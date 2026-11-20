@@ -9,7 +9,7 @@ not approval to build. **Repository and build (§25, decision 8; Notion Q11):
 Approved 2026-11-20 4:02 PM MST by Stephen** ("Go ahead and start building zproject"): `sbj-ee/zproject` is created
 and phase 1 starts in reviewable pull requests. Merges, tags, releases and
 installs still each need Stephen's yes.
-**Post-lock change, approved by Stephen:** Changed 2026-11-20 3:59 PM MST by Stephen: zprojectd host debian199 -> dragon (§4.4, decision 2).
+**Post-lock change, approved by Stephen:** Changed 2026-11-20 3:59 PM MST by Stephen: zprojectd moved to a different server host, a Pop!_OS 24.04 amd64 machine (§4.4, decision 2).
 This document consolidates the Notion spec
 ([zproject spec](https://app.notion.com/p/41e2b260c3f08169ad71f9c403f787f9))
 and the additions of 2026-11-20 afternoon: Stephen's feature list (1:20 PM), the
@@ -70,8 +70,8 @@ approved 2026-11-20 4:02 PM MST by Stephen):
 
 | Component | What it is | Runs on |
 |---|---|---|
-| `zprojectd` | Headless server: C++20, Qt 6 Core/Network (no GUI), SQLite. The only writer to the plan database. Serves the REST API `/v1`, the MCP endpoint `/mcp`, reports, alerts, Google Calendar sync and backups. | dragon — Pop!_OS 24.04 LTS (Ubuntu 24.04 noble base), amd64, verified 2026-11-20 **(decided, Q2; changed 3:59 PM by Stephen)** |
-| `zproject` | Desktop client: C++20, Qt 6 Widgets. Gantt, lists, editors, reports; local read-only cache for instant start and offline reading. | MacBook (macOS, Apple Silicon), vertex and dragon (Linux amd64) |
+| `zprojectd` | Headless server: C++20, Qt 6 Core/Network (no GUI), SQLite. The only writer to the plan database. Serves the REST API `/v1`, the MCP endpoint `/mcp`, reports, alerts, Google Calendar sync and backups. | The server host (`<server-host>`): Pop!_OS 24.04 LTS (Ubuntu 24.04 noble base), amd64, verified 2026-11-20 **(decided, Q2; changed 3:59 PM by Stephen)** |
+| `zproject` | Desktop client: C++20, Qt 6 Widgets. Gantt, lists, editors, reports; local read-only cache for instant start and offline reading. | Stephen's Macs (macOS, Apple Silicon) and Linux amd64 desktops |
 | `zproject-cli` | Thin command-line client of `/v1`. | Any client machine, and the server |
 
 Conventions shared with the other Z apps: C++20 and Qt 6, `core/` (logic, no
@@ -131,7 +131,7 @@ Non-goals unless Stephen changes them:
 ## 4. Architecture
 
 ```
- MacBook / vertex / dragon (clients)               dragon (server)    
+ Mac / Linux desktops (clients)                    <server-host> (server)
  ┌─────────────────────────┐   HTTPS (tailnet)   ┌────────────────────────────┐
  │ zproject (Qt Widgets)   │ ──────────────────▶ │ tailscale serve :443       │
  │  local cache (SQLite)   │                     │      │ 127.0.0.1:8788       │
@@ -141,8 +141,8 @@ Non-goals unless Stephen changes them:
  ┌─────────────────────────┐   HTTPS (tailnet)   │  SQLite WAL  backups       │
  │ Grok Bot agents (MCP)   │ ──────────────────▶ │       │ alerts over tailnet ─┼─▶ ts-notify-hub
  └─────────────────────────┘                     └────────────────────────────┘
-                                                   nightly snapshot ─▶ Box folder
- ts-notify-hub runs on debian199 (http://100.112.153.39:8787).
+                                                   nightly snapshot ─▶ <offsite-backup-target>
+ ts-notify-hub is reached at <notify-hub-url>.
 ```
 
 ### 4.1 Directory layout
@@ -180,7 +180,7 @@ behaviour is fixed), libsodium (minisign verification, token hashing helpers),
 libsecret (Linux keychain) and Security.framework (macOS Keychain). No
 JavaScript runtime, no Python at runtime.
 
-**Qt version.** The server host (dragon, Pop!_OS 24.04) and vertex use the
+**Qt version.** The server host (Pop!_OS 24.04) and the Linux desktops use the
 distribution's Qt **6.4.2** from Ubuntu noble (`qt6-base-dev`); the macOS build
 uses Homebrew's newer Qt. The code therefore targets Qt 6.4 as its minimum and
 uses no API newer than 6.4. Nothing in this spec needs a newer Qt:
@@ -195,64 +195,48 @@ uses no API newer than 6.4. Nothing in this spec needs a newer Qt:
 A bundled or newer Qt is only worth it if a later feature needs one (for
 example Qt Graphs). It would be decided then, with Stephen's yes, not now.
 
-### 4.4 Deployment on dragon
+### 4.4 Deployment on the server host
 
-Changed 2026-11-20 3:59 PM MST by Stephen: zprojectd host debian199 -> dragon. The decision is recorded in §25, decision 2. The read-only checks
-run on dragon at about 4:00 PM MST on 2026-11-20, with no sudo, agreed with
-CoS's independent check:
-
-- **OS / arch:** `/etc/os-release` reports Pop!_OS 24.04 LTS (an Ubuntu 24.04
-  noble base; `/etc/debian_version` shows `trixie/sid`, which is Ubuntu's
-  Debian base, not Debian). `uname -m` reports `x86_64` and dpkg reports
-  `amd64`.
-- **Capacity:** 24 cores, 61 GiB RAM (about 49 GiB available), 261 GB free
-  on `/`. Up 13 days, load average about 0.5. GNOME's suspend on AC is set to
-  `nothing`.
-- **Listening TCP ports:**
-  - on `127.0.0.1`: 631 (CUPS), 7681 (ttyd), 9996–9997 (batfish container),
-    11434 (Ollama);
-  - on all interfaces: 1313 (Hugo dev server), 1716 (KDE Connect), 22, 25,
-    111, 139, 445;
-  - on the tailnet address: tailscaled's own ports.
-  - **8787 and 8788 are free.**
-- **Tailscale:** `tailscale serve status` reports "No serve config". The node is
-  `dragon` at `100.97.211.64`.
+The server host is `<server-host>`, a Pop!_OS 24.04 LTS machine (Ubuntu 24.04
+noble base) on amd64 in Stephen's tailnet. Changed 2026-11-20 3:59 PM MST by
+Stephen to a different host from the original plan (§25, decision 2). The
+host's OS, architecture, capacity, free ports and existing services were
+checked read-only on 2026-11-20; the concrete host names, addresses and
+inventory are kept in Stephen's private notes, not in this public repository.
 
 Chosen settings:
-- **Local port:** `zprojectd` binds `127.0.0.1:8788`. It is free on dragon,
-  and the port that ts-notify-hub uses (8787) on debian199 is left alone.
+- **Local port:** `zprojectd` binds `127.0.0.1:8788` (verified free on the
+  server host). 8787 is left alone: it is the suite's convention for the
+  notification hub (`<notify-hub-url>`).
 - **Tailscale serve mapping** (Stephen runs it; Software changes nothing on
-  dragon): `tailscale serve --bg --https=443 http://127.0.0.1:8788`, which
-  publishes `https://dragon.<tailnet>.ts.net/` → `/v1` and `/mcp`. Nothing is
-  served on dragon today, so it does not clash with anything. If Stephen
-  later wants 443 for something else, `--https=8443` is the fallback, and
+  the host): `tailscale serve --bg --https=443 http://127.0.0.1:8788`, which
+  publishes `https://<server-host>.<tailnet>.ts.net/` → `/v1` and `/mcp`. If
+  443 is later needed for something else, `--https=8443` is the fallback, and
   clients store the full URL. Never Funnel.
-- **Paths on dragon:** database `/var/lib/zproject/zproject.db`, backups
-  `/var/lib/zproject/backups`, Google credentials in a root-owned 0600 file
-  under `/etc/zproject/` or `systemd-creds`. The Google Calendar cache lives in
-  the database on dragon. An off-site copy of the snapshots goes to a Box
-  folder through dragon's existing rclone setup.
-- **Alerts:** `zprojectd` on dragon posts to ts-notify-hub on debian199 at
-  `http://100.112.153.39:8787` over the tailnet/LAN. That is the only
-  outbound call besides Google, and the systemd unit allows it.
+- **Paths on the server host:** database `/var/lib/zproject/zproject.db`,
+  backups in `<backup-dir>` (default `/var/lib/zproject/backups`), Google
+  credentials in a root-owned 0600 file under `/etc/zproject/` or
+  `systemd-creds`. The Google Calendar cache lives in the database. An
+  optional off-site copy of the snapshots goes to `<offsite-backup-target>`
+  through rclone (§16.3).
+- **Alerts:** `zprojectd` posts to the notification hub at
+  `<notify-hub-url>` over the tailnet. That is the only outbound call besides
+  Google, and the systemd unit allows it.
 
-Coexistence with what already runs on dragon:
-- **What runs there:** Ollama, a batfish Docker container, the Hugo dev
-  server, ttyd, Samba, Postfix, and libvirt. Timers: netbox-scanner (system,
-  every 30 minutes), rusty-rag-index (user, about every 45 minutes) and
-  home-dashboard (user, every minute; the Blink cache every 5 minutes). The
-  user service desk-presence runs too.
+Coexistence with what already runs on the server host:
+- **Other workloads:** the host also runs other services and periodic timers
+  (some CPU-heavy, such as local model inference and indexing jobs).
 - **Footprint:** `zprojectd` is small (about 60 MB RSS, mostly idle). Its unit
-  sets `MemoryMax=512M`, `CPUWeight=50` and `IOWeight=50`, so Ollama
-  inference and rusty-rag indexing keep priority.
+  sets `MemoryMax=512M`, `CPUWeight=50` and `IOWeight=50`, so the host's
+  heavier workloads keep priority.
 - **Backups:** the nightly timer runs at 03:17 with `RandomizedDelaySec=10m`,
-  away from the netbox-scanner :00/:30 slots. It uses `Nice=10` and
+  away from the half-hour slots other timers use. It uses `Nice=10` and
   `IOSchedulingClass=idle`.
 - **Startup:** it is a system unit, so it runs without a login session and
-  does not touch the user-session services.
-- **Risk:** dragon is also a desktop workstation. Pop!_OS updates and reboots
-  take the server offline briefly; desktop clients fall back to the read-only
-  cache, and agents get connection errors until it is back.
+  does not touch user-session services.
+- **Risk:** the server host is also a desktop workstation. OS updates and
+  reboots take the server offline briefly; desktop clients fall back to the
+  read-only cache, and agents get connection errors until it is back.
 
 ## 5. Data model
 
@@ -446,8 +430,8 @@ Rules evaluated after every write and every 15 minutes: `task_overdue`,
 > N days), `finish_moved` (critical path finish changed), `overallocation`,
 `raid_review_due`, `calendar_stale` (> 24 h). De-duplicated by `dedupKey`;
 states open → acknowledged → resolved (auto-resolve when the condition clears).
-Delivery: desktop Alerts panel and notifications; ts-notify-hub on debian199
-(`http://100.112.153.39:8787`) over HTTP across the tailnet/LAN from dragon
+Delivery: desktop Alerts panel and notifications; the notification hub
+(ts-notify-hub, `<notify-hub-url>`) over HTTP across the tailnet from the server host
 **(decided, Q19)**. Quiet hours and per-rule
 toggles. API: `GET /v1/alerts`, `POST /v1/alerts/{id}/ack`,
 `GET|PATCH /v1/alert-rules`.
@@ -506,7 +490,7 @@ Carlo, multi-user permissions.
   View (Gantt, List, Resources, RAID, Portfolio; zoom; critical only; baseline
   bars; calendar overlay), Project (Set baseline, Save as template, Reschedule,
   Project calendar), Help (Check for updates, About, API docs).
-- First run: server URL (e.g. `https://dragon.<tailnet>.ts.net`), then a
+- First run: server URL (e.g. `https://<server-host>.<tailnet>.ts.net`), then a
   one-time sign-in that creates a `device` token (pasting an owner-approved
   enrolment code from `zproject-cli token create --kind device`), stored in the
   keychain. Single instance per device (`QLockFile`), as ztodo.
@@ -546,14 +530,14 @@ switch views Ctrl-1…6, refresh F5. Cmd instead of Ctrl on macOS.
 
 ### 9.1 Transport and binding
 
-- `zprojectd` listens on `127.0.0.1:8788` (configurable) on dragon. 8788
-  was verified free there on 2026-11-20; 8787 stays reserved by the suite's
-  convention for ts-notify-hub on debian199.
-  `tailscale serve` publishes it as `https://<host>.<tailnet>.ts.net` with a
+- `zprojectd` listens on `127.0.0.1:8788` (configurable) on the server host.
+  8788 was verified free there on 2026-11-20; 8787 stays reserved by the
+  suite's convention for the notification hub (`<notify-hub-url>`).
+  `tailscale serve` publishes it as `https://<server-host>.<tailnet>.ts.net` with a
   Tailscale certificate, tailnet only. Never Funnel, never a raw LAN bind by
   default, no CORS.
 - Tailscale ACL grants allow only Stephen's devices and the agent box's tag
-  (e.g. `tag:grokbot`) to reach the host on 443 **(decided, Q30)**.
+  (e.g. `tag:<agent-tag>`) to reach the host on 443 **(decided, Q30)**.
 - The server reads the identity headers `tailscale serve` adds
   (`Tailscale-User-Login`, `Tailscale-User-Name`) and the peer node, and
   records them in the audit log. They are an extra signal, not a replacement
@@ -761,7 +745,7 @@ audit trail.
   cache of the plan on the local disk (not encrypted in phase 1; it is deleted
   when the device token is revoked or the user signs out).
 - Nothing is sent anywhere except Google (only when Calendar is connected),
-  GitHub (update checks by desktop clients), and ts-notify-hub on debian199 (alerts, over the tailnet).
+  GitHub (update checks by desktop clients), and ts-notify-hub at `<notify-hub-url>` (alerts, over the tailnet).
   No telemetry.
 - Example data, fixtures and docs use `example.com` addresses only.
 
@@ -791,10 +775,10 @@ agents; the `Store` interface keeps it possible later.
 
 ### 16.3 Backup and restore
 
-- Nightly systemd timer: `VACUUM INTO /var/lib/zproject/backups/zproject-<date>.db`,
+- Nightly systemd timer: `VACUUM INTO <backup-dir>/zproject-<date>.db`,
   `PRAGMA integrity_check` on the copy, plus a full JSON export. Keep 30 daily
   and 12 monthly. Optional off-site copy of the snapshot and export (never the
-  live file) to a Box folder through rclone **(decided, Q5)**.
+  live file) to `<offsite-backup-target>` through rclone **(decided, Q5)**.
 - `zprojectd --restore FILE` with the service stopped: integrity check,
   schema migration if older, then replace. Tested in CI.
 - Before every schema migration the server takes an automatic snapshot.
@@ -821,8 +805,8 @@ schema 1 to head on fixture databases.
 ### 16.6 Migration from the earlier design
 
 No zproject data exists yet, so nothing must be converted. If Stephen chooses
-the MacBook-local fallback first (Q3), moving to the server later is
-`zprojectd --backup` on the MacBook and `--restore` on the server.
+the Mac-local fallback first (Q3), moving to the server later is
+`zprojectd --backup` on the Mac and `--restore` on the server.
 
 ## 17. Performance targets
 
@@ -832,7 +816,7 @@ the MacBook-local fallback first (Q3), moving to the server later is
 | Over-allocation scan, 50 resources × 2 years | ≤ 100 ms |
 | API p95 latency on the tailnet (read) | ≤ 100 ms; writes with reschedule ≤ 200 ms |
 | Desktop cold start to Gantt (warm cache) | ≤ 1.5 s |
-| Gantt scroll/zoom, 2,000 rows | 60 fps on the MacBook |
+| Gantt scroll/zoom, 2,000 rows | 60 fps on an Apple Silicon Mac |
 | Server memory, idle | ≤ 60 MB RSS |
 | Report PDF (status, 200 tasks) | ≤ 2 s |
 | Nightly backup, 50 MB database | ≤ 10 s |
@@ -876,7 +860,7 @@ light and dark themes.
   in PR CI; nightly 20-minute runs with a cached, minimised corpus.
 - **CI (`ci.yml`, on every PR and push to main; actions pinned by SHA;
   `-Werror`):** Version consistency; Linux (ubuntu-24.04) build + test +
-  `cpack` both `.deb`s (built on ubuntu-24.04, matching dragon's Pop!_OS 24.04
+  `cpack` both `.deb`s (built on ubuntu-24.04, matching the server host's Pop!_OS 24.04
   noble base and its distro Qt 6.4.2) + `systemd-analyze verify` of the
   `zprojectd` unit + an install smoke test in an `ubuntu:24.04` container; macOS arm64 build + test + dmg checks;
   Sanitizers (ASan + UBSan); clang-tidy; Fuzz (60 s per harness); OpenAPI
@@ -935,9 +919,8 @@ shows when the server is older or newer than itself.
 
 ## 23. Branding
 
-Icon **concept B**, approved by Stephen on 2026-11-20. Source (on Software's
-box until the repo exists): `/workspace/zproject-icon/concepts/zproject-B.svg`
-with `zproject-B-16.png`, `-32.png`, `-128.png`, `-1024.png`. It uses zmail's
+Icon **concept B**, approved by Stephen on 2026-11-20. Source: the concept B
+SVG with 16, 32, 128 and 1024 px PNGs, committed as `assets/icon/`. It uses zmail's
 exact Z path and the z-suite family tile, with the blue accent `#2fa8f0`.
 When the repo is created: commit the SVG master to `assets/icon/zproject.svg`,
 generate Linux hicolor PNGs (16–512) and the macOS `.icns` in the build, and
@@ -948,8 +931,8 @@ use `#2fa8f0` as the app accent. Concepts A and C are not used.
 | Phase | Contents | Exit criteria |
 |---|---|---|
 | 0 — Repo and skeleton | After Stephen's yes: `sbj-ee/zproject`, this SPEC, CMake skeleton for three targets, CI with all jobs, icon B, `openapi.yaml` stub, release workflow dry run | CI green; dry-run signed release verified |
-| 1a — Server core | `store/` with migrations, `changes`, `audit`; tokens, scopes, rate limits, dry-run/confirm; projects, tasks, WBS, dependencies (FS/SS/FF, lag), calendars, CPM, critical path; `/v1` for those; backups; `zprojectd` `.deb`; `zproject-cli` | Contract tests and fuzzers green; installed on dragon by Stephen; `tailscale serve` + ACL in place (his change) |
-| 1b — Desktop MVP | Qt client: Gantt, List, inspector, keyboard, cache, offline read-only, Preferences, updater | Daily use on MacBook and vertex |
+| 1a — Server core | `store/` with migrations, `changes`, `audit`; tokens, scopes, rate limits, dry-run/confirm; projects, tasks, WBS, dependencies (FS/SS/FF, lag), calendars, CPM, critical path; `/v1` for those; backups; `zprojectd` `.deb`; `zproject-cli` | Contract tests and fuzzers green; installed on the server host by Stephen; `tailscale serve` + ACL in place (his change) |
+| 1b — Desktop MVP | Qt client: Gantt, List, inspector, keyboard, cache, offline read-only, Preferences, updater | Daily use on Stephen's Mac and Linux desktop |
 | 1c — PM features | Baselines and variance; resources, assignments, cost, over-allocation; RAID; templates; project details; notes journal; tags and links; portfolio and all-projects timeline | Approved six features complete |
 | 1d — Reports, alerts, calendar, agents | Canned reports (MD/PDF), status-report snapshots, alert rules (+ ts-notify-hub), CSV/JSON/PDF/PNG export, CSV/JSON import, Google Calendar read-only (server cache), `/mcp` with phase 1 tools | First agent token in use; v1.0.0 |
 | 2 | Offline edits (outbox), ztodo import with back-link, MSPDI import/export, `.ics`, SF and more constraints, multiple baselines, time tracking, attachments | — |
@@ -964,25 +947,26 @@ page. Notion questions 13–17 and 19 (the desktop-only `127.0.0.1` API, the CLI
 talking to it, the keychain token, the desktop `--daemon`, the FS push flag)
 are superseded by §9. Question 6 (cycles after sync merges) is moot because the
 server refuses cycles on write. Question 18 (a fixed port) is kept: the server
-uses `127.0.0.1:8788` on dragon (verified free; 8787 is ts-notify-hub's port
-on debian199).
+uses `127.0.0.1:8788` on the server host (verified free; 8787 is the
+notification hub's port by convention).
 
-1. **Backend:** `zprojectd` + SQLite WAL on a home server (dragon, decision 2), desktop clients over
+1. **Backend:** `zprojectd` + SQLite WAL on a home server (`<server-host>`, decision 2), desktop clients over
    Tailscale. **Accepted 2026-11-20 (Stephen: go with the recs).** [27]
-2. **Host: dragon.** **Changed 2026-11-20 3:59 PM MST by Stephen: zprojectd host debian199 -> dragon.** This is a post-lock change approved by
-   Stephen. It replaces the earlier decision (debian199, accepted at 3:27 PM
-   with "go with the recs"). Verified read-only on 2026-11-20 at about 4:00 PM
-   MST: **Pop!_OS 24.04 LTS (Ubuntu 24.04 noble base), x86_64 / amd64**, 24
-   cores, 61 GiB RAM, ports 8787 and 8788 free, and no existing
-   `tailscale serve` config. Evidence and coexistence notes are in §4.4.
-   ts-notify-hub stays on debian199. (The earlier attempt to check debian199
-   failed on every route and is moot now.) [28]
-3. **Server from day one;** the MacBook-local mode is only for development.
+2. **Host: `<server-host>`.** **Changed 2026-11-20 3:59 PM MST by Stephen:** zprojectd
+   moved to a different home server. This is a post-lock change approved by
+   Stephen. It replaces the earlier host decision (accepted at 3:27 PM with
+   "go with the recs"). Verified read-only on 2026-11-20 at about 4:00 PM
+   MST: **Pop!_OS 24.04 LTS (Ubuntu 24.04 noble base), x86_64 / amd64**,
+   ports 8787 and 8788 free, and no existing `tailscale serve` config.
+   Settings and coexistence notes are in §4.4. The notification hub stays
+   where it is (`<notify-hub-url>`). Concrete host names and addresses are in
+   Stephen's private notes. [28]
+3. **Server from day one;** the Mac-local mode is only for development.
    **Accepted 2026-11-20 (Stephen: go with the recs).** [29]
 4. **Offline:** read-only in phase 1, offline edits in phase 2. **Accepted 2026-11-20 (Stephen: go with the recs).** [30]
 5. **Backups:** nightly snapshots (30 daily, 12 monthly) on the server, plus
-   copies (never the live file) to a Box folder such as
-   `BoxSync/zproject-backups`. **Accepted 2026-11-20 (Stephen: go with the recs).** [31]
+   copies (never the live file) to an off-site
+   location (`<offsite-backup-target>`). **Accepted 2026-11-20 (Stephen: go with the recs).** [31]
 6. **Milestones are zero-duration tasks.** **Accepted 2026-11-20 (Stephen: go with the recs).** [33]
 7. **Dependency types:** FS, SS and FF with lag/lead in phase 1; SF in phase 2
    (supersedes FS-only). **Accepted 2026-11-20 (Stephen: go with the recs).** [34, 5]
@@ -990,7 +974,7 @@ on debian199).
    start building zproject", relayed by Chief of Staff). A public
    `sbj-ee/zproject` (MIT, same minisign key) is created and phase 1 starts in
    reviewable pull requests with CI, each bumping the version. Merges, tags,
-   releases and installs on dragon or any machine still each need Stephen's
+   releases and installs on the server host or any machine still each need Stephen's
    yes. [11]
 9. **Phase 1 views:** Gantt, List, Resources, RAID, Baselines, Reports,
    Portfolio; Kanban later. **Accepted 2026-11-20 (Stephen: go with the recs).** [1]
@@ -1011,7 +995,7 @@ on debian199).
 17. **Baselines:** one active per project in phase 1. **Accepted 2026-11-20 (Stephen: go with the recs).** [38]
 18. **RAID:** includes assumptions; 1–5 × 1–5 scoring. **Accepted 2026-11-20 (Stephen: go with the recs).** [39]
 19. **Alerts via ts-notify-hub.** **Accepted 2026-11-20 (Stephen: go with the recs).** ts-notify-hub is owned by
-    Software and runs on debian199 at `http://100.112.153.39:8787`. It accepts
+    Software and is reached at `<notify-hub-url>`. It accepts
     messages over HTTP, so `zprojectd` posts alerts to it like its other
     clients do. The exact payload follows ts-notify-hub's existing client
     contract. [40]
@@ -1035,12 +1019,12 @@ on debian199).
 29. **Audit:** every agent and app request is logged (metadata for reads,
     before/after for writes), forever, hash-chained. **Accepted 2026-11-20 (Stephen: go with the recs).** [50]
 30. **Tailscale:** `tailscale serve` on the server, tailnet only, an ACL for
-    Stephen's devices plus the agent box tag (e.g. `tag:grokbot`), never
+    Stephen's devices plus the agent box tag (e.g. `tag:<agent-tag>`), never
     Funnel. Stephen makes the ACL and serve changes himself. **Accepted 2026-11-20 (Stephen: go with the recs).**
     [51, 14, 15]
 31. **Server package:** a signed `zprojectd` `.deb` for Pop!_OS 24.04 / Ubuntu
     noble amd64 (distro Qt 6.4), installed by Stephen, no self-update.
-    Updated for the dragon host on 2026-11-20 at 3:59 PM. **Accepted 2026-11-20 (Stephen: go with the recs).** [52]
+    Updated for the new server host on 2026-11-20 at 3:59 PM. **Accepted 2026-11-20 (Stephen: go with the recs).** [52]
 32. **Shared z-suite library:** copy patterns from ztodo/zterminal now,
     extract later. **Accepted 2026-11-20 (Stephen: go with the recs).** [10]
 33. **Later calendar phases:** busy time stays display-only until opted in;

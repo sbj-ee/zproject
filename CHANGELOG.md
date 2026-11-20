@@ -49,7 +49,7 @@ Phase 0: repository skeleton (SPEC.md §24).
 
 ### Added
 - `SPEC.md`: the approved specification (locked 2026-11-20; zprojectd host
-  changed to dragon at 3:59 PM MST; repository and build approved by Stephen
+  host changed at 3:59 PM MST; repository and build approved by Stephen
   at 4:02 PM MST, §25 decision 8).
 - Icon concept B: `assets/icon/zproject.svg` (master) and PNGs at 16, 24, 32,
   48, 64, 128, 256, 512 and 1024 px (`scripts/render-icons.sh`).
@@ -68,6 +68,11 @@ Phase 0: repository skeleton (SPEC.md §24).
   (PRs); Linux (ubuntu-24.04, distro Qt 6.4) build + test + both `.deb`s +
   install smoke test in an `ubuntu:24.04` container; macOS arm64 build + test;
   Sanitizers (ASan + UBSan); clang-tidy.
+
+### Changed (during review)
+- The public `SPEC.md` uses placeholders (`<server-host>`, `<tailnet>.ts.net`,
+  `<notify-hub-url>`, `<backup-dir>`, `<offsite-backup-target>`) instead of
+  concrete host names, tailnet addresses and backup locations.
 
 ### Not yet (later PRs)
 - macOS `.dmg` and bundle checks, fuzzing, OpenAPI lint, systemd units and
