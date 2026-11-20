@@ -1,0 +1,43 @@
+# zproject HTTP API, the source of truth for /v1 (SPEC.md §9). Phase 0 stub:
+# operations are added with the server in phase 1a.
+openapi: 3.1.0
+info:
+  title: zproject API
+  version: 0.1.0
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: https://dragon.example.ts.net
+    description: zprojectd behind tailscale serve (tailnet only)
+paths:
+  /v1/health:
+    get:
+      operationId: getHealth
+      summary: Server health and versions (no token needed)
+      security: []
+      x-zproject-scope: none
+      x-zproject-destructive: false
+      x-zproject-dry-run: false
+      responses:
+        '200':
+          description: The server is up
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ok, version, apiVersion, schemaVersion]
+                properties:
+                  ok: {type: boolean}
+                  version: {type: string, description: App version (x.y.z)}
+                  apiVersion: {type: integer, const: 1}
+                  schemaVersion: {type: integer, minimum: 0}
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: "zpt_<id>.<secret> scoped token (SPEC.md §9.2)"
+security:
+  - bearer: []

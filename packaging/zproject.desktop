@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=zproject
+GenericName=Project Manager
+Comment=Projects, Gantt chart, critical path and baselines
+Exec=zproject
+Icon=zproject
+Terminal=false
+Categories=Office;ProjectManagement;Qt;
+Keywords=project;gantt;schedule;wbs;milestone;
+StartupWMClass=zproject

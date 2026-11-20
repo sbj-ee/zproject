@@ -1,0 +1,210 @@
+# Build, test and package zproject on Ubuntu 24.04 (Linux amd64, distro Qt 6.4,
+# the same base as dragon's Pop!_OS 24.04) and macOS 15 (Apple Silicon,
+# Homebrew Qt). The version comes from CMake project() -> PROJECT_VERSION;
+# artifacts are zproject_<version>_amd64.deb and zprojectd_<version>_amd64.deb.
+# SPEC.md §19 lists the full job set; fuzzing, OpenAPI lint, the .dmg and the
+# systemd unit checks are added with the code they test.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version:
+    name: Version consistency
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the v* tags, for README "Current release"
+      # CMakeLists.txt version, top CHANGELOG heading, README header and the
+      # SPEC.md version line agree.
+      - name: Check version drift
+        run: scripts/check-version.sh
+
+  # Every PR bumps the version (SPEC.md §22): its CMakeLists.txt version must
+  # be greater than the base branch's. Pull requests only; Dependabot's PRs
+  # are exempt.
+  version-increase:
+    name: Version increase
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Version is greater than the base branch's
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          scripts/check-version-increase.sh "origin/${BASE_REF}"
+
+  linux:
+    name: Linux (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Qt 6 (noble, 6.4) + build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            qt6-base-dev qt6-qpa-plugins libgl1-mesa-dev cmake ninja-build g++ dpkg-dev file
+          dpkg-query -W -f='qt6-base-dev ${Version}\n' qt6-base-dev
+
+      # ZPROJECT_WERROR: a new compiler warning fails CI (off for local builds).
+      - name: Configure
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZPROJECT_WERROR=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Package .debs
+        run: |
+          set -euo pipefail
+          cd build
+          cpack -G DEB
+          ls -l *.deb
+          for d in zproject_*_amd64.deb zprojectd_*_amd64.deb; do
+            dpkg-deb -I "$d"
+            dpkg-deb -c "$d"
+          done
+          dpkg-deb -c zproject_*_amd64.deb | grep -q './usr/bin/zproject$'
+          dpkg-deb -c zproject_*_amd64.deb | grep -q './usr/bin/zproject-cli$'
+          dpkg-deb -c zproject_*_amd64.deb | grep -q './usr/share/applications/zproject.desktop$'
+          dpkg-deb -c zproject_*_amd64.deb | grep -q './usr/share/icons/hicolor/256x256/apps/zproject.png$'
+          dpkg-deb -c zprojectd_*_amd64.deb | grep -q './usr/bin/zprojectd$'
+          # The server package is headless: Qt Core + Network, never Widgets/Gui.
+          dpkg-deb -f zprojectd_*_amd64.deb Depends | grep -q 'libqt6network6'
+          ! dpkg-deb -f zprojectd_*_amd64.deb Depends | grep -Eq 'libqt6(widgets|gui)6'
+          ! dpkg-deb -c zprojectd_*_amd64.deb | grep -Eq 'zproject-cli$|/zproject$'
+
+      # Install both packages on a clean Ubuntu 24.04 (dragon's base) and run
+      # each binary.
+      - name: Install smoke test (ubuntu:24.04 container)
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/build:/pkgs:ro" ubuntu:24.04 bash -euo pipefail -c '
+            export DEBIAN_FRONTEND=noninteractive
+            apt-get update -qq
+            apt-get install -y -qq /pkgs/zprojectd_*_amd64.deb >/dev/null
+            zprojectd --version
+            if zprojectd --listen 0.0.0.0:8788; then echo "non-loopback bind accepted" >&2; exit 1; fi
+            apt-get install -y -qq /pkgs/zproject_*_amd64.deb >/dev/null
+            zproject-cli --version
+            zproject --version
+          '
+
+      - name: Upload .deb artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zproject-debs
+          path: build/*.deb
+          if-no-files-found: error
+
+  linux-server-only:
+    name: Linux server-only build (no Qt Widgets)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Qt 6 Core/Network only + build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qt6-base-dev cmake ninja-build g++
+      - name: Configure (ZPROJECT_BUILD_GUI=OFF)
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DZPROJECT_WERROR=ON -DZPROJECT_BUILD_GUI=OFF
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: |
+          ctest --test-dir build --output-on-failure
+          test ! -e build/app/zproject
+
+  macos:
+    name: macOS arm64
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Qt + build tools (brew)
+        run: brew install qt cmake ninja
+
+      - name: Configure arm64
+        run: |
+          cmake -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DZPROJECT_WERROR=ON \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: |
+          ctest --test-dir build --output-on-failure
+          file build/server/zprojectd | grep -q arm64
+
+  sanitizers:
+    name: Sanitizers (ASan + UBSan, ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Qt 6 + build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qt6-base-dev qt6-qpa-plugins libgl1-mesa-dev cmake ninja-build g++
+
+      - name: Configure (RelWithDebInfo, -fsanitize=address,undefined)
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DZPROJECT_SANITIZE=address,undefined
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test under ASan/UBSan
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:detect_stack_use_after_return=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build --output-on-failure
+
+  clang-tidy:
+    name: clang-tidy (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Qt 6 + clang-tidy
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qt6-base-dev libgl1-mesa-dev cmake ninja-build clang clang-tidy
+          clang-tidy --version
+
+      - name: Configure (clang, compile_commands.json)
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+            -DZPROJECT_BUILD_TESTS=OFF
+
+      # The analysis needs the generated headers (moc output, version.hpp).
+      - name: Build
+        run: cmake --build build
+
+      # Checks are in .clang-tidy; any finding fails the job.
+      - name: Run clang-tidy
+        run: run-clang-tidy -quiet -p build "$PWD/(core|store|server|app|cli)/.*\.cpp$"
