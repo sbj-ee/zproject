@@ -1,6 +1,6 @@
 # zproject
 
-**0.1.0**
+**0.2.0**
 
 Current release: none yet
 
@@ -19,9 +19,10 @@ The full design is in [SPEC.md](SPEC.md).
 
 ## Status
 
-Phase 0: the build skeleton, CI and packaging. The binaries print their
-version and nothing more yet; the server store and API arrive in phase 1a
-(SPEC.md §24). Nothing is released.
+Phase 1a has started: the SQLite store (schema migrations, projects and the
+task tree, the append-only `changes` feed) is in; `zprojectd --migrate-only
+--db FILE` creates or migrates a database. The HTTP API, tokens and the
+scheduling engine follow (SPEC.md §24). Nothing is released.
 
 ## Building
 

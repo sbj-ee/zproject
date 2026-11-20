@@ -7,6 +7,42 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases will be tagged `vX.Y.Z` and minisign-signed (SPEC.md §20);
 there is no release yet.
 
+## 0.2.0 — 2026-11-20
+
+Phase 1a, first part: the store (SPEC.md §5, §16).
+
+### Added
+- Vendored SQLite 3.54.1 amalgamation (`third_party/sqlite/`, unmodified;
+  SHA3-256 of the zip checked against sqlite.org and recorded in
+  `README.zproject.md`). zproject uses it directly, not QtSql.
+- `zproject_store` (`store/`): `Database`/`Statement` RAII wrappers; the
+  connection settings of §16.1 (WAL for files, `synchronous=NORMAL`,
+  `foreign_keys=ON`, `busy_timeout=5000`); numbered, forward-only migrations
+  in `store/migrations/` embedded at build time and applied in one
+  transaction (`PRAGMA user_version`), rolled back completely on failure; a
+  database newer than the build is refused.
+- Schema 1: `meta` (installation id, currency USD), `project`, `task` (WBS via
+  `parent` + order), the append-only `changes` and `audit` tables (triggers
+  reject `UPDATE` and `DELETE`). Table `CHECK`s and foreign keys back the
+  model rules.
+- `Store` interface and `SqliteStore`: create/read/list/update/delete for
+  projects and tasks with `rev` (If-Match, `rev_mismatch`), tombstone deletes
+  (a project or task takes its subtree with it), no-op updates that keep the
+  revision, a change row per entity per write (changed fields before/after,
+  actor, request id, hybrid-clock timestamp), and the `changesSince` sync
+  feed. Task tree rules: parent in the same project and live, no milestone
+  parents, no cycles (`cycle` error with the path), a task with children
+  cannot become a milestone, tasks cannot move between projects.
+- `core/`: `Error`/`Result` (the API error codes of §9.3), `Project` and
+  `Task` with validation (§5.2: milestone iff duration 0, ASAP/SNET/FNLT
+  constraint dates, % complete and actuals, dates, priority, RAG, budget,
+  colour) and JSON with the API's field names.
+- `zprojectd --db FILE --migrate-only`; `--version` also prints the schema
+  version.
+- Tests: `tst_model`, `tst_migrations` (each migration applied step by step,
+  connection settings, re-open, newer schema refused, failed batch rolled
+  back), `tst_store`, and `--migrate-only` run twice on a fresh file.
+
 ## 0.1.0 — 2026-11-20
 
 Phase 0: repository skeleton (SPEC.md §24).

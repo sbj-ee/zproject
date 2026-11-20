@@ -109,6 +109,8 @@ jobs:
             apt-get update -qq
             apt-get install -y -qq /pkgs/zprojectd_*_amd64.deb >/dev/null
             zprojectd --version
+            zprojectd --db /tmp/smoke.db --migrate-only
+            zprojectd --db /tmp/smoke.db --migrate-only
             if zprojectd --listen 0.0.0.0:8788; then echo "non-loopback bind accepted" >&2; exit 1; fi
             apt-get install -y -qq /pkgs/zproject_*_amd64.deb >/dev/null
             zproject-cli --version
