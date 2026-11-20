@@ -40,7 +40,8 @@ class TstServerConfig : public QObject {
     QTest::addColumn<QString>("text");
     QTest::newRow("all interfaces") << QStringLiteral("0.0.0.0:8788");
     QTest::newRow("lan") << QStringLiteral("192.168.1.10:8788");
-    QTest::newRow("tailnet") << QStringLiteral("100.97.211.64:8788");
+    // A tailnet (CGNAT range) example address, not a real host.
+    QTest::newRow("tailnet") << QStringLiteral("100.64.0.1:8788");
     QTest::newRow("ipv6 any") << QStringLiteral("[::]:8788");
     QTest::newRow("port 0") << QStringLiteral("127.0.0.1:0");
     QTest::newRow("port too big") << QStringLiteral("127.0.0.1:65536");

@@ -11,7 +11,7 @@ one repository (C++20, Qt 6):
 
 | Program | What it is |
 |---|---|
-| `zprojectd` | Headless server (Qt Core/Network, SQLite). Listens on `127.0.0.1:8788` only and is published on the tailnet with `tailscale serve`. Runs on dragon (Pop!_OS 24.04, amd64). |
+| `zprojectd` | Headless server (Qt Core/Network, SQLite). Listens on `127.0.0.1:8788` only and is published on the tailnet with `tailscale serve`. Runs on a home server (Pop!_OS 24.04, amd64). |
 | `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. |
 | `zproject-cli` | Thin command-line client of the `/v1` API. |
 
