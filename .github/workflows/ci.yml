@@ -83,15 +83,21 @@ jobs:
             dpkg-deb -I "$d"
             dpkg-deb -c "$d"
           done
-          dpkg-deb -c zproject_*_amd64.deb | grep -q './usr/bin/zproject$'
-          dpkg-deb -c zproject_*_amd64.deb | grep -q './usr/bin/zproject-cli$'
-          dpkg-deb -c zproject_*_amd64.deb | grep -q './usr/share/applications/zproject.desktop$'
-          dpkg-deb -c zproject_*_amd64.deb | grep -q './usr/share/icons/hicolor/256x256/apps/zproject.png$'
-          dpkg-deb -c zprojectd_*_amd64.deb | grep -q './usr/bin/zprojectd$'
+          # Listings go to files first: `grep -q` closing a pipe early would
+          # make dpkg-deb fail with SIGPIPE under pipefail.
+          dpkg-deb -c zproject_*_amd64.deb > desktop.list
+          dpkg-deb -c zprojectd_*_amd64.deb > server.list
+          dpkg-deb -f zprojectd_*_amd64.deb Depends > server.depends
+          grep -q './usr/bin/zproject$' desktop.list
+          grep -q './usr/bin/zproject-cli$' desktop.list
+          grep -q './usr/share/applications/zproject.desktop$' desktop.list
+          grep -q './usr/share/icons/hicolor/256x256/apps/zproject.png$' desktop.list
+          grep -q './usr/bin/zprojectd$' server.list
           # The server package is headless: Qt Core + Network, never Widgets/Gui.
-          dpkg-deb -f zprojectd_*_amd64.deb Depends | grep -q 'libqt6network6'
-          ! dpkg-deb -f zprojectd_*_amd64.deb Depends | grep -Eq 'libqt6(widgets|gui)6'
-          ! dpkg-deb -c zprojectd_*_amd64.deb | grep -Eq 'zproject-cli$|/zproject$'
+          grep -q 'libqt6network6' server.depends
+          # (`! grep` would not fail the step under set -e, so test explicitly.)
+          if grep -Eq 'libqt6(widgets|gui)6' server.depends; then echo "::error::zprojectd depends on Qt GUI"; exit 1; fi
+          if grep -Eq 'zproject-cli$|/zproject$' server.list; then echo "::error::client binaries in zprojectd"; exit 1; fi
 
       # Install both packages on a clean Ubuntu 24.04 (dragon's base) and run
       # each binary.
