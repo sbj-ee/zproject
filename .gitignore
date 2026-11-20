@@ -1,0 +1,16 @@
+# build trees
+/build*/
+/out/
+CMakeLists.txt.user
+compile_commands.json
+.cache/
+# editors and OS
+*.swp
+.DS_Store
+.vscode/
+.idea/
+# local databases and scratch (never commit real plan data or tokens)
+*.db
+*.db-wal
+*.db-shm
+/scratch/
