@@ -6,7 +6,9 @@
 # The server package carries the systemd units (zprojectd.service and the
 # 03:17 zprojectd-backup.timer), /etc/zproject/zprojectd.conf (a conffile with
 # placeholders) and a postinst that creates the zproject user; it does not
-# enable or start anything. The macOS .dmg arrives in a later pull request.
+# enable or start anything.
+#   zproject-<ver>-Darwin.dmg   macOS arm64: zproject.app with zproject-cli in
+#                               Contents/MacOS, Qt deployed, ad-hoc signed
 
 include(GNUInstallDirs)
 
@@ -62,6 +64,9 @@ if(UNIX AND NOT APPLE)
   set(CPACK_DEBIAN_DESKTOP_PACKAGE_NAME "zproject")
   set(CPACK_DEBIAN_DESKTOP_FILE_NAME "zproject_${PROJECT_VERSION}_amd64.deb")
   set(CPACK_DEBIAN_DESKTOP_PACKAGE_SECTION "x11")
+  # Qt loads OpenSSL at run time for https:// (shlibdeps cannot see it).
+  set(CPACK_DEBIAN_DESKTOP_PACKAGE_DEPENDS "libssl3t64 | libssl3")
+  set(CPACK_DEBIAN_DESKTOP_PACKAGE_SUGGESTS "libsecret-tools")
   set(CPACK_COMPONENT_DESKTOP_DESCRIPTION
       "zproject desktop app and zproject-cli.\nGantt, WBS, critical path and baselines; a client of zprojectd.")
 
@@ -76,6 +81,19 @@ if(UNIX AND NOT APPLE)
       "zproject server.\nHeadless zprojectd (Qt Core/Network, SQLite) serving /v1 and /mcp on loopback behind tailscale serve.")
   include(CPack)
   message(STATUS "zproject: CPack configured for .deb (version ${PROJECT_VERSION})")
-elseif(APPLE)
-  message(STATUS "zproject: macOS .dmg packaging is not configured yet (later PR)")
+elseif(APPLE AND ZPROJECT_BUILD_GUI)
+  set(CPACK_GENERATOR "DragNDrop")
+  set(CPACK_DMG_VOLUME_NAME "zproject ${PROJECT_VERSION}")
+  set(CPACK_PACKAGE_FILE_NAME "zproject-${PROJECT_VERSION}-Darwin")
+  set(CPACK_DMG_SLA_USE_RESOURCE_FILE_LICENSE OFF)
+  # In this order, in this directory (so it is also the install order): the
+  # bundle, the CLI inside it, the icon, then macdeployqt + ad-hoc signing.
+  install(TARGETS zproject BUNDLE DESTINATION . COMPONENT desktop)
+  install(TARGETS zproject-cli RUNTIME DESTINATION zproject.app/Contents/MacOS COMPONENT desktop)
+  if(DEFINED ZPROJECT_ICNS_FILE)
+    install(FILES "${ZPROJECT_ICNS_FILE}" DESTINATION zproject.app/Contents/Resources COMPONENT desktop)
+  endif()
+  install(SCRIPT "${CMAKE_BINARY_DIR}/MacDeploy.cmake" COMPONENT desktop)
+  include(CPack)
+  message(STATUS "zproject: CPack configured for .dmg (version ${PROJECT_VERSION})")
 endif()

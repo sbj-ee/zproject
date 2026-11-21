@@ -1,7 +1,7 @@
-# Static analysis for zproject's own code (core/, store/, server/, app/, cli/);
+# Static analysis for zproject's own code (core/, store/, server/, client/, app/, cli/);
 # CI job "clang-tidy" fails on any finding. Run it locally with:
 #   cmake -B build -G Ninja && cmake --build build   # moc output, version.hpp
-#   run-clang-tidy -quiet -p build "$PWD/(core|store|server|app|cli)/.*\.cpp$"
+#   run-clang-tidy -quiet -p build "$PWD/(core|store|server|client|app|cli)/.*\.cpp$"
 # Same check set as zterminal. Switched off below: checks that only produce
 # noise with Qt code. Each has a reason; re-enable one by deleting its line and
 # fixing what it reports.
@@ -24,4 +24,4 @@ Checks: >
 #                               clang-tidy 18; ASan/LSan in CI cover the real thing
 # performance.Padding           struct layout advice, not a defect
 WarningsAsErrors: '*'
-HeaderFilterRegex: '.*/(core|store|server|app|cli)/[^/]*$'
+HeaderFilterRegex: '.*/(core|store|server|client|app|cli)/[^/]*$'

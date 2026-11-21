@@ -2,8 +2,8 @@
 # the same base as the server host's Pop!_OS 24.04) and macOS 15 (Apple Silicon,
 # Homebrew Qt). The version comes from CMake project() -> PROJECT_VERSION;
 # artifacts are zproject_<version>_amd64.deb and zprojectd_<version>_amd64.deb.
-# SPEC.md §19 lists the full job set; fuzzing and the .dmg are added with the
-# code they test. The OpenAPI document is linted in its own job, and the
+# SPEC.md §19 lists the full job set; fuzzing is added with the code it
+# tests. The macOS job builds and checks the .dmg (release.yml publishes). The OpenAPI document is linted in its own job, and the
 # systemd units are checked with systemd-analyze in the install smoke test.
 #
 # SQLite is downloaded at configure time and verified against the hashes
@@ -115,6 +115,9 @@ jobs:
           dpkg-deb -c zproject_*_amd64.deb > desktop.list
           dpkg-deb -c zprojectd_*_amd64.deb > server.list
           dpkg-deb -f zprojectd_*_amd64.deb Depends > server.depends
+          dpkg-deb -f zproject_*_amd64.deb Depends > desktop.depends
+          grep -q 'libssl3' desktop.depends
+          grep -q 'libqt6network6' desktop.depends
           grep -q './usr/bin/zproject$' desktop.list
           grep -q './usr/bin/zproject-cli$' desktop.list
           grep -q './usr/share/applications/zproject.desktop$' desktop.list
@@ -178,6 +181,25 @@ jobs:
             case "$projects" in *"\"name\":\"Smoke\""*) ;; *) echo "project not listed" >&2; exit 1;; esac
             curl -fsS -o /dev/null -H "$auth" -H "Content-Type: application/json" \
               -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}" http://127.0.0.1:8788/mcp
+            # The client package on the same box: zproject-cli against the
+            # running server (loopback http is allowed; anything else needs https).
+            apt-get install -y -qq /pkgs/zproject_*_amd64.deb >/dev/null
+            zproject-cli --version
+            zproject-cli doctor
+            export ZPROJECT_URL=http://127.0.0.1:8788
+            printf "%s\n" "$token" | zproject-cli login --stdin
+            test "$(stat -c "%a" "$HOME/.config/zproject/token")" = 600
+            zproject-cli status
+            project=$(zproject-cli --json projects create "CLI smoke" | sed -n "s/.*\"id\": \"\([0-9a-f]\{20\}\)\".*/\1/p" | head -n1)
+            zproject-cli tasks add "$project" "First task" --duration 2
+            zproject-cli tasks list "$project"
+            zproject-cli token create --name smoke-device --kind device --out-file /tmp/device.token
+            test "$(stat -c "%a" /tmp/device.token)" = 600
+            ZPROJECT_TOKEN_FILE=/tmp/device.token zproject-cli --json projects list >/dev/null
+            zproject-cli logout
+            if zproject-cli projects list 2>/dev/null; then echo "still logged in" >&2; exit 1; fi
+            if ZPROJECT_URL=http://example.com zproject-cli status 2>/dev/null; then echo "clear-text URL accepted" >&2; exit 1; fi
+
             kill -TERM "$pid"
             wait "$pid"
             cat /tmp/zprojectd.log
@@ -186,8 +208,6 @@ jobs:
             $as_zproject zprojectd --config "$conf" --backup
             ls -l /var/lib/zproject/backups
 
-            apt-get install -y -qq /pkgs/zproject_*_amd64.deb >/dev/null
-            zproject-cli --version
             zproject --version
           '
 
@@ -270,6 +290,45 @@ jobs:
           ctest --test-dir build --output-on-failure
           file build/server/zprojectd | grep -q arm64
 
+      # The release .dmg: zproject.app with zproject-cli, Qt deployed (with a
+      # TLS backend), no Homebrew paths, ad-hoc signed. Then the bundled CLI
+      # talks to a local zprojectd.
+      - name: Package and check .dmg
+        run: |
+          set -euo pipefail
+          (cd build && cpack -G DragNDrop)
+          dmg=$(ls build/zproject-*-Darwin.dmg)
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg"
+          trap 'hdiutil detach "$mnt" -quiet || true; kill "${pid:-0}" 2>/dev/null || true' EXIT
+          tools/macos/check-bundle.sh "$mnt/zproject.app"
+          codesign --verify --deep --strict --verbose=2 "$mnt/zproject.app"
+          cli="$mnt/zproject.app/Contents/MacOS/zproject-cli"
+          "$mnt/zproject.app/Contents/MacOS/zproject" --version
+          "$cli" --version
+          "$cli" doctor
+          file "$cli" | grep -q arm64
+
+          db="$RUNNER_TEMP/smoke.db"
+          build/server/zprojectd --db "$db" --migrate-only
+          token=$(build/server/zprojectd --db "$db" --create-owner-token 2>/dev/null)
+          build/server/zprojectd --db "$db" --listen 127.0.0.1:8788 2>"$RUNNER_TEMP/zprojectd.log" &
+          pid=$!
+          for _ in $(seq 50); do curl -fsS -o /dev/null http://127.0.0.1:8788/v1/health && break; sleep 0.1; done
+          export ZPROJECT_CONFIG_DIR="$RUNNER_TEMP/cli-config"
+          # The Keychain needs a login session; the file store works anywhere.
+          printf '%s\n' "$token" | "$cli" login --url http://127.0.0.1:8788 --store file --stdin
+          "$cli" status
+          "$cli" projects create "Smoke"
+          "$cli" projects list | grep -q Smoke
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zproject-dmg
+          path: build/zproject-*-Darwin.dmg
+          if-no-files-found: error
+
   sanitizers:
     name: Sanitizers (ASan + UBSan, ubuntu-24.04)
     runs-on: ubuntu-24.04
@@ -329,4 +388,4 @@ jobs:
 
       # Checks are in .clang-tidy; any finding fails the job.
       - name: Run clang-tidy
-        run: run-clang-tidy -quiet -p build "$PWD/(core|store|server|app|cli)/.*\.cpp$"
+        run: run-clang-tidy -quiet -p build "$PWD/(core|store|server|client|app|cli)/.*\.cpp$"
