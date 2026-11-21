@@ -1,0 +1,7 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <qresource prefix="/icons">
+    <file alias="zproject-32.png">../assets/icon/zproject-32.png</file>
+    <file alias="zproject-256.png">../assets/icon/zproject-256.png</file>
+  </qresource>
+</RCC>
