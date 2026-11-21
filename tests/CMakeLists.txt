@@ -9,14 +9,29 @@ endfunction()
 
 zproject_add_test(tst_core zproject_core)
 zproject_add_test(tst_serverconfig zproject_server_lib)
+zproject_add_test(tst_model zproject_core)
+zproject_add_test(tst_migrations zproject_store)
+zproject_add_test(tst_store zproject_store)
 
 # Every binary reports the single project() version.
 add_test(NAME zprojectd_version COMMAND zprojectd --version)
 set_tests_properties(zprojectd_version PROPERTIES
-  PASS_REGULAR_EXPRESSION "^zprojectd ${PROJECT_VERSION}\napiVersion 1\n$")
+  PASS_REGULAR_EXPRESSION "^zprojectd ${PROJECT_VERSION}\napiVersion 1\nschemaVersion [0-9]+\n$")
 add_test(NAME zprojectd_refuses_non_loopback COMMAND zprojectd --listen 0.0.0.0:8788)
 set_tests_properties(zprojectd_refuses_non_loopback PROPERTIES
   PASS_REGULAR_EXPRESSION "only loopback addresses are allowed")
+# --migrate-only creates a fresh database at the head schema, and is a no-op
+# the second time.
+set(_zp_mdb "${CMAKE_CURRENT_BINARY_DIR}/migrate-only-test.db")
+add_test(NAME zprojectd_migrate_clean
+  COMMAND ${CMAKE_COMMAND} -E rm -f "${_zp_mdb}" "${_zp_mdb}-wal" "${_zp_mdb}-shm")
+add_test(NAME zprojectd_migrate_only COMMAND zprojectd --db "${_zp_mdb}" --migrate-only)
+add_test(NAME zprojectd_migrate_again COMMAND zprojectd --db "${_zp_mdb}" --migrate-only)
+set_tests_properties(zprojectd_migrate_clean PROPERTIES FIXTURES_SETUP zp_mdb)
+set_tests_properties(zprojectd_migrate_only PROPERTIES FIXTURES_REQUIRED zp_mdb
+  PASS_REGULAR_EXPRESSION "is at schema [1-9][0-9]*")
+set_tests_properties(zprojectd_migrate_again PROPERTIES FIXTURES_REQUIRED zp_mdb DEPENDS zprojectd_migrate_only
+  PASS_REGULAR_EXPRESSION "is at schema [1-9][0-9]*")
 add_test(NAME zproject_cli_version COMMAND zproject-cli --version)
 set_tests_properties(zproject_cli_version PROPERTIES
   PASS_REGULAR_EXPRESSION "^zproject-cli ${PROJECT_VERSION}\n$")

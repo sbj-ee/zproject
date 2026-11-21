@@ -6,6 +6,6 @@ target_link_libraries(zproject_server_lib PUBLIC zproject_core Qt6::Network)
 zproject_set_warnings(zproject_server_lib)
 
 add_executable(zprojectd main.cpp)
-target_link_libraries(zprojectd PRIVATE zproject_server_lib)
+target_link_libraries(zprojectd PRIVATE zproject_server_lib zproject_store)
 zproject_set_warnings(zprojectd)
 install(TARGETS zprojectd RUNTIME DESTINATION bin COMPONENT server)
