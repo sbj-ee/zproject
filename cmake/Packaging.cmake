@@ -86,6 +86,10 @@ elseif(APPLE AND ZPROJECT_BUILD_GUI)
   set(CPACK_DMG_VOLUME_NAME "zproject ${PROJECT_VERSION}")
   set(CPACK_PACKAGE_FILE_NAME "zproject-${PROJECT_VERSION}-Darwin")
   set(CPACK_DMG_SLA_USE_RESOURCE_FILE_LICENSE OFF)
+  # In this order, in this directory (so it is also the install order): the
+  # bundle, the CLI inside it, the icon, then macdeployqt + ad-hoc signing.
+  install(TARGETS zproject BUNDLE DESTINATION . COMPONENT desktop)
+  install(TARGETS zproject-cli RUNTIME DESTINATION zproject.app/Contents/MacOS COMPONENT desktop)
   if(DEFINED ZPROJECT_ICNS_FILE)
     install(FILES "${ZPROJECT_ICNS_FILE}" DESTINATION zproject.app/Contents/Resources COMPONENT desktop)
   endif()
