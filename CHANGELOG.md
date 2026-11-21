@@ -7,6 +7,18 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases will be tagged `vX.Y.Z` and minisign-signed (SPEC.md §20);
 there is no release yet.
 
+## 0.2.1 — 2026-11-20
+
+Dependabot for the pinned GitHub Actions, as in zterminal.
+
+### Added
+- `.github/dependabot.yml`: weekly `github-actions` updates with a 7-day
+  cooldown; minor and patch updates grouped into one PR, commit prefix `ci`.
+- `.github/workflows/dependabot-auto-merge.yml`: turns on GitHub auto-merge for
+  a Dependabot PR whose updates are all minor or patch; branch protection on
+  `main` holds the merge until the required checks pass. A major update is left
+  for review.
+
 ## 0.2.0 — 2026-11-20
 
 Phase 1a, first part: the store (SPEC.md §5, §16).
