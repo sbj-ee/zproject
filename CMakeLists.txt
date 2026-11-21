@@ -12,7 +12,7 @@ endif()
 # Single source of truth for the version (SPEC.md §22): bump ONLY the VERSION
 # here. It reaches all three binaries through generated/zproject/version.hpp,
 # and CPack names the packages from PROJECT_VERSION.
-project(zproject VERSION 0.2.1 LANGUAGES C CXX)
+project(zproject VERSION 0.2.2 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -48,7 +48,7 @@ configure_file(
   "${ZPROJECT_GENERATED_DIR}/zproject/version.hpp"
   @ONLY)
 
-add_subdirectory(third_party/sqlite)
+include(cmake/SQLite.cmake)
 add_subdirectory(core)
 add_subdirectory(store)
 add_subdirectory(server)

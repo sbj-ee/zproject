@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.2.1**, the version in `CMakeLists.txt`
+This specification describes zproject **0.2.2**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -176,7 +176,9 @@ fuzzers (`-DZPROJECT_FUZZ=ON`, clang only). CMake options:
 ### 4.3 Dependencies
 
 Qt 6, **minimum 6.4** (Core, Network, Widgets, PrintSupport for PDF, Test), SQLite ≥ 3.45 (bundled amalgamation so WAL and `VACUUM INTO`
-behaviour is fixed), libsodium (minisign verification, token hashing helpers),
+behaviour is fixed; downloaded from sqlite.org at configure time and verified
+against the SHA3-256 and SHA-256 pinned in `cmake/FetchSQLite.cmake`, not
+vendored), libsodium (minisign verification, token hashing helpers),
 libsecret (Linux keychain) and Security.framework (macOS Keychain). No
 JavaScript runtime, no Python at runtime.
 

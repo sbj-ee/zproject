@@ -1,4 +1,4 @@
-# Warning flags for zproject's own targets (not third_party/).
+# Warning flags for zproject's own targets (not the SQLite amalgamation).
 #   -DZPROJECT_WERROR=ON   treat warnings as errors (CI sets this; off by
 #                          default so a newer compiler doesn't break a build)
 option(ZPROJECT_WERROR "Treat compiler warnings in zproject's own targets as errors" OFF)

@@ -1,6 +1,6 @@
 # zproject
 
-**0.2.1**
+**0.2.2**
 
 Current release: none yet
 
@@ -49,6 +49,15 @@ CMake options: `ZPROJECT_WERROR` (warnings are errors; CI sets it),
 `ZPROJECT_SANITIZE=address,undefined`.
 
 The code targets Qt 6.4 as its minimum: use no Qt API newer than 6.4.
+
+SQLite is not in the repository. The first configure downloads the
+amalgamation zip from sqlite.org and checks it against the SHA3-256 and
+SHA-256 pinned in [`cmake/FetchSQLite.cmake`](cmake/FetchSQLite.cmake); a
+mismatch stops the build. The zip is cached in `~/.cache/zproject` (or
+`$XDG_CACHE_HOME/zproject`, or `$ZPROJECT_SQLITE_CACHE`), so later builds work
+offline. For a build with no network: put the zip in the cache, or pass
+`-DSQLITE_SOURCE_DIR=<dir>` with an extracted `sqlite3.c`/`sqlite3.h` (each is
+still hash-checked); `-DZPROJECT_SQLITE_OFFLINE=ON` forbids the download.
 
 ## Version bumps
 
