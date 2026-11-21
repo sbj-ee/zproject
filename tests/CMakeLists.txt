@@ -12,6 +12,12 @@ zproject_add_test(tst_serverconfig zproject_server_lib)
 zproject_add_test(tst_model zproject_core)
 zproject_add_test(tst_migrations zproject_store)
 zproject_add_test(tst_store zproject_store)
+zproject_add_test(tst_audit zproject_store)
+zproject_add_test(tst_backup zproject_store)
+zproject_add_test(tst_httpparser zproject_server_lib)
+zproject_add_test(tst_httpserver zproject_server_lib)
+zproject_add_test(tst_auth zproject_server_lib)
+zproject_add_test(tst_api zproject_server_lib)
 
 # SQLite hash pinning (cmake/FetchSQLite.cmake): wrong hashes are refused.
 add_test(NAME sqlite_hash_verification COMMAND ${CMAKE_COMMAND}

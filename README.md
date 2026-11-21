@@ -1,6 +1,6 @@
 # zproject
 
-**0.2.2**
+**0.3.0**
 
 Current release: none yet
 
@@ -19,10 +19,51 @@ The full design is in [SPEC.md](SPEC.md).
 
 ## Status
 
-Phase 1a has started: the SQLite store (schema migrations, projects and the
-task tree, the append-only `changes` feed) is in; `zprojectd --migrate-only
---db FILE` creates or migrates a database. The HTTP API, tokens and the
-scheduling engine follow (SPEC.md §24). Nothing is released.
+Phase 1b: `zprojectd` serves the first slice of the `/v1` API (projects,
+tasks, WBS, history, the change feed, tokens, the audit log, backups) and an
+MCP endpoint at `/mcp`, with scoped tokens, rate limits and a hash-chained
+audit log. Dependencies, the scheduling engine, resources, baselines, the RAID
+log, reports and the desktop client follow (SPEC.md §24). Nothing is
+released.
+
+## Running the server
+
+The `zprojectd` package installs the binary, `/etc/zproject/zprojectd.conf`,
+and three systemd units; its postinst creates the `zproject` user and
+`/var/lib/zproject`, and enables nothing. On the server host:
+
+```sh
+sudoedit /etc/zproject/zprojectd.conf        # allowed_hosts, notify_hub_url
+sudo -u zproject zprojectd --config /etc/zproject/zprojectd.conf --create-owner-token
+sudo systemctl enable --now zprojectd.service zprojectd-backup.timer
+tailscale serve --bg --https=443 http://127.0.0.1:8788
+```
+
+The owner token is printed once; keep it in a password manager. Other
+tokens are made through the API:
+
+```sh
+curl -H "Authorization: Bearer $ZPROJECT_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"name":"assistant","kind":"agent","projects":["<project-id>"]}' \
+  https://<server-host>.<tailnet>.ts.net/v1/tokens
+```
+
+An agent token is read-only, limited to the named projects, expires after 90
+days and needs a dry run plus `X-Zproject-Confirm` for deletes, unless the
+request asks for more (`scopes: ["write"]`, `expiresInDays` up to 90,
+`requireConfirm`); it can never be `admin`.
+
+- REST: [`api/openapi.yaml`](api/openapi.yaml) (also served at
+  `/v1/openapi.json`). `?dryRun=true` previews a write; `If-Match: <rev>`
+  refuses a stale update with 412.
+- MCP: point an MCP client at `https://<server-host>.<tailnet>.ts.net/mcp`
+  with `Authorization: Bearer <token>` (streamable HTTP, JSON responses).
+- Backups: `zprojectd-backup.timer` runs `zprojectd --backup` at 03:17 into
+  `/var/lib/zproject/backups`; `zprojectd --restore FILE` (service stopped)
+  restores one. `zprojectd --verify-audit` checks the audit chain.
+- Alerts: set `[alerts] notify_hub_url` to the ts-notify-hub URL and put its
+  token in `/etc/zproject/notify-hub.token` (`root:zproject`, mode 0640);
+  `zprojectd --notify-test` sends a test alert.
 
 ## Building
 

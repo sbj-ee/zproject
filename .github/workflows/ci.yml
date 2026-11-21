@@ -2,8 +2,9 @@
 # the same base as the server host's Pop!_OS 24.04) and macOS 15 (Apple Silicon,
 # Homebrew Qt). The version comes from CMake project() -> PROJECT_VERSION;
 # artifacts are zproject_<version>_amd64.deb and zprojectd_<version>_amd64.deb.
-# SPEC.md §19 lists the full job set; fuzzing, OpenAPI lint, the .dmg and the
-# systemd unit checks are added with the code they test.
+# SPEC.md §19 lists the full job set; fuzzing and the .dmg are added with the
+# code they test. The OpenAPI document is linted in its own job, and the
+# systemd units are checked with systemd-analyze in the install smoke test.
 #
 # SQLite is downloaded at configure time and verified against the hashes
 # pinned in cmake/FetchSQLite.cmake; every building job restores the download
@@ -119,25 +120,69 @@ jobs:
           grep -q './usr/share/applications/zproject.desktop$' desktop.list
           grep -q './usr/share/icons/hicolor/256x256/apps/zproject.png$' desktop.list
           grep -q './usr/bin/zprojectd$' server.list
+          grep -q './usr/lib/systemd/system/zprojectd.service$' server.list
+          grep -q './usr/lib/systemd/system/zprojectd-backup.service$' server.list
+          grep -q './usr/lib/systemd/system/zprojectd-backup.timer$' server.list
+          grep -q './etc/zproject/zprojectd.conf$' server.list
+          dpkg-deb -e zprojectd_*_amd64.deb server.control
+          grep -qx '/etc/zproject/zprojectd.conf' server.control/conffiles
+          test -x server.control/postinst
+          rm -rf server.control
           # The server package is headless: Qt Core + Network, never Widgets/Gui.
           grep -q 'libqt6network6' server.depends
           # (`! grep` would not fail the step under set -e, so test explicitly.)
           if grep -Eq 'libqt6(widgets|gui)6' server.depends; then echo "::error::zprojectd depends on Qt GUI"; exit 1; fi
           if grep -Eq 'zproject-cli$|/zproject$' server.list; then echo "::error::client binaries in zprojectd"; exit 1; fi
 
-      # Install both packages on a clean Ubuntu 24.04 (the server host's base) and run
-      # each binary.
+      # Install both packages on a clean Ubuntu 24.04 (the server host's base),
+      # check the systemd units, then run zprojectd as the zproject user
+      # created by postinst and call the API with a throwaway owner token
+      # (never printed).
       - name: Install smoke test (ubuntu:24.04 container)
         run: |
           set -euo pipefail
           docker run --rm -v "$PWD/build:/pkgs:ro" ubuntu:24.04 bash -euo pipefail -c '
             export DEBIAN_FRONTEND=noninteractive
             apt-get update -qq
+            apt-get install -y -qq systemd curl >/dev/null
             apt-get install -y -qq /pkgs/zprojectd_*_amd64.deb >/dev/null
             zprojectd --version
             zprojectd --db /tmp/smoke.db --migrate-only
             zprojectd --db /tmp/smoke.db --migrate-only
             if zprojectd --listen 0.0.0.0:8788; then echo "non-loopback bind accepted" >&2; exit 1; fi
+
+            # postinst: the zproject user and a private state directory.
+            id zproject
+            test "$(stat -c "%U %a" /var/lib/zproject)" = "zproject 700"
+            test "$(stat -c "%U:%G %a" /etc/zproject/zprojectd.conf)" = "root:zproject 640"
+            units="/usr/lib/systemd/system/zprojectd.service /usr/lib/systemd/system/zprojectd-backup.service /usr/lib/systemd/system/zprojectd-backup.timer"
+            systemd-analyze verify $units
+            grep -qx "MemoryMax=512M" /usr/lib/systemd/system/zprojectd.service
+            grep -qx "OnCalendar=\*-\*-\* 03:17:00" /usr/lib/systemd/system/zprojectd-backup.timer
+
+            conf=/etc/zproject/zprojectd.conf
+            token=$(runuser -u zproject -- zprojectd --config "$conf" --create-owner-token --name ci-smoke 2>/dev/null)
+            runuser -u zproject -- zprojectd --config "$conf" 2>/tmp/zprojectd.log &
+            pid=$!
+            for _ in $(seq 50); do curl -fsS -o /dev/null http://127.0.0.1:8788/v1/health && break; sleep 0.1; done
+            curl -fsS http://127.0.0.1:8788/v1/health
+            echo
+            test "$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8788/v1/projects)" = 401
+            test "$(curl -s -o /dev/null -w "%{http_code}" -H "Host: evil.example" http://127.0.0.1:8788/v1/health)" = 400
+            auth="Authorization: Bearer $token"
+            curl -fsS -o /dev/null -H "$auth" -H "Content-Type: application/json" -d "{\"name\":\"Smoke\"}" http://127.0.0.1:8788/v1/projects
+            projects=$(curl -fsS -H "$auth" http://127.0.0.1:8788/v1/projects)
+            case "$projects" in *"\"name\":\"Smoke\""*) ;; *) echo "project not listed" >&2; exit 1;; esac
+            curl -fsS -o /dev/null -H "$auth" -H "Content-Type: application/json" \
+              -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}" http://127.0.0.1:8788/mcp
+            kill -TERM "$pid"
+            wait "$pid"
+            cat /tmp/zprojectd.log
+            if grep -q "zpt_" /tmp/zprojectd.log; then echo "token in the log" >&2; exit 1; fi
+            runuser -u zproject -- zprojectd --config "$conf" --verify-audit
+            runuser -u zproject -- zprojectd --config "$conf" --backup
+            ls -l /var/lib/zproject/backups
+
             apt-get install -y -qq /pkgs/zproject_*_amd64.deb >/dev/null
             zproject-cli --version
             zproject --version
@@ -149,6 +194,22 @@ jobs:
           name: zproject-debs
           path: build/*.deb
           if-no-files-found: error
+
+  # api/openapi.yaml is valid OpenAPI 3.1 (Redocly's recommended rules) and
+  # api/openapi.json, which zprojectd embeds, is generated from it.
+  openapi:
+    name: OpenAPI lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install PyYAML
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-yaml
+      - name: openapi.json matches openapi.yaml
+        run: scripts/openapi-json.py --check
+      - name: Redocly lint
+        run: npx -y @redocly/cli@2.77.0 lint --format=github-actions api/openapi.yaml
 
   linux-server-only:
     name: Linux server-only build (no Qt Widgets)

@@ -1,0 +1,40 @@
+# Nightly zproject backup (SPEC.md §16.3): VACUUM INTO, integrity_check,
+# JSON export, keep 30 daily + 12 monthly. Started by zprojectd-backup.timer.
+# A failure is sent to ts-notify-hub when alerts are configured.
+[Unit]
+Description=zproject nightly backup
+Documentation=https://github.com/sbj-ee/zproject
+
+[Service]
+Type=oneshot
+User=zproject
+Group=zproject
+ExecStart=/usr/bin/zprojectd --config /etc/zproject/zprojectd.conf --backup
+Nice=10
+IOSchedulingClass=idle
+Environment=QT_ENABLE_REGEXP_JIT=0
+MemoryMax=512M
+
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+ReadWritePaths=/var/lib/zproject

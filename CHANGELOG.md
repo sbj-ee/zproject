@@ -7,6 +7,71 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases will be tagged `vX.Y.Z` and minisign-signed (SPEC.md §20);
 there is no release yet.
 
+## 0.3.0 — 2026-11-21
+
+zprojectd serves its first slice of the `/v1` API and `/mcp` (SPEC.md §9,
+§11, §14, §16.3), with tokens, the audit log, backups and systemd units.
+
+### Added
+- Own HTTP/1.1 layer on `QTcpServer` (Qt Core + Network only): keep-alive and
+  pipelining; 8 KiB request line, 32 KiB / 64 headers, 1 MiB body; refuses
+  `Transfer-Encoding`, bare LF, missing or duplicate `Host`, conflicting
+  `Content-Length`, obs-fold and `..` paths; 64 connections, 30 s idle
+  timeout. Loopback only (`127.0.0.1:8788`).
+- `/v1` REST API, described by `api/openapi.yaml` (OpenAPI 3.1, embedded and
+  served at `/v1/openapi.json`): health; projects and tasks (list, search,
+  get, create, PATCH, delete, WBS, task history); the change feed; tokens
+  (list, create, revoke); the audit log; a backup trigger. Errors are
+  `{"error","code","details"}`. `If-Match` gives 412 on a stale revision;
+  `?dryRun=true` previews writes; cursor pagination.
+- Tokens (`zpt_<id>.<secret>`): only a SHA-256 of the secret is stored and
+  compared in constant time; scopes (`read` and `write` bundles, `admin`),
+  project allowlists, expiry, revocation, `lastUsedAt`. Agent tokens default
+  to read-only, named projects only, 90-day expiry (also the maximum), and
+  confirmation for destructive calls; they can never hold `admin` (also
+  enforced by a database trigger). `zprojectd --create-owner-token` makes
+  the first token (shown once).
+- Destructive calls: a dry run returns a single-use `confirmId` (5 minutes,
+  bound to the token and the exact request), sent back as
+  `X-Zproject-Confirm`.
+- Rate limits per token kind (read/write/destructive per minute, with
+  per-token overrides) and 10 failed authentications per minute per source;
+  429 with `Retry-After`.
+- Append-only, hash-chained audit log (migration 0002): every write, every
+  agent and app request, MCP tool calls, 401/403/429 and admin calls, with
+  before/after and Tailscale identity headers; written in the same
+  transaction as the change. `zprojectd --verify-audit` checks the chain.
+- `/mcp`: MCP over HTTP (JSON-RPC 2.0, protocol 2025-06-18, also 2025-03-26
+  and 2024-11-05). Tools `list_projects`, `get_project`, `search_tasks`,
+  `get_task`, `create_task`, `update_task`, `delete_task` (dry run, then
+  confirm), filtered by the token's scopes and run through the same checks as
+  `/v1`; resources `zproject://openapi` and
+  `zproject://projects/{id}/summary`.
+- Backups: `zprojectd --backup` (`VACUUM INTO`, `integrity_check`, JSON
+  export; keeps 30 daily and the newest of each of 12 months),
+  `--restore FILE`, and a snapshot before any schema migration.
+- Alerts: backup and audit-verification failures are posted to ts-notify-hub
+  (`[alerts] notify_hub_url`; the token is read from a file).
+  `zprojectd --notify-test` sends a test alert.
+- Configuration file `/etc/zproject/zprojectd.conf` (placeholders only in the
+  repository) and `--config`, `--listen`, `--db`, `--allowed-host`,
+  `--backup-dir`.
+- Packaging: `zprojectd.service` (hardened; `MemoryMax=512M`,
+  `CPUWeight=50`, `IOWeight=50`), `zprojectd-backup.service` and
+  `zprojectd-backup.timer` (03:17 nightly, `RandomizedDelaySec=10m`), the
+  config as a conffile, and a postinst that creates the `zproject` user and
+  `/var/lib/zproject` (mode 0700). Nothing is enabled or started on install.
+- Tests: `tst_httpparser`, `tst_httpserver` (real sockets), `tst_auth`,
+  `tst_audit`, `tst_backup`, and `tst_api` (the OpenAPI contract, scopes,
+  allowlists, expiry, revocation, confirm, rate limits, audit, MCP).
+- CI: an "OpenAPI lint" job (`@redocly/cli` 2.77.0, and `api/openapi.json` is
+  checked against the YAML); the install smoke test now runs
+  `systemd-analyze verify` on the units, checks the postinst, and runs the
+  server as the `zproject` user against `/v1` and `/mcp`.
+
+### Changed
+- `store::Transaction` is public and nests with savepoints.
+
 ## 0.2.2 — 2026-11-20
 
 SQLite is fetched at build time instead of vendored.

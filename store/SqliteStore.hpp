@@ -34,6 +34,8 @@ class SqliteStore final : public Store {
   Result<Task> deleteTask(const QString& id, qint64 expectedRev, const WriteContext& ctx) override;
 
   Result<QList<ChangeRecord>> changesSince(qint64 since, int limit = 500) override;
+  Result<QList<ChangeRecord>> changesFor(const QString& entityKind, const QString& entityId,
+                                         qint64 since = 0, int limit = 500) override;
 
  private:
   SqliteStore(Database db, int schemaVersion) : db_(std::move(db)), schemaVersion_(schemaVersion) {}

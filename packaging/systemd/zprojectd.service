@@ -1,0 +1,59 @@
+# zprojectd: the zproject server (SPEC.md §4.4, §14). Listens on
+# 127.0.0.1:8788 only; publish it on the tailnet with `tailscale serve`.
+[Unit]
+Description=zproject server (zprojectd)
+Documentation=https://github.com/sbj-ee/zproject
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=zproject
+Group=zproject
+ExecStart=/usr/bin/zprojectd --config /etc/zproject/zprojectd.conf
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+# QRegularExpression's JIT needs W+X memory; MemoryDenyWriteExecute forbids it.
+Environment=QT_ENABLE_REGEXP_JIT=0
+
+# Resource limits (SPEC.md §4.4)
+MemoryMax=512M
+CPUWeight=50
+IOWeight=50
+TasksMax=64
+LimitNOFILE=1024
+
+# Hardening (SPEC.md §14)
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+ReadWritePaths=/var/lib/zproject
+StateDirectory=zproject
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target
