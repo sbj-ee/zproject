@@ -4,8 +4,52 @@ All notable changes to zproject. The version is the single
 `project(zproject VERSION x.y.z)` in `CMakeLists.txt`; every pull request bumps
 it ([semantic versioning](https://semver.org/): patch for fixes and
 documentation, minor for features) and adds an entry here. A PR dates its own
-heading. Releases will be tagged `vX.Y.Z` and minisign-signed (SPEC.md §20);
-there is no release yet.
+heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
+[docs/RELEASING.md](docs/RELEASING.md)); there is no release yet.
+
+## 0.4.0 — 2026-11-21
+
+The first usable client, `zproject-cli`, and a release pipeline that ships it
+to Linux and macOS (SPEC.md §10, §20).
+
+- `zproject-cli` (new `client/` library) covers the whole `/v1` slice:
+  `projects list|show|create|update|delete`, `tasks
+  list|show|add|update|done|delete|history` (the list shows WBS codes, with
+  milestones marked ◆), `token list|create|revoke`, `audit`, `backup`, plus
+  `status` and `doctor`. Every command takes `--json`. Exit codes follow
+  SPEC.md §10: 0 ok, 1 error, 2 usage, 3 validation/conflict, 4 auth, 5 rate
+  limited (with the `Retry-After` hint). Deletes and confirm-required tokens
+  print a dry run until you add `--confirm ID`.
+- The URL comes from `--url`, `ZPROJECT_URL` or `~/.config/zproject/cli.ini`.
+  It must be https, except for loopback, and must not include a path,
+  credentials or query. Redirects are never followed. The CLI checks the
+  server's `apiVersion` and refuses a mismatch.
+- Tokens never go on the command line. `login` reads one from a file, stdin
+  or a prompt that doesn't echo. It validates the token against the server,
+  then stores it in the macOS Keychain (via `security -i`, so the token never
+  appears in an argv) or in a 0600 file under a 0700 directory on Linux. The
+  file store refuses a file anyone else can read, and `--store keychain` on
+  Linux uses `secret-tool`. `ZPROJECT_TOKEN` and `ZPROJECT_TOKEN_FILE` serve
+  scripts. `token create` writes the new token to a fresh 0600 file
+  (`--out-file`), or to stdout only when stdout is not a terminal.
+- macOS: `zproject.app` bundles `zproject-cli` (`Contents/MacOS`), with Qt and
+  its TLS backend deployed. It is ad-hoc signed and packaged as
+  `zproject-<v>-Darwin.dmg` (`cmake/MacBundle.cmake`,
+  `tools/macos/check-bundle.sh`). CI builds the .dmg, checks the bundle and
+  runs the bundled CLI against a local zprojectd.
+- Linux: the `zproject` .deb depends on `libssl3` (Qt's TLS backend) and
+  suggests `libsecret-tools`. The install smoke test now drives the installed
+  `zproject-cli` against the installed `zprojectd`.
+- `.github/workflows/release.yml`: on a `v*` tag it builds and tests on
+  Ubuntu 24.04 and macOS 15 and packages both .debs and the .dmg with build
+  provenance. It signs `SHA256SUMS` with minisign in the protected `release`
+  environment, verifies the signature against `core/UpdateSigningKey.cpp`
+  (the key shared with zterminal and ztodo), and creates the GitHub Release.
+  See docs/RELEASING.md.
+- The desktop placeholder points to `zproject-cli`. The README gains Install
+  and CLI login sections.
+- clang-tidy now covers `client/`. The SQLite hash test no longer depends on
+  how CMake wraps long build paths.
 
 ## 0.3.0 — 2026-11-21
 

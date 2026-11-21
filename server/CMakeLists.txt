@@ -40,4 +40,7 @@ zproject_set_warnings(zproject_server_lib)
 add_executable(zprojectd main.cpp)
 target_link_libraries(zprojectd PRIVATE zproject_server_lib zproject_store)
 zproject_set_warnings(zprojectd)
-install(TARGETS zprojectd RUNTIME DESTINATION bin COMPONENT server)
+# The server is packaged for Linux only (zprojectd_<ver>_amd64.deb).
+if(NOT APPLE)
+  install(TARGETS zprojectd RUNTIME DESTINATION bin COMPONENT server)
+endif()

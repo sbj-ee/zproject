@@ -1,6 +1,6 @@
 # zproject
 
-**0.3.0**
+**0.4.0**
 
 Current release: none yet
 
@@ -12,19 +12,20 @@ one repository (C++20, Qt 6):
 | Program | What it is |
 |---|---|
 | `zprojectd` | Headless server (Qt Core/Network, SQLite). Listens on `127.0.0.1:8788` only and is published on the tailnet with `tailscale serve`. Runs on a home server (Pop!_OS 24.04, amd64). |
-| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. |
-| `zproject-cli` | Thin command-line client of the `/v1` API. |
+| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. A placeholder window for now. |
+| `zproject-cli` | Command-line client of the `/v1` API, shipped with the desktop app (Linux `.deb`, inside `zproject.app` on macOS). |
 
 The full design is in [SPEC.md](SPEC.md).
 
 ## Status
 
-Phase 1b: `zprojectd` serves the first slice of the `/v1` API (projects,
+Phase 1c: `zprojectd` serves the first slice of the `/v1` API (projects,
 tasks, WBS, history, the change feed, tokens, the audit log, backups) and an
 MCP endpoint at `/mcp`, with scoped tokens, rate limits and a hash-chained
-audit log. Dependencies, the scheduling engine, resources, baselines, the RAID
-log, reports and the desktop client follow (SPEC.md §24). Nothing is
-released.
+audit log. `zproject-cli` covers all of it from Linux and macOS. The release
+workflow builds signed `.deb` and `.dmg` packages (see [Install](#install)).
+Dependencies, the scheduling engine, resources, baselines, the RAID log,
+reports and the desktop client follow (SPEC.md §24).
 
 ## Running the server
 
@@ -39,13 +40,15 @@ sudo systemctl enable --now zprojectd.service zprojectd-backup.timer
 tailscale serve --bg --https=443 http://127.0.0.1:8788
 ```
 
-The owner token is printed once; keep it in a password manager. Other
-tokens are made through the API:
+`allowed_hosts` must list the server's MagicDNS name
+(`<server-host>.<tailnet>.ts.net`); the server refuses any other `Host`. The
+owner token is printed once. Rather than putting it on screen, pipe it
+straight into the CLI on the server host (see [Install](#install)), and keep
+a copy in a password manager. Other tokens are made with
+`zproject-cli token create` or through the API:
 
 ```sh
-curl -H "Authorization: Bearer $ZPROJECT_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"name":"assistant","kind":"agent","projects":["<project-id>"]}' \
-  https://<server-host>.<tailnet>.ts.net/v1/tokens
+zproject-cli token create --kind agent --name assistant --projects <project-id> --out-file assistant.token
 ```
 
 An agent token is read-only, limited to the named projects, expires after 90
@@ -65,6 +68,74 @@ request asks for more (`scopes: ["write"]`, `expiresInDays` up to 90,
   token in `/etc/zproject/notify-hub.token` (`root:zproject`, mode 0640);
   `zprojectd --notify-test` sends a test alert.
 
+## Install
+
+Each release has `zproject_<v>_amd64.deb` (desktop app and `zproject-cli`,
+Ubuntu/Pop!_OS 24.04), `zprojectd_<v>_amd64.deb` (server),
+`zproject-<v>-Darwin.dmg` (macOS on Apple Silicon, ad-hoc signed),
+`SHA256SUMS`, and `SHA256SUMS.minisig`. Before installing, check them:
+
+```sh
+gh release download vX.Y.Z -R sbj-ee/zproject
+sha256sum -c --ignore-missing SHA256SUMS          # macOS: shasum -a 256 -c --ignore-missing SHA256SUMS
+minisign -Vm SHA256SUMS -P RWQfb7N3uguWMhJ7jsE/Z0hZ7pDWHQ9OEeWSBTlN/R5bxQ8HWSMxp/l9
+```
+
+The key is the one in [`core/UpdateSigningKey.cpp`](core/UpdateSigningKey.cpp)
+and [docs/RELEASING.md](docs/RELEASING.md).
+
+- Linux: `sudo apt install ./zproject_<v>_amd64.deb` (and `./zprojectd_<v>_amd64.deb` on the server).
+- macOS: open the `.dmg` and drag `zproject.app` to Applications. The app is
+  ad-hoc signed, not notarized, so the first launch needs right-click → Open.
+  To put the CLI on your `PATH`, run
+  `ln -s /Applications/zproject.app/Contents/MacOS/zproject-cli /usr/local/bin/zproject-cli`.
+
+### Connecting the CLI
+
+`zproject-cli` needs the server URL and a token. The URL is
+`https://<server-host>.<tailnet>.ts.net`, the address `tailscale serve`
+publishes, or `http://127.0.0.1:8788` on the server host itself. Plain http
+is accepted only for loopback. The token never goes on the command line.
+`login` reads it from a file, from stdin, or from a prompt that doesn't echo,
+checks it against the server, and stores it:
+
+- macOS: in the login Keychain (`--store keychain`, the default; service
+  `ee.sbj.zproject`).
+- Linux: in `~/.config/zproject/token`, mode 0600 (`--store file`, the
+  default). The CLI refuses to read the file if anyone else can read it. With
+  `libsecret-tools` installed, `--store keychain` uses the Secret Service
+  instead.
+
+The URL and store choice go into `~/.config/zproject/cli.ini`.
+`ZPROJECT_URL`, `ZPROJECT_TOKEN` (for scripts) and `ZPROJECT_TOKEN_FILE`
+override them.
+
+Use one token per machine. On the server host, log in with the owner token
+without ever displaying it, then make a device token for each other machine:
+
+```sh
+sudo -u zproject zprojectd --config /etc/zproject/zprojectd.conf --create-owner-token \
+  | zproject-cli login --url http://127.0.0.1:8788 --stdin
+zproject-cli token create --kind device --name <machine> --expires 365d --out-file <machine>.token
+```
+
+`token create` writes a new file with mode 0600. It prints the token only with
+`--stdout`, and refuses even then if stdout is a terminal. Copy the file to
+the machine (with `tailscale file cp` or `scp`), then on that machine:
+
+```sh
+zproject-cli login --url https://<server-host>.<tailnet>.ts.net --from-file <machine>.token
+rm <machine>.token
+zproject-cli status
+```
+
+`zproject-cli doctor` shows the config and TLS support. Run
+`zproject-cli --help` for the commands: projects, tasks, tokens, audit and
+backup, with `--json` output throughout. Deletes are dry runs until you add
+`--confirm ID`. To revoke a lost machine's token, run
+`zproject-cli token revoke <token-id>` (as owner) and check the result with
+`zproject-cli token list`.
+
 ## Building
 
 Linux (Ubuntu 24.04 / Pop!_OS 24.04, distro Qt 6.4):
@@ -83,6 +154,7 @@ macOS (Apple Silicon, Homebrew Qt):
 brew install qt cmake ninja
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
 cmake --build build && ctest --test-dir build --output-on-failure
+(cd build && cpack -G DragNDrop)   # zproject-<ver>-Darwin.dmg
 ```
 
 CMake options: `ZPROJECT_WERROR` (warnings are errors; CI sets it),

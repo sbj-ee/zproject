@@ -4,6 +4,7 @@ add_library(zproject_core STATIC
   Error.hpp
   Id.cpp Id.hpp
   Model.cpp Model.hpp
+  UpdateSigningKey.cpp UpdateSigningKey.hpp
   Version.cpp Version.hpp)
 target_include_directories(zproject_core PUBLIC
   "${CMAKE_SOURCE_DIR}"

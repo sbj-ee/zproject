@@ -6,4 +6,7 @@ add_executable(zproject
   resources.qrc)
 target_link_libraries(zproject PRIVATE zproject_core Qt6::Widgets)
 zproject_set_warnings(zproject)
-install(TARGETS zproject RUNTIME DESTINATION bin COMPONENT desktop)
+# macOS: zproject.app at the top of the .dmg (cmake/MacBundle.cmake).
+install(TARGETS zproject
+  RUNTIME DESTINATION bin COMPONENT desktop
+  BUNDLE DESTINATION . COMPONENT desktop)
