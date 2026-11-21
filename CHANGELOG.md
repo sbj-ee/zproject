@@ -7,6 +7,32 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases will be tagged `vX.Y.Z` and minisign-signed (SPEC.md §20);
 there is no release yet.
 
+## 0.2.2 — 2026-11-20
+
+SQLite is fetched at build time instead of vendored.
+
+### Changed
+- The SQLite 3.54.1 amalgamation is no longer in the repository
+  (`third_party/sqlite/` removed). `cmake/FetchSQLite.cmake` downloads
+  `sqlite-amalgamation-3540100.zip` from sqlite.org at configure time and
+  checks its SHA3-256 and SHA-256, and the SHA3-256 of the extracted
+  `sqlite3.c` and `sqlite3.h`, against pinned values; any mismatch is a fatal
+  configure error. Compile options are unchanged (`cmake/SQLite.cmake`).
+- Offline and cached builds: the verified zip is kept in `~/.cache/zproject`
+  (`$XDG_CACHE_HOME/zproject`, or `ZPROJECT_SQLITE_CACHE`);
+  `-DSQLITE_SOURCE_DIR=<dir>` uses already extracted sources (still
+  hash-checked); `-DZPROJECT_SQLITE_OFFLINE=ON` never downloads.
+- CI restores the download cache with `actions/cache` in every building job.
+- CI comments name the server host generically.
+
+### Added
+- ctest `sqlite_hash_verification`: a cached zip with the wrong hash, a
+  tampered `SQLITE_SOURCE_DIR` and an empty cache with downloads off are all
+  refused; verified sources are accepted.
+- CI step "Wrong SQLite hash fails the configure" (Linux job): a full configure
+  against a cached zip with one byte appended must fail with a SHA3-256
+  mismatch.
+
 ## 0.2.1 — 2026-11-20
 
 Dependabot for the pinned GitHub Actions, as in zterminal.

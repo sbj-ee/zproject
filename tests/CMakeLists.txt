@@ -13,6 +13,13 @@ zproject_add_test(tst_model zproject_core)
 zproject_add_test(tst_migrations zproject_store)
 zproject_add_test(tst_store zproject_store)
 
+# SQLite hash pinning (cmake/FetchSQLite.cmake): wrong hashes are refused.
+add_test(NAME sqlite_hash_verification COMMAND ${CMAKE_COMMAND}
+  -DFETCH=${PROJECT_SOURCE_DIR}/cmake/FetchSQLite.cmake
+  -DGOOD_DIR=${ZPROJECT_SQLITE_DIR}
+  -DWORK=${CMAKE_CURRENT_BINARY_DIR}/sqlite-hash-test
+  -P ${CMAKE_CURRENT_SOURCE_DIR}/sqlite/HashMismatch.cmake)
+
 # Every binary reports the single project() version.
 add_test(NAME zprojectd_version COMMAND zprojectd --version)
 set_tests_properties(zprojectd_version PROPERTIES
