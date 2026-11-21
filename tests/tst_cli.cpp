@@ -144,7 +144,7 @@ class TestCli : public QObject {
                                             path} + args);
     if (r.code != 0) qFatal("token create: %s", qPrintable(r.err));
     QFile f(path);
-    f.open(QIODevice::ReadOnly);
+    if (!f.open(QIODevice::ReadOnly)) qFatal("cannot read %s", qPrintable(path));
     return QString::fromLatin1(f.readAll()).trimmed();
   }
   int tokenFiles_ = 0;
