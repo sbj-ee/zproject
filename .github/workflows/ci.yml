@@ -161,8 +161,11 @@ jobs:
             grep -qx "OnCalendar=\*-\*-\* 03:17:00" /usr/lib/systemd/system/zprojectd-backup.timer
 
             conf=/etc/zproject/zprojectd.conf
-            token=$(runuser -u zproject -- zprojectd --config "$conf" --create-owner-token --name ci-smoke 2>/dev/null)
-            runuser -u zproject -- zprojectd --config "$conf" 2>/tmp/zprojectd.log &
+            # setpriv execs directly (runuser would sit in between and relay
+            # the SIGTERM below to the whole process group).
+            as_zproject="setpriv --reuid=zproject --regid=zproject --init-groups"
+            token=$($as_zproject zprojectd --config "$conf" --create-owner-token --name ci-smoke 2>/dev/null)
+            $as_zproject zprojectd --config "$conf" 2>/tmp/zprojectd.log &
             pid=$!
             for _ in $(seq 50); do curl -fsS -o /dev/null http://127.0.0.1:8788/v1/health && break; sleep 0.1; done
             curl -fsS http://127.0.0.1:8788/v1/health
@@ -179,8 +182,8 @@ jobs:
             wait "$pid"
             cat /tmp/zprojectd.log
             if grep -q "zpt_" /tmp/zprojectd.log; then echo "token in the log" >&2; exit 1; fi
-            runuser -u zproject -- zprojectd --config "$conf" --verify-audit
-            runuser -u zproject -- zprojectd --config "$conf" --backup
+            $as_zproject zprojectd --config "$conf" --verify-audit
+            $as_zproject zprojectd --config "$conf" --backup
             ls -l /var/lib/zproject/backups
 
             apt-get install -y -qq /pkgs/zproject_*_amd64.deb >/dev/null
