@@ -1,5 +1,5 @@
 # zproject_store: the Store interface and its SQLite implementation, schema
-# migrations and (later) backup (SPEC.md §4.1, §16).
+# migrations, tokens, the audit log and backup (SPEC.md §4.1, §16).
 
 # Embed store/migrations/NNNN_*.sql into the library as an ordered table, so
 # zprojectd needs no data files. Re-runs when a migration is added or edited.
@@ -29,6 +29,9 @@ add_library(zproject_store STATIC
   Migrations.cpp Migrations.hpp
   "${CMAKE_CURRENT_BINARY_DIR}/MigrationsData.cpp"
   Store.hpp
-  SqliteStore.cpp SqliteStore.hpp)
+  SqliteStore.cpp SqliteStore.hpp
+  Tokens.cpp Tokens.hpp
+  Audit.cpp Audit.hpp
+  Backup.cpp Backup.hpp)
 target_link_libraries(zproject_store PUBLIC zproject_core zproject_sqlite)
 zproject_set_warnings(zproject_store)

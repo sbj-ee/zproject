@@ -1,0 +1,2149 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "zproject API",
+  "version": "0.3.0",
+  "description": "Plans served by zprojectd on 127.0.0.1:8788, published on the tailnet by\n`tailscale serve`. Every request except `GET /v1/health` needs\n`Authorization: Bearer zpt_<id>.<secret>`. Each operation names the\nscope it needs (`x-zproject-scope`; `any` = any valid token), whether\nit is destructive (`x-zproject-destructive`; tokens with\n`requireConfirm` must confirm it) and whether it takes `?dryRun=true`\n(`x-zproject-dry-run`).\n",
+  "license": {
+   "name": "MIT",
+   "identifier": "MIT"
+  }
+ },
+ "servers": [
+  {
+   "url": "https://server-host.example.ts.net",
+   "description": "zprojectd behind tailscale serve (tailnet only)"
+  }
+ ],
+ "security": [
+  {
+   "bearer": []
+  }
+ ],
+ "tags": [
+  {
+   "name": "meta",
+   "description": "Health and this description"
+  },
+  {
+   "name": "projects",
+   "description": "Projects"
+  },
+  {
+   "name": "tasks",
+   "description": "Tasks and the WBS tree"
+  },
+  {
+   "name": "sync",
+   "description": "The change feed for client caches"
+  },
+  {
+   "name": "admin",
+   "description": "Tokens, audit log and backups"
+  }
+ ],
+ "paths": {
+  "/v1/health": {
+   "get": {
+    "operationId": "getHealth",
+    "tags": [
+     "meta"
+    ],
+    "summary": "Server health and versions (no token needed)",
+    "security": [],
+    "x-zproject-scope": "none",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "responses": {
+     "200": {
+      "description": "The server is up",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Health"
+        }
+       }
+      }
+     },
+     "400": {
+      "description": "400 bad_host: the Host header is not one of the configured names",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Error"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/v1/openapi.json": {
+   "get": {
+    "operationId": "getOpenApi",
+    "tags": [
+     "meta"
+    ],
+    "summary": "This API description as JSON",
+    "x-zproject-scope": "any",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "responses": {
+     "200": {
+      "description": "The OpenAPI 3.1 document",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     }
+    }
+   }
+  },
+  "/v1/projects": {
+   "get": {
+    "operationId": "listProjects",
+    "tags": [
+     "projects"
+    ],
+    "summary": "Projects this token may see",
+    "x-zproject-scope": "projects:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/limit"
+     },
+     {
+      "$ref": "#/components/parameters/cursor"
+     },
+     {
+      "$ref": "#/components/parameters/includeDeleted"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "A page of projects",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProjectPage"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "post": {
+    "operationId": "createProject",
+    "tags": [
+     "projects"
+    ],
+    "summary": "Create a project (tokens limited to named projects cannot)",
+    "x-zproject-scope": "projects:write",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProjectInput"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/DryRun"
+     },
+     "201": {
+      "description": "Created",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "415": {
+      "$ref": "#/components/responses/UnsupportedMediaType"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/projects/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "operationId": "getProject",
+    "tags": [
+     "projects"
+    ],
+    "summary": "One project",
+    "x-zproject-scope": "projects:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "responses": {
+     "200": {
+      "description": "The project",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Project"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "patch": {
+    "operationId": "updateProject",
+    "tags": [
+     "projects"
+    ],
+    "summary": "Change project fields (If-Match honoured)",
+    "x-zproject-scope": "projects:write",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     },
+     {
+      "$ref": "#/components/parameters/ifMatch"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProjectInput"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "The updated project, or a dry-run result with ?dryRun=true",
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "$ref": "#/components/schemas/Project"
+          },
+          {
+           "$ref": "#/components/schemas/DryRunResult"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "412": {
+      "$ref": "#/components/responses/RevMismatch"
+     },
+     "415": {
+      "$ref": "#/components/responses/UnsupportedMediaType"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "delete": {
+    "operationId": "deleteProject",
+    "tags": [
+     "projects"
+    ],
+    "summary": "Tombstone a project and its tasks (destructive)",
+    "x-zproject-scope": "projects:write",
+    "x-zproject-destructive": true,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     },
+     {
+      "$ref": "#/components/parameters/ifMatch"
+     },
+     {
+      "$ref": "#/components/parameters/confirm"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The tombstoned project, or a dry-run result with a confirmId",
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "$ref": "#/components/schemas/Project"
+          },
+          {
+           "$ref": "#/components/schemas/DryRunResult"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "412": {
+      "$ref": "#/components/responses/RevMismatch"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/projects/{id}/wbs": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "operationId": "getWbs",
+    "tags": [
+     "tasks"
+    ],
+    "summary": "The task tree with WBS codes (1, 1.1, 1.2, 2, ...)",
+    "x-zproject-scope": "tasks:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "responses": {
+     "200": {
+      "description": "WBS rows in depth-first order",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Wbs"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/projects/{id}/tasks": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "operationId": "listTasks",
+    "tags": [
+     "tasks"
+    ],
+    "summary": "A project's tasks in WBS order, optionally filtered",
+    "x-zproject-scope": "tasks:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/limit"
+     },
+     {
+      "$ref": "#/components/parameters/cursor"
+     },
+     {
+      "$ref": "#/components/parameters/includeDeleted"
+     },
+     {
+      "name": "q",
+      "in": "query",
+      "description": "Text to find in the title or notes (case-insensitive)",
+      "schema": {
+       "type": "string"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "schema": {
+       "$ref": "#/components/schemas/TaskStatus"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "A page of tasks",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TaskPage"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "post": {
+    "operationId": "createTask",
+    "tags": [
+     "tasks"
+    ],
+    "summary": "Add a task to the project",
+    "x-zproject-scope": "tasks:write",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TaskInput"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/DryRun"
+     },
+     "201": {
+      "description": "Created",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Task"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "415": {
+      "$ref": "#/components/responses/UnsupportedMediaType"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/tasks/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "operationId": "getTask",
+    "tags": [
+     "tasks"
+    ],
+    "summary": "One task",
+    "x-zproject-scope": "tasks:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "responses": {
+     "200": {
+      "description": "The task",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Task"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "patch": {
+    "operationId": "updateTask",
+    "tags": [
+     "tasks"
+    ],
+    "summary": "Change task fields (If-Match honoured)",
+    "x-zproject-scope": "tasks:write",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     },
+     {
+      "$ref": "#/components/parameters/ifMatch"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TaskInput"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "The updated task, or a dry-run result with ?dryRun=true",
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "$ref": "#/components/schemas/Task"
+          },
+          {
+           "$ref": "#/components/schemas/DryRunResult"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "412": {
+      "$ref": "#/components/responses/RevMismatch"
+     },
+     "415": {
+      "$ref": "#/components/responses/UnsupportedMediaType"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "delete": {
+    "operationId": "deleteTask",
+    "tags": [
+     "tasks"
+    ],
+    "summary": "Tombstone a task and its subtree (destructive)",
+    "x-zproject-scope": "tasks:write",
+    "x-zproject-destructive": true,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     },
+     {
+      "$ref": "#/components/parameters/ifMatch"
+     },
+     {
+      "$ref": "#/components/parameters/confirm"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The tombstoned task, or a dry-run result with a confirmId",
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "$ref": "#/components/schemas/Task"
+          },
+          {
+           "$ref": "#/components/schemas/DryRunResult"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "412": {
+      "$ref": "#/components/responses/RevMismatch"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/tasks/{id}/history": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "operationId": "getTaskHistory",
+    "tags": [
+     "tasks"
+    ],
+    "summary": "The change records of one task, oldest first",
+    "x-zproject-scope": "tasks:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/since"
+     },
+     {
+      "$ref": "#/components/parameters/limit"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Change records",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "items"
+         ],
+         "properties": {
+          "items": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Change"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/changes": {
+   "get": {
+    "operationId": "listChanges",
+    "tags": [
+     "sync"
+    ],
+    "summary": "The sync feed (needs projects:read too, and access to every project)",
+    "x-zproject-scope": "tasks:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/since"
+     },
+     {
+      "$ref": "#/components/parameters/limit"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Change records with seq > since",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ChangePage"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/tokens": {
+   "get": {
+    "operationId": "listTokens",
+    "tags": [
+     "admin"
+    ],
+    "summary": "Every token's metadata (never the secret or its hash)",
+    "x-zproject-scope": "admin",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "responses": {
+     "200": {
+      "description": "Tokens",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "items"
+         ],
+         "properties": {
+          "items": {
+           "type": "array",
+           "items": {
+            "$ref": "#/components/schemas/Token"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "post": {
+    "operationId": "createToken",
+    "tags": [
+     "admin"
+    ],
+    "summary": "Create a device, app or agent token; the secret is returned once",
+    "description": "Agent tokens: scopes default to `read` and can never include `admin`;\nthey must name their projects (no `*`); they expire after 90 days by\ndefault and at most; `requireConfirm` defaults to true.\n",
+    "x-zproject-scope": "admin",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TokenCreate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Created; `token` is shown only in this response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TokenCreated"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "415": {
+      "$ref": "#/components/responses/UnsupportedMediaType"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/tokens/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "delete": {
+    "operationId": "revokeToken",
+    "tags": [
+     "admin"
+    ],
+    "summary": "Revoke a token; takes effect on its next request (destructive)",
+    "x-zproject-scope": "admin",
+    "x-zproject-destructive": true,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     },
+     {
+      "$ref": "#/components/parameters/confirm"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The revoked token, or a dry-run result with a confirmId",
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "$ref": "#/components/schemas/Token"
+          },
+          {
+           "$ref": "#/components/schemas/DryRunResult"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/audit": {
+   "get": {
+    "operationId": "listAudit",
+    "tags": [
+     "admin"
+    ],
+    "summary": "The append-only, hash-chained audit log",
+    "x-zproject-scope": "audit:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/since"
+     },
+     {
+      "$ref": "#/components/parameters/limit"
+     },
+     {
+      "name": "tokenId",
+      "in": "query",
+      "schema": {
+       "$ref": "#/components/schemas/Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Audit rows with seq > since",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AuditPage"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/admin/backup": {
+   "post": {
+    "operationId": "runBackup",
+    "tags": [
+     "admin"
+    ],
+    "summary": "Take a backup now (the same as the nightly timer)",
+    "x-zproject-scope": "admin",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "responses": {
+     "200": {
+      "description": "The files written and the ones pruned",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "required": [
+          "databaseFile",
+          "exportFile",
+          "removed"
+         ],
+         "properties": {
+          "databaseFile": {
+           "type": "string"
+          },
+          "exportFile": {
+           "type": "string"
+          },
+          "removed": {
+           "type": "array",
+           "items": {
+            "type": "string"
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     },
+     "500": {
+      "$ref": "#/components/responses/Internal"
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "securitySchemes": {
+   "bearer": {
+    "type": "http",
+    "scheme": "bearer",
+    "description": "zpt_<id>.<secret> scoped token (SPEC.md \u00a79.2)"
+   }
+  },
+  "parameters": {
+   "id": {
+    "name": "id",
+    "in": "path",
+    "required": true,
+    "schema": {
+     "$ref": "#/components/schemas/Id"
+    }
+   },
+   "limit": {
+    "name": "limit",
+    "in": "query",
+    "schema": {
+     "type": "integer",
+     "minimum": 1,
+     "maximum": 500,
+     "default": 100
+    }
+   },
+   "cursor": {
+    "name": "cursor",
+    "in": "query",
+    "description": "nextCursor from the previous page",
+    "schema": {
+     "type": "string"
+    }
+   },
+   "since": {
+    "name": "since",
+    "in": "query",
+    "description": "Return rows with seq greater than this",
+    "schema": {
+     "type": "integer",
+     "minimum": 0,
+     "default": 0
+    }
+   },
+   "includeDeleted": {
+    "name": "includeDeleted",
+    "in": "query",
+    "schema": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "dryRun": {
+    "name": "dryRun",
+    "in": "query",
+    "description": "Validate and describe the change without making it",
+    "schema": {
+     "type": "boolean",
+     "default": false
+    }
+   },
+   "ifMatch": {
+    "name": "If-Match",
+    "in": "header",
+    "description": "The rev the change is based on; 412 if it moved on",
+    "schema": {
+     "type": "string"
+    }
+   },
+   "confirm": {
+    "name": "X-Zproject-Confirm",
+    "in": "header",
+    "description": "confirmId from a dry run of the identical request (single use, 5 minutes)",
+    "schema": {
+     "type": "string"
+    }
+   }
+  },
+  "responses": {
+   "DryRun": {
+    "description": "Dry-run result (?dryRun=true)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/DryRunResult"
+      }
+     }
+    }
+   },
+   "Validation": {
+    "description": "400 validation: the request is malformed or a field is invalid",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Unauthenticated": {
+    "description": "401 unauthenticated: missing, unknown, expired or revoked token",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Forbidden": {
+    "description": "403 forbidden_scope or forbidden_project",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "NotFound": {
+    "description": "404 not_found",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Conflict": {
+    "description": "409 conflict, cycle or confirm_required",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "RevMismatch": {
+    "description": "412 rev_mismatch: If-Match did not match the current rev",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "UnsupportedMediaType": {
+    "description": "415 unsupported_media_type: writes must be application/json",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "RateLimited": {
+    "description": "429 rate_limited; see Retry-After",
+    "headers": {
+     "Retry-After": {
+      "description": "Seconds to wait",
+      "schema": {
+       "type": "integer"
+      }
+     }
+    },
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   },
+   "Internal": {
+    "description": "500 internal (no details)",
+    "content": {
+     "application/json": {
+      "schema": {
+       "$ref": "#/components/schemas/Error"
+      }
+     }
+    }
+   }
+  },
+  "schemas": {
+   "Id": {
+    "type": "string",
+    "pattern": "^[0-9a-f]{20}$"
+   },
+   "Date": {
+    "type": [
+     "string",
+     "null"
+    ],
+    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+   },
+   "Timestamp": {
+    "type": "string",
+    "description": "UTC ISO 8601 with milliseconds"
+   },
+   "Error": {
+    "type": "object",
+    "required": [
+     "error",
+     "code"
+    ],
+    "properties": {
+     "error": {
+      "type": "string"
+     },
+     "code": {
+      "type": "string"
+     },
+     "details": {
+      "type": "object"
+     }
+    }
+   },
+   "Health": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "ok",
+     "version",
+     "apiVersion",
+     "schemaVersion"
+    ],
+    "properties": {
+     "ok": {
+      "type": "boolean"
+     },
+     "version": {
+      "type": "string",
+      "description": "App version (x.y.z)"
+     },
+     "apiVersion": {
+      "type": "integer",
+      "const": 1
+     },
+     "schemaVersion": {
+      "type": "integer",
+      "minimum": 0
+     }
+    }
+   },
+   "EntityBase": {
+    "type": "object",
+    "required": [
+     "id",
+     "createdAt",
+     "updatedAt",
+     "deleted",
+     "rev"
+    ],
+    "properties": {
+     "id": {
+      "$ref": "#/components/schemas/Id"
+     },
+     "createdAt": {
+      "$ref": "#/components/schemas/Timestamp"
+     },
+     "updatedAt": {
+      "$ref": "#/components/schemas/Timestamp"
+     },
+     "deleted": {
+      "type": "boolean"
+     },
+     "rev": {
+      "type": "integer",
+      "minimum": 1
+     }
+    }
+   },
+   "ProjectInput": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string",
+      "minLength": 1
+     },
+     "description": {
+      "type": "string"
+     },
+     "objectives": {
+      "type": "string"
+     },
+     "scope": {
+      "type": "string"
+     },
+     "outOfScope": {
+      "type": "string"
+     },
+     "successCriteria": {
+      "type": "string"
+     },
+     "owner": {
+      "type": "string"
+     },
+     "sponsor": {
+      "type": "string"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "active",
+       "on_hold",
+       "done",
+       "cancelled"
+      ]
+     },
+     "rag": {
+      "type": "string",
+      "enum": [
+       "green",
+       "amber",
+       "red"
+      ]
+     },
+     "priority": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+     },
+     "start": {
+      "$ref": "#/components/schemas/Date"
+     },
+     "finish": {
+      "$ref": "#/components/schemas/Date"
+     },
+     "budget": {
+      "type": [
+       "number",
+       "null"
+      ],
+      "minimum": 0
+     },
+     "color": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "order": {
+      "type": "integer"
+     }
+    }
+   },
+   "Project": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/EntityBase"
+     },
+     {
+      "$ref": "#/components/schemas/ProjectInput"
+     },
+     {
+      "required": [
+       "name",
+       "status",
+       "rag",
+       "priority"
+      ]
+     }
+    ]
+   },
+   "TaskStatus": {
+    "type": "string",
+    "enum": [
+     "todo",
+     "in_progress",
+     "done"
+    ]
+   },
+   "TaskInput": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "title": {
+      "type": "string",
+      "minLength": 1
+     },
+     "parent": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "pattern": "^[0-9a-f]{20}$"
+     },
+     "order": {
+      "type": "integer"
+     },
+     "notes": {
+      "type": "string"
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "task",
+       "milestone"
+      ]
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "auto",
+       "manual"
+      ]
+     },
+     "duration": {
+      "type": "number",
+      "minimum": 0
+     },
+     "start": {
+      "$ref": "#/components/schemas/Date"
+     },
+     "finish": {
+      "$ref": "#/components/schemas/Date"
+     },
+     "constraint": {
+      "type": "string",
+      "enum": [
+       "ASAP",
+       "SNET",
+       "FNLT"
+      ]
+     },
+     "constraintDate": {
+      "$ref": "#/components/schemas/Date"
+     },
+     "deadline": {
+      "$ref": "#/components/schemas/Date"
+     },
+     "percentComplete": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+     },
+     "actualStart": {
+      "$ref": "#/components/schemas/Date"
+     },
+     "actualFinish": {
+      "$ref": "#/components/schemas/Date"
+     },
+     "status": {
+      "$ref": "#/components/schemas/TaskStatus"
+     },
+     "priority": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+     },
+     "fixedCost": {
+      "type": "number",
+      "minimum": 0
+     }
+    }
+   },
+   "Task": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/EntityBase"
+     },
+     {
+      "$ref": "#/components/schemas/TaskInput"
+     },
+     {
+      "type": "object",
+      "required": [
+       "project",
+       "title",
+       "type",
+       "duration",
+       "status"
+      ],
+      "properties": {
+       "project": {
+        "$ref": "#/components/schemas/Id"
+       }
+      }
+     }
+    ]
+   },
+   "ProjectPage": {
+    "type": "object",
+    "required": [
+     "items",
+     "nextCursor"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Project"
+      }
+     },
+     "nextCursor": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "TaskPage": {
+    "type": "object",
+    "required": [
+     "items",
+     "nextCursor"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Task"
+      }
+     },
+     "nextCursor": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "Wbs": {
+    "type": "object",
+    "required": [
+     "projectId",
+     "items"
+    ],
+    "properties": {
+     "projectId": {
+      "$ref": "#/components/schemas/Id"
+     },
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "id",
+        "wbs",
+        "depth",
+        "title",
+        "type",
+        "parent"
+       ],
+       "properties": {
+        "id": {
+         "$ref": "#/components/schemas/Id"
+        },
+        "wbs": {
+         "type": "string",
+         "examples": [
+          "1.2.3"
+         ]
+        },
+        "depth": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "title": {
+         "type": "string"
+        },
+        "type": {
+         "type": "string",
+         "enum": [
+          "task",
+          "milestone"
+         ]
+        },
+        "parent": {
+         "type": [
+          "string",
+          "null"
+         ]
+        }
+       }
+      }
+     }
+    }
+   },
+   "DryRunResult": {
+    "type": "object",
+    "required": [
+     "dryRun",
+     "changes",
+     "ripple"
+    ],
+    "properties": {
+     "dryRun": {
+      "type": "boolean",
+      "const": true
+     },
+     "changes": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "required": [
+        "op",
+        "entityKind",
+        "entityId",
+        "before",
+        "after"
+       ],
+       "properties": {
+        "op": {
+         "type": "string",
+         "enum": [
+          "create",
+          "update",
+          "delete",
+          "revoke"
+         ]
+        },
+        "entityKind": {
+         "type": "string"
+        },
+        "entityId": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "before": {
+         "type": "object"
+        },
+        "after": {
+         "type": "object"
+        }
+       }
+      }
+     },
+     "ripple": {
+      "type": "object",
+      "description": "Schedule effects (empty until the scheduling engine lands)",
+      "properties": {
+       "moved": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        }
+       },
+       "finishDelta": {
+        "type": "number"
+       },
+       "criticalChanged": {
+        "type": "boolean"
+       }
+      }
+     },
+     "confirmId": {
+      "type": "string",
+      "description": "For destructive operations; send it in X-Zproject-Confirm"
+     },
+     "confirmExpiresAt": {
+      "$ref": "#/components/schemas/Timestamp"
+     }
+    }
+   },
+   "Change": {
+    "type": "object",
+    "required": [
+     "seq",
+     "ts",
+     "actor",
+     "entityKind",
+     "entityId",
+     "before",
+     "after"
+    ],
+    "properties": {
+     "seq": {
+      "type": "integer"
+     },
+     "ts": {
+      "$ref": "#/components/schemas/Timestamp"
+     },
+     "actor": {
+      "type": "string",
+      "description": "Token id or \"system\""
+     },
+     "entityKind": {
+      "type": "string"
+     },
+     "entityId": {
+      "type": "string"
+     },
+     "before": {
+      "type": "object"
+     },
+     "after": {
+      "type": "object"
+     },
+     "requestId": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "ChangePage": {
+    "type": "object",
+    "required": [
+     "items",
+     "nextSince",
+     "more"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Change"
+      }
+     },
+     "nextSince": {
+      "type": "integer"
+     },
+     "more": {
+      "type": "boolean"
+     }
+    }
+   },
+   "Scope": {
+    "type": "string",
+    "enum": [
+     "projects:read",
+     "tasks:read",
+     "schedule:read",
+     "resources:read",
+     "raid:read",
+     "reports:read",
+     "calendar:read",
+     "alerts:read",
+     "projects:write",
+     "tasks:write",
+     "resources:write",
+     "baselines:write",
+     "raid:write",
+     "templates:write",
+     "alerts:write",
+     "audit:read",
+     "admin",
+     "read",
+     "write"
+    ]
+   },
+   "Token": {
+    "type": "object",
+    "required": [
+     "id",
+     "name",
+     "kind",
+     "scopes",
+     "projects",
+     "createdAt",
+     "requireConfirm",
+     "active"
+    ],
+    "properties": {
+     "id": {
+      "$ref": "#/components/schemas/Id"
+     },
+     "name": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "owner",
+       "device",
+       "app",
+       "agent"
+      ]
+     },
+     "scopes": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Scope"
+      }
+     },
+     "projects": {
+      "type": "array",
+      "items": {
+       "type": "string"
+      },
+      "description": "Project ids, or [\"*\"] for all"
+     },
+     "createdAt": {
+      "$ref": "#/components/schemas/Timestamp"
+     },
+     "createdBy": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "expiresAt": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "lastUsedAt": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "revokedAt": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "requireConfirm": {
+      "type": "boolean"
+     },
+     "rateLimit": {
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "active": {
+      "type": "boolean"
+     }
+    }
+   },
+   "TokenCreate": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "name",
+     "kind"
+    ],
+    "properties": {
+     "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "device",
+       "app",
+       "agent"
+      ]
+     },
+     "scopes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+       "$ref": "#/components/schemas/Scope"
+      }
+     },
+     "projects": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+       "type": "string"
+      }
+     },
+     "expiresInDays": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "minimum": 1,
+      "maximum": 3650
+     },
+     "requireConfirm": {
+      "type": "boolean"
+     },
+     "rateLimit": {
+      "type": [
+       "object",
+       "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "read": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "write": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "destructive": {
+        "type": "integer",
+        "minimum": 1
+       },
+       "total": {
+        "type": "integer",
+        "minimum": 1
+       }
+      }
+     }
+    }
+   },
+   "TokenCreated": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/Token"
+     },
+     {
+      "type": "object",
+      "required": [
+       "token"
+      ],
+      "properties": {
+       "token": {
+        "type": "string",
+        "description": "zpt_<id>.<secret>, shown once; store it in a keychain"
+       }
+      }
+     }
+    ]
+   },
+   "AuditEntry": {
+    "type": "object",
+    "required": [
+     "seq",
+     "ts",
+     "status",
+     "prevHash",
+     "hash"
+    ],
+    "properties": {
+     "seq": {
+      "type": "integer"
+     },
+     "ts": {
+      "$ref": "#/components/schemas/Timestamp"
+     },
+     "tokenId": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "tokenName": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "tokenKind": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "tsUser": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "tsNode": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "method": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "path": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "mcpTool": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "entityKind": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "entityId": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "before": {
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "after": {
+      "type": [
+       "object",
+       "null"
+      ]
+     },
+     "dryRun": {
+      "type": "boolean"
+     },
+     "confirmId": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "status": {
+      "type": "integer"
+     },
+     "requestId": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "prevHash": {
+      "type": "string"
+     },
+     "hash": {
+      "type": "string"
+     }
+    }
+   },
+   "AuditPage": {
+    "type": "object",
+    "required": [
+     "items",
+     "nextSince",
+     "more"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/AuditEntry"
+      }
+     },
+     "nextSince": {
+      "type": "integer"
+     },
+     "more": {
+      "type": "boolean"
+     }
+    }
+   }
+  }
+ }
+}

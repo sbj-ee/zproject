@@ -1,0 +1,11 @@
+# 03:17 local time every night, within 10 minutes (SPEC.md §4.4).
+[Unit]
+Description=zproject nightly backup at 03:17
+
+[Timer]
+OnCalendar=*-*-* 03:17:00
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

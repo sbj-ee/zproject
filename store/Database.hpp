@@ -29,6 +29,9 @@ class Database {
   // connection settings of SPEC.md §16.1: WAL (files only), synchronous=NORMAL,
   // foreign_keys=ON, busy_timeout=5000.
   static Result<Database> open(const QString& path);
+  // Opens an existing file read-only with no pragmas that write (for checking
+  // a backup copy without turning it into a WAL database).
+  static Result<Database> openReadOnly(const QString& path);
 
   bool isOpen() const { return db_ != nullptr; }
   sqlite3* handle() const { return db_; }
@@ -81,6 +84,28 @@ class Statement {
   Statement(sqlite3* db, sqlite3_stmt* stmt) : db_(db), stmt_(stmt) {}
   sqlite3* db_ = nullptr;
   sqlite3_stmt* stmt_ = nullptr;
+};
+
+// A write transaction, rolled back unless commit() succeeded. The outermost
+// one is BEGIN IMMEDIATE ... COMMIT; one opened inside another becomes a
+// SAVEPOINT, so the server can wrap a store write and its audit row in one
+// transaction (SPEC.md §16.1).
+class Transaction {
+ public:
+  explicit Transaction(Database& db);
+  ~Transaction();
+  Transaction(const Transaction&) = delete;
+  Transaction& operator=(const Transaction&) = delete;
+
+  bool ok() const { return active_; }
+  const Error& error() const { return error_; }
+  Status commit();
+
+ private:
+  Database& db_;
+  Error error_;
+  QString savepoint_;  // empty for the outermost transaction
+  bool active_ = false;
 };
 
 }  // namespace zproject::store

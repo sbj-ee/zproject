@@ -56,6 +56,9 @@ class Store {
 
   // The sync feed: change rows with seq > since, oldest first (limit <= 500).
   virtual Result<QList<ChangeRecord>> changesSince(qint64 since, int limit = 500) = 0;
+  // One entity's history, oldest first.
+  virtual Result<QList<ChangeRecord>> changesFor(const QString& entityKind, const QString& entityId,
+                                                 qint64 since = 0, int limit = 500) = 0;
 };
 
 }  // namespace zproject::store

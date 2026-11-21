@@ -1,0 +1,32 @@
+#!/bin/sh
+# zprojectd postinst: create the zproject system user and its state
+# directory. The service is not enabled or started here; see the message.
+set -e
+
+if [ "$1" = "configure" ]; then
+  if ! getent group zproject >/dev/null; then
+    addgroup --system zproject >/dev/null
+  fi
+  if ! getent passwd zproject >/dev/null; then
+    adduser --system --ingroup zproject --home /var/lib/zproject --no-create-home \
+      --shell /usr/sbin/nologin --gecos "zproject server" zproject >/dev/null
+  fi
+  install -d -o zproject -g zproject -m 0700 /var/lib/zproject /var/lib/zproject/backups
+  if [ -f /etc/zproject/zprojectd.conf ]; then
+    chown root:zproject /etc/zproject/zprojectd.conf
+    chmod 0640 /etc/zproject/zprojectd.conf
+  fi
+  if [ -d /run/systemd/system ]; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+  cat <<'MSG'
+zprojectd is installed but not enabled. Next steps:
+  1. Edit /etc/zproject/zprojectd.conf (allowed_hosts, notify_hub_url).
+  2. sudo -u zproject zprojectd --config /etc/zproject/zprojectd.conf --create-owner-token
+     (shown once; store it in your password manager)
+  3. sudo systemctl enable --now zprojectd.service zprojectd-backup.timer
+  4. tailscale serve --bg --https=443 http://127.0.0.1:8788
+MSG
+fi
+
+exit 0

@@ -1,0 +1,8 @@
+#!/bin/sh
+# zprojectd postrm. Data in /var/lib/zproject and the zproject user are kept
+# even on purge: the database and backups are the user's project history.
+set -e
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+exit 0

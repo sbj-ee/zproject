@@ -3,8 +3,10 @@
 # one build, one per CPack component:
 #   zproject_<ver>_amd64.deb    component "desktop": zproject + zproject-cli
 #   zprojectd_<ver>_amd64.deb   component "server":  zprojectd (no Qt Widgets)
-# The macOS .dmg, the systemd units and the zproject user (postinst) arrive in
-# later pull requests.
+# The server package carries the systemd units (zprojectd.service and the
+# 03:17 zprojectd-backup.timer), /etc/zproject/zprojectd.conf (a conffile with
+# placeholders) and a postinst that creates the zproject user; it does not
+# enable or start anything. The macOS .dmg arrives in a later pull request.
 
 include(GNUInstallDirs)
 
@@ -33,6 +35,15 @@ if(UNIX AND NOT APPLE)
   endif()
   install(FILES ${CMAKE_SOURCE_DIR}/LICENSE
           DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/zprojectd RENAME copyright COMPONENT server)
+  install(FILES ${CMAKE_SOURCE_DIR}/packaging/systemd/zprojectd.service
+                ${CMAKE_SOURCE_DIR}/packaging/systemd/zprojectd-backup.service
+                ${CMAKE_SOURCE_DIR}/packaging/systemd/zprojectd-backup.timer
+          DESTINATION lib/systemd/system COMPONENT server)
+  # Absolute on purpose: Debian conffiles live in /etc whatever the prefix.
+  install(FILES ${CMAKE_SOURCE_DIR}/packaging/zprojectd.conf
+          DESTINATION /etc/zproject
+          PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ COMPONENT server)
+  file(WRITE ${CMAKE_BINARY_DIR}/packaging/conffiles "/etc/zproject/zprojectd.conf\n")
 
   set(CPACK_GENERATOR "DEB")
   set(CPACK_DEB_COMPONENT_INSTALL ON)
@@ -57,6 +68,10 @@ if(UNIX AND NOT APPLE)
   set(CPACK_DEBIAN_SERVER_PACKAGE_NAME "zprojectd")
   set(CPACK_DEBIAN_SERVER_FILE_NAME "zprojectd_${PROJECT_VERSION}_amd64.deb")
   set(CPACK_DEBIAN_SERVER_PACKAGE_SECTION "net")
+  set(CPACK_DEBIAN_SERVER_PACKAGE_DEPENDS "adduser")
+  set(CPACK_DEBIAN_SERVER_PACKAGE_CONTROL_EXTRA
+      "${CMAKE_SOURCE_DIR}/packaging/debian/postinst;${CMAKE_SOURCE_DIR}/packaging/debian/prerm;${CMAKE_SOURCE_DIR}/packaging/debian/postrm;${CMAKE_BINARY_DIR}/packaging/conffiles")
+  set(CPACK_DEBIAN_SERVER_PACKAGE_CONTROL_STRICT_PERMISSION ON)
   set(CPACK_COMPONENT_SERVER_DESCRIPTION
       "zproject server.\nHeadless zprojectd (Qt Core/Network, SQLite) serving /v1 and /mcp on loopback behind tailscale serve.")
   include(CPack)

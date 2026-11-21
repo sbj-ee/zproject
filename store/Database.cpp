@@ -68,6 +68,18 @@ Result<Database> Database::open(const QString& path) {
   return db;
 }
 
+Result<Database> Database::openReadOnly(const QString& path) {
+  sqlite3* raw = nullptr;
+  const QByteArray utf8 = path.toUtf8();
+  const int rc = sqlite3_open_v2(utf8.constData(), &raw, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nullptr);
+  Database db(raw);
+  if (rc != SQLITE_OK) {
+    return sqliteError(raw, QStringLiteral("cannot open database '%1'").arg(path));
+  }
+  sqlite3_extended_result_codes(raw, 1);
+  return db;
+}
+
 Status Database::exec(const QString& sql) {
   char* err = nullptr;
   const QByteArray utf8 = sql.toUtf8();
@@ -183,5 +195,36 @@ QString Statement::text(int column) const {
 qint64 Statement::int64(int column) const { return sqlite3_column_int64(stmt_, column); }
 double Statement::real(int column) const { return sqlite3_column_double(stmt_, column); }
 bool Statement::isNull(int column) const { return sqlite3_column_type(stmt_, column) == SQLITE_NULL; }
+
+}  // namespace zproject::store
+
+namespace zproject::store {
+
+Transaction::Transaction(Database& db) : db_(db) {
+  static qint64 counter = 0;
+  if (sqlite3_get_autocommit(db_.handle()) == 0) {
+    savepoint_ = QStringLiteral("zp_%1").arg(++counter);
+  }
+  auto s = db_.exec(savepoint_.isEmpty() ? QStringLiteral("BEGIN IMMEDIATE")
+                                         : QStringLiteral("SAVEPOINT %1").arg(savepoint_));
+  if (!s) error_ = s.error();
+  active_ = s.ok();
+}
+
+Transaction::~Transaction() {
+  if (!active_) return;
+  if (savepoint_.isEmpty()) {
+    (void)db_.exec(QStringLiteral("ROLLBACK"));
+  } else {
+    (void)db_.exec(QStringLiteral("ROLLBACK TO %1; RELEASE %1").arg(savepoint_));
+  }
+}
+
+Status Transaction::commit() {
+  auto s = db_.exec(savepoint_.isEmpty() ? QStringLiteral("COMMIT")
+                                         : QStringLiteral("RELEASE %1").arg(savepoint_));
+  if (s) active_ = false;
+  return s;
+}
 
 }  // namespace zproject::store

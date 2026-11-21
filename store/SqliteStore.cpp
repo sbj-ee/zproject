@@ -87,34 +87,6 @@ QString compactJson(const QJsonObject& o) {
   return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact));
 }
 
-// BEGIN IMMEDIATE ... COMMIT, rolled back unless commit() succeeded.
-class Transaction {
- public:
-  explicit Transaction(Database& db) : db_(db) {
-    auto s = db_.exec(QStringLiteral("BEGIN IMMEDIATE"));
-    if (!s) error_ = s.error();
-    active_ = s.ok();
-  }
-  ~Transaction() {
-    if (active_) (void)db_.exec(QStringLiteral("ROLLBACK"));
-  }
-  Transaction(const Transaction&) = delete;
-  Transaction& operator=(const Transaction&) = delete;
-
-  bool ok() const { return active_; }
-  const Error& error() const { return error_; }
-  Status commit() {
-    auto s = db_.exec(QStringLiteral("COMMIT"));
-    if (s) active_ = false;
-    return s;
-  }
-
- private:
-  Database& db_;
-  Error error_;
-  bool active_ = false;
-};
-
 }  // namespace
 
 Result<std::unique_ptr<SqliteStore>> SqliteStore::open(const QString& path) {
@@ -488,6 +460,29 @@ Result<Task> SqliteStore::deleteTask(const QString& id, qint64 expectedRev, cons
 
 // ---- sync feed --------------------------------------------------------------
 
+namespace {
+
+Result<QList<ChangeRecord>> readChanges(Statement& st) {
+  QList<ChangeRecord> out;
+  Error err;
+  while (st.step(&err)) {
+    ChangeRecord c;
+    c.seq = st.int64(0);
+    c.ts = st.text(1);
+    c.actor = st.text(2);
+    c.entityKind = st.text(3);
+    c.entityId = st.text(4);
+    c.before = QJsonDocument::fromJson(st.text(5).toUtf8()).object();
+    c.after = QJsonDocument::fromJson(st.text(6).toUtf8()).object();
+    c.requestId = st.text(7);
+    out.append(c);
+  }
+  if (!err.code.isEmpty()) return err;
+  return out;
+}
+
+}  // namespace
+
 Result<QList<ChangeRecord>> SqliteStore::changesSince(qint64 since, int limit) {
   limit = std::clamp(limit, 1, 500);
   auto st = db_.prepare(QStringLiteral(
@@ -495,23 +490,18 @@ Result<QList<ChangeRecord>> SqliteStore::changesSince(qint64 since, int limit) {
       "WHERE seq > ?1 ORDER BY seq LIMIT ?2"));
   if (!st) return st.error();
   st.value().bind(1, since).bind(2, limit);
-  QList<ChangeRecord> out;
-  Error err;
-  while (st.value().step(&err)) {
-    const Statement& s = st.value();
-    ChangeRecord c;
-    c.seq = s.int64(0);
-    c.ts = s.text(1);
-    c.actor = s.text(2);
-    c.entityKind = s.text(3);
-    c.entityId = s.text(4);
-    c.before = QJsonDocument::fromJson(s.text(5).toUtf8()).object();
-    c.after = QJsonDocument::fromJson(s.text(6).toUtf8()).object();
-    c.requestId = s.text(7);
-    out.append(c);
-  }
-  if (!err.code.isEmpty()) return err;
-  return out;
+  return readChanges(st.value());
+}
+
+Result<QList<ChangeRecord>> SqliteStore::changesFor(const QString& entityKind, const QString& entityId,
+                                                    qint64 since, int limit) {
+  limit = std::clamp(limit, 1, 500);
+  auto st = db_.prepare(QStringLiteral(
+      "SELECT seq, ts, actor, entityKind, entityId, before, after, requestId FROM changes "
+      "WHERE entityKind = ?1 AND entityId = ?2 AND seq > ?3 ORDER BY seq LIMIT ?4"));
+  if (!st) return st.error();
+  st.value().bind(1, entityKind).bind(2, entityId).bind(3, since).bind(4, limit);
+  return readChanges(st.value());
 }
 
 }  // namespace zproject::store
