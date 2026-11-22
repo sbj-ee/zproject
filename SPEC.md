@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.5.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.6.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -153,11 +153,15 @@ core/        model, validation, scheduling engine, calendars, CSV/JSON/MSPDI
 store/       Store interface + SQLite implementation, migrations, backup
 server/      zprojectd: HTTP router, auth, scopes, rate limits, audit, MCP,
              reports, alerts, Google Calendar sync
-client/      REST client, local cache, (phase 2) offline outbox
+client/      REST clients (synchronous for the CLI, non-blocking AsyncApiClient
+             for the desktop), error mapping, the token store shared by CLI
+             and desktop, desktop settings, the read-only cache and the
+             change-feed syncer (§16.5), (phase 2) offline outbox
 app/         Qt Widgets desktop app
 cli/         zproject-cli
 api/         openapi.yaml (OpenAPI 3.1, source of truth for /v1)
-tests/       unit, property, API contract, GUI smoke tests
+tests/       unit, property, API contract, GUI smoke tests, and a
+             fault-injecting mock HTTP server for client tests
 fuzz/        libFuzzer harnesses + corpus
 packaging/   deb (zproject, zprojectd), dmg, systemd units, icons
 assets/icon/ zproject-B.svg master
@@ -620,6 +624,18 @@ expires in 90 days, `requireConfirm = true`; agents never get `admin`
   destructive per minute; `app` 600 / 120 / 20; `device` and `owner` 1,200
   total. Failed authentication 10 per minute per source. Overridable per token
   **(decided, Q28)**.
+- Desktop client behaviour (`client/AsyncApiClient`, `client/ApiError`):
+  requests never block the UI; reads run up to 4 at a time, writes are
+  serialized per entity, and every `PATCH` sends `If-Match: <rev>` of the
+  entity the user started from. Redirects are never followed (the token is
+  never sent elsewhere) and TLS certificates are always verified, with no
+  option to ignore an error. Answers map to: 400 inline field error (a
+  summary's derived field: "its progress is rolled up"); 401 token dialog,
+  read-only; 403 action disabled; 404 "deleted elsewhere", refresh; 409
+  explain, `confirm_required` re-runs the dry run; 412 conflict dialog;
+  413/422 explain; 429 no new request until `Retry-After`; 5xx, network and
+  timeout offline read-only with backoff; TLS failure hard stop; a 2xx whose
+  body isn't the JSON expected is refused. Nothing is retried blindly.
 - OpenAPI 3.1: `api/openapi.yaml` is the source of truth, served at
   `GET /v1/openapi.json` (any valid token). Each operation declares
   `x-zproject-scope`, `x-zproject-destructive`, `x-zproject-dry-run`.
@@ -829,8 +845,34 @@ schema 1 to head on fixture databases.
   `~/.config/zproject/device-id`, `~/.cache/zproject/cache.db` (read-only plan
   cache), `update-state.ini`. macOS: `~/Library/Preferences/zproject/` and
   `~/Library/Caches/zproject/`. None of these are in Box.
-- Cache refresh: `GET /v1/changes?since=<seq>` at start, on F5, and every 15 s
-  while open (long-poll later). Offline: read-only, marked stale.
+- Connection: the desktop app uses the same server URL (`cli.ini`, unless
+  its own `zproject.ini` or `ZPROJECT_URL` names one) and the same device
+  token store as `zproject-cli` on that machine (`[auth] store`, the 0600
+  token file or the Keychain), so each machine has one device identity and
+  revoking its token stops both. The token is never shown (only its
+  `zpt_<id>` label), logged, cached or written to `zproject.ini`.
+- Cache (`client/Cache`): SQLite, 0600 in a 0700 directory, holding
+  projects and tasks as the server's JSON, WBS codes per project, the last
+  5,000 change records (activity), the feed position (`lastSeq` and that
+  record's `ts`), the server's version and `schemaVersion`, and the last
+  refresh time. Never a token. A record's `after` is merged into the stored
+  entity; one whose `rev` isn't newer is skipped, so replays change nothing.
+  A cache-format change empties it. Preferences → Clear cache deletes it; with
+  the cache turned off it is kept in memory only.
+- Cache refresh (`client/ChangeFeedSyncer`): `GET /v1/changes?since=<seq>&limit=500`,
+  looping while `more`, at start, on F5, every 15 s while the window is
+  active and every 60 s in the background (long-poll later). WBS codes are
+  refetched for projects that changed. At start, on F5 and on reconnect it
+  first reads `/v1/health` (another API major is refused; a new
+  `schemaVersion` means a full reload) and checks that the record at
+  `lastSeq` still exists with the same `ts`; if not, the server was restored
+  or replaced and the cache is rebuilt from the feed. An update to an entity
+  the cache never saw also triggers a full reload. A project-limited token
+  can't read the feed (403 `forbidden_project`) and polls the project and
+  task lists every 30 s instead.
+- Offline (network, timeout, 5xx): read-only, marked stale with the last
+  refresh time, retried with backoff from 5 s to 60 s. 429 waits
+  `Retry-After`. 401 and TLS errors stop polling until the user acts.
 - Phase 2: offline edits written to a local outbox of change records, sent on
   reconnect; server applies with per-field last-writer-wins and returns a
   conflict list that the client shows.

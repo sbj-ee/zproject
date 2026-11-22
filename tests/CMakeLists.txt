@@ -21,6 +21,16 @@ zproject_add_test(tst_auth zproject_server_lib)
 zproject_add_test(tst_api zproject_server_lib)
 zproject_add_test(tst_cli zproject_client zproject_server_lib)
 
+# Desktop client core (SPEC.md §16.5): the fault-injecting mock server is a
+# test-only library.
+add_library(zproject_test_mock STATIC MockServer.cpp MockServer.hpp)
+target_link_libraries(zproject_test_mock PUBLIC Qt6::Network)
+zproject_set_warnings(zproject_test_mock)
+zproject_add_test(tst_clientcore zproject_client)
+zproject_add_test(tst_cache zproject_client)
+zproject_add_test(tst_asyncapi zproject_client zproject_test_mock)
+zproject_add_test(tst_syncer zproject_client zproject_test_mock zproject_server_lib)
+
 # SQLite hash pinning (cmake/FetchSQLite.cmake): wrong hashes are refused.
 add_test(NAME sqlite_hash_verification COMMAND ${CMAKE_COMMAND}
   -DFETCH=${PROJECT_SOURCE_DIR}/cmake/FetchSQLite.cmake

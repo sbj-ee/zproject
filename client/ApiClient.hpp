@@ -12,12 +12,17 @@
 #include <memory>
 
 class QNetworkAccessManager;
+class QNetworkReply;
+class QNetworkRequest;
 
 namespace zproject::client {
 
 struct ApiResponse {
   int status = 0;             // 0: no HTTP response (see networkError)
   QString networkError;       // connection, TLS or timeout failure
+  int networkErrorCode = 0;   // QNetworkReply::NetworkError when status is 0
+  bool timedOut = false;      // no answer within the timeout
+  bool tlsFailure = false;    // certificate or handshake failure (never ignored)
   QByteArray body;
   QJsonObject json;           // body when it is a JSON object
   QList<QPair<QByteArray, QByteArray>> headers;
@@ -28,6 +33,19 @@ struct ApiResponse {
   QString errorMessage() const;
   QString errorCode() const { return json.value(QStringLiteral("code")).toString(); }
 };
+
+// Shared by ApiClient (CLI) and AsyncApiClient (desktop): one /v1 request
+// with the bearer token, JSON Accept/Content-Type, the given User-Agent, no
+// redirects (so the token is never sent elsewhere) and peer verification
+// required (there is no option to turn it off).
+QNetworkRequest buildApiRequest(const QUrl& base, const QString& path, const QUrlQuery& query, const QByteArray& token,
+                                const QString& userAgent, bool hasBody,
+                                const QList<QPair<QByteArray, QByteArray>>& headers);
+// Status, headers and JSON body of a finished reply. `timedOut` when the
+// caller aborted it on its timer.
+ApiResponse readApiReply(QNetworkReply* reply, const QUrl& base, bool timedOut, int timeoutMs);
+// True for QNetworkReply errors that come from TLS (handshake, certificate).
+bool isTlsError(int networkErrorCode);
 
 // A small synchronous client of zprojectd's /v1 (SPEC.md §9): one request at
 // a time, bearer token, JSON in and out, no redirects (so the token is never

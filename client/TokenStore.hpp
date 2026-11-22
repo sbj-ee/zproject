@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QHash>
 #include <QString>
 #include <QStringList>
 
@@ -65,5 +66,18 @@ class TokenStore {
   CommandRunner run_;
   bool macos_;
 };
+
+// The token this machine uses, shared by zproject-cli and the desktop app so
+// each machine keeps one device identity (SPEC.md §10, §16.5): ZPROJECT_TOKEN,
+// else the store cli.ini names (`[auth] store=keychain`), else the token file,
+// else (macOS, no store chosen) the Keychain. `source` says where it came
+// from ("ZPROJECT_TOKEN", "keychain" or "file <path>"); it never holds the
+// secret. Errors: code "auth" with a message fit for the user.
+struct ResolvedToken {
+  QString token;
+  QString source;
+};
+Result<ResolvedToken> resolveDeviceToken(const QHash<QString, QString>& env, const QString& configuredStore,
+                                         const TokenStore& store);
 
 }  // namespace zproject::client

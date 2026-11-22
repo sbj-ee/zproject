@@ -345,50 +345,15 @@ class Runner {
     return exitFor(r);
   }
 
-  // The token: ZPROJECT_TOKEN, else the configured store, else the token
-  // file, else (macOS) the Keychain.
+  // The token, resolved as the desktop app does (client/TokenStore.hpp).
   std::optional<QString> resolveToken(QString* source, int* code) {
-    const QString envToken = io_.env.value(QStringLiteral("ZPROJECT_TOKEN")).trimmed();
-    if (!envToken.isEmpty()) {
-      if (!looksLikeToken(envToken)) {
-        *code = fail(kExitAuth, QStringLiteral("ZPROJECT_TOKEN is not a zproject token"));
-        return std::nullopt;
-      }
-      *source = QStringLiteral("ZPROJECT_TOKEN");
-      return envToken;
-    }
-    const bool keychainFirst = config_.store == QLatin1String("keychain");
-    auto tryKeychain = [&]() -> std::optional<QString> {
-      auto t = store_->readKeychain();
-      if (t) {
-        *source = QStringLiteral("keychain");
-        return t.value();
-      }
-      if (t.error().code != QLatin1String("not_found") || keychainFirst) {
-        *code = fail(kExitAuth, t.error().message);
-        return std::nullopt;
-      }
-      return std::nullopt;
-    };
-    if (keychainFirst) {
-      auto t = tryKeychain();
-      if (t || *code != kExitOk) return t;
-    }
-    auto f = store_->readFile();
-    if (f) {
-      *source = QStringLiteral("file ") + config_.tokenFile;
-      return f.value();
-    }
-    if (f.error().code != QLatin1String("not_found")) {
-      *code = fail(kExitAuth, f.error().message);
+    auto t = resolveDeviceToken(io_.env, config_.store, *store_);
+    if (!t) {
+      *code = fail(kExitAuth, t.error().message);
       return std::nullopt;
     }
-    if (!keychainFirst && io_.macos && config_.store.isEmpty()) {
-      auto t = tryKeychain();
-      if (t || *code != kExitOk) return t;
-    }
-    *code = fail(kExitAuth, QStringLiteral("no token: run `zproject-cli login` (or set ZPROJECT_TOKEN)"));
-    return std::nullopt;
+    *source = t->source;
+    return t->token;
   }
 
   // Connects with the stored token and checks the server's API version.
