@@ -65,3 +65,8 @@ if(ZPROJECT_BUILD_GUI)
   set_tests_properties(zproject_version PROPERTIES
     PASS_REGULAR_EXPRESSION "^zproject ${PROJECT_VERSION}\n$")
 endif()
+
+# The desktop app shell (SPEC.md §8), offscreen.
+if(ZPROJECT_BUILD_GUI)
+  zproject_add_test(tst_appshell zproject_app_lib zproject_test_mock)
+endif()

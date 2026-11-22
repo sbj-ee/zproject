@@ -1,10 +1,22 @@
 # The zproject desktop app (Qt Widgets). Off with -DZPROJECT_BUILD_GUI=OFF.
+# zproject_app_lib holds the shell so tests/tst_appshell can drive it
+# offscreen; the executable is main.cpp.
 set(CMAKE_AUTORCC ON)
-add_executable(zproject
-  main.cpp
+add_library(zproject_app_lib STATIC
+  AppSession.cpp AppSession.hpp
+  Dialogs.cpp Dialogs.hpp
+  HelpDialog.cpp HelpDialog.hpp
   MainWindow.cpp MainWindow.hpp
-  resources.qrc)
-target_link_libraries(zproject PRIVATE zproject_core Qt6::Widgets)
+  Shortcuts.cpp Shortcuts.hpp
+  SignInDialog.cpp SignInDialog.hpp
+  SingleInstance.cpp SingleInstance.hpp
+  Theme.cpp Theme.hpp
+  zproject_app.qrc)
+target_link_libraries(zproject_app_lib PUBLIC zproject_client Qt6::Widgets)
+zproject_set_warnings(zproject_app_lib)
+
+add_executable(zproject main.cpp)
+target_link_libraries(zproject PRIVATE zproject_app_lib)
 zproject_set_warnings(zproject)
 # Linux: /usr/bin/zproject. macOS: the zproject.app bundle is installed by
 # cmake/Packaging.cmake, after cmake/MacBundle.cmake has made it a bundle.

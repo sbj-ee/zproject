@@ -4,4 +4,7 @@
     <file alias="zproject-32.png">../assets/icon/zproject-32.png</file>
     <file alias="zproject-256.png">../assets/icon/zproject-256.png</file>
   </qresource>
+  <qresource prefix="/help">
+    <file alias="zproject-help.md">help/zproject-help.md</file>
+  </qresource>
 </RCC>

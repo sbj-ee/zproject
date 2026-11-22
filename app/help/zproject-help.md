@@ -1,0 +1,116 @@
+# zproject Help
+
+zproject is the desktop app for a zproject server (`zprojectd`) on your
+tailnet. It shows your projects, keeps a read-only copy for when the server
+can't be reached, and follows changes made elsewhere — another computer,
+`zproject-cli`, or an agent — within about 15 seconds.
+
+**Contents**
+
+- [Connecting](#connecting)
+- [The window](#the-window)
+- [Offline](#offline)
+- [Appearance](#appearance)
+- [Preferences](#preferences)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Accessibility](#accessibility)
+- [Privacy and security](#privacy-and-security)
+- [More help](#more-help)
+
+## Connecting
+
+The first time it starts, zproject asks for two things:
+
+1. **The server URL** — the `https://` address `tailscale serve` publishes,
+   for example `https://server-host.example.ts.net`. If `zproject-cli` on
+   this computer is already set up, its URL is filled in.
+2. **A device token.** If `zproject-cli login` has stored one on this
+   computer, zproject offers it by its label (`zpt_…`) and uses the same
+   token, so the app and the CLI are one device. Otherwise create one on the
+   server with `zproject-cli token create --kind device --name "laptop"` and
+   paste it. The token is never shown on screen; it is kept in the 0600 token
+   file or the Keychain, the same places `zproject-cli` uses.
+
+To change the server or the token later, use **File → Connect to Server…**
+or **Preferences → Change server or token…**.
+
+## The window
+
+- **Projects** (left) lists the projects your token can see.
+- The **centre** shows the selected project. The outline, Gantt and resource
+  views arrive in later versions.
+- The **Inspector** (right) shows the selected item's details.
+- The **status bar** shows the connection, the server's version and when the
+  data was last refreshed. **Read-only** means editing is off.
+
+Press **F5** to refresh now. zproject also refreshes every 15 seconds while
+its window is active and every 60 seconds in the background.
+
+## Offline
+
+When the server can't be reached, a banner says **Offline — showing data
+from** the last refresh. You can keep reading everything that was loaded;
+editing is off until the server answers again. zproject retries on its own
+(5 seconds, then up to a minute apart); **Retry now** tries at once.
+
+If the server refuses the device token (it was revoked or expired), the
+banner offers **Sign in…** to paste a new one. A certificate problem or a
+server speaking another API version is shown the same way.
+
+## Appearance
+
+**View → Theme** chooses Light, Dark, High contrast, or System (follow the
+operating system). The accent colour is zproject blue, as in zterminal and
+zwriter.
+
+**View → Zoom In / Zoom Out / Actual Size** (Ctrl + = , Ctrl + − , Ctrl + 0;
+⌘ on macOS) changes the size of all interface text from 50 % to 300 %. In
+the Gantt view of later versions, Ctrl + Shift + = / − and Ctrl + mouse wheel
+zoom the timeline instead.
+
+## Preferences
+
+**File → Preferences** (Ctrl + , — **zproject → Settings** on macOS):
+
+- **Theme** and **Text size**, as in the View menu.
+- **Keep a read-only copy for offline use.** Turning it off deletes the copy
+  and keeps nothing on disk.
+- **Clear cache** deletes the copy and loads everything again from the
+  server. It needs the server, so it is off while you are offline.
+- **Connection** shows the server, its version, and the device token by its
+  label only.
+
+## Keyboard shortcuts
+
+| Action | Keys |
+| --- | --- |
+| Refresh | F5 or Ctrl + R |
+| Preferences | Ctrl + , |
+| Zoom in / out / actual size | Ctrl + = / Ctrl + − / Ctrl + 0 |
+| Show or hide the sidebar | Ctrl + B |
+| Show or hide the inspector | Ctrl + I |
+| Go to the project list | Ctrl + Shift + P |
+| Help | F1 |
+| Keyboard shortcuts | Ctrl + / |
+| Quit | Ctrl + Q |
+
+On macOS, Ctrl is ⌘. **Help → Keyboard Shortcuts** lists them too.
+
+## Accessibility
+
+Every control can be reached with Tab and Shift + Tab and has a name for
+screen readers. Menus have keyboard mnemonics (Alt + letter on Linux). The
+High contrast theme uses white on black with yellow selection; every theme
+keeps text at a contrast of at least 4.5 : 1.
+
+## Privacy and security
+
+zproject talks only to your server, over HTTPS on your tailnet. The local
+copy is a private file (readable only by you) in your cache folder. Tokens
+are never written to the cache, to logs, or to the screen.
+
+## More help
+
+- [zproject on GitHub](https://github.com/sbj-ee/zproject)
+- [API reference](https://github.com/sbj-ee/zproject/blob/main/api/openapi.yaml)
+- [Report an issue](https://github.com/sbj-ee/zproject/issues)

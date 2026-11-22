@@ -1,6 +1,6 @@
 # zproject
 
-**0.6.0**
+**0.7.0**
 
 Current release: **0.5.0**
 
@@ -25,7 +25,18 @@ MCP endpoint at `/mcp`, with scoped tokens, rate limits and a hash-chained
 audit log. `zproject-cli` covers all of it from Linux and macOS. The release
 workflow builds signed `.deb` and `.dmg` packages (see [Install](#install)).
 Dependencies, the scheduling engine, resources, baselines, the RAID log,
-reports and the desktop client follow (SPEC.md §24).
+reports and the desktop client's views follow (SPEC.md §24).
+
+The desktop app (`zproject`) has its shell: themes, the offline banner,
+first-run sign-in that reuses `zproject-cli`'s token, Preferences and Help.
+
+| Light | Dark | Offline |
+|---|---|---|
+| ![Main window, Light](docs/screenshots/main-light.png) | ![Main window, Dark](docs/screenshots/main-dark.png) | ![Offline banner](docs/screenshots/offline-light.png) |
+
+More in [docs/screenshots](docs/screenshots/): High contrast, first run,
+Preferences, Help and About, rendered offscreen from example data
+(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R tst_appshell`).
 
 ## Running the server
 

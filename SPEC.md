@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.6.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.7.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -520,17 +520,33 @@ Carlo, multi-user permissions.
 - Main area: the selected view. Inspector panel on the right for the selected
   task, milestone, resource or RAID item (Details, Schedule, Assignments,
   Notes journal, Links, History tabs).
-- Status bar: server connection (connected / offline-stale with last refresh
-  time), current filter, schedule warnings count.
+- Status bar: server connection (connected with the server's version /
+  offline-stale with last refresh time), a Read-only marker while editing is
+  off, current filter, schedule warnings count.
+- Offline banner: when the server can't be reached (or refuses the token, or
+  its certificate or API version is refused), a banner above the main area
+  says "Offline — showing data from <last refresh>"; the cached data stays
+  readable and editing is off until the server answers. It offers Retry now
+  (and Sign in… after a 401).
 - Menus: File (New project, New from template, Import, Export, Print/PDF,
   Refresh F5, Preferences), Edit (Undo/Redo, Cut/Copy/Paste rows, Find),
   View (Gantt, List, Resources, RAID, Portfolio; zoom; critical only; baseline
   bars; calendar overlay), Project (Set baseline, Save as template, Reschedule,
-  Project calendar), Help (Check for updates, About, API docs).
-- First run: server URL (e.g. `https://<server-host>.<tailnet>.ts.net`), then a
-  one-time sign-in that creates a `device` token (pasting an owner-approved
-  enrolment code from `zproject-cli token create --kind device`), stored in the
-  keychain. Single instance per device (`QLockFile`), as ztodo.
+  Project calendar), Help (zproject Help F1, Keyboard Shortcuts, API
+  Reference, Report an Issue, About; Check for updates with the updater).
+  View also has Theme (System, Light, Dark, High contrast) and UI text zoom
+  (Zoom In / Zoom Out / Actual Size, 50–300 %). Help is zwriter's: one
+  embedded Markdown guide in a modeless window; links open only if https.
+- First run: server URL (e.g. `https://<server-host>.<tailnet>.ts.net`),
+  prefilled from `zproject-cli`'s `cli.ini`, then the device token. If
+  `zproject-cli` on this machine already has one, the app offers it by its
+  label (`zpt_<id>`) and both use the same device identity; otherwise the user
+  pastes a `device` token from `zproject-cli token create --kind device` into a
+  password field. It is stored where the CLI keeps it (the 0600 token file or
+  the keychain, `[auth] store` in `cli.ini`). The secret is never displayed,
+  logged or cached: dialogs show only the label. A URL different from the
+  CLI's is the app's own, in `zproject.ini`. Single instance per device
+  (`QLockFile` in the cache directory), as ztodo.
 
 ### 8.2 Gantt
 
@@ -551,8 +567,9 @@ List (outline table with configurable columns, inline edit), Resources sheet
 and Resource Usage heat map, RAID table with type filters and risk heat map,
 Baselines and Variance table, Reports (rendered Markdown with export),
 Portfolio table and all-projects timeline, Calendar editor (work week and
-exceptions), Preferences (server, appearance light/dark/system, font size,
-updates, Google Calendar connect/disconnect and calendar picker, Tokens,
+exceptions), Preferences (server and token label, appearance
+light/dark/high contrast/system, UI text size, offline cache on/off and Clear
+cache, updates, Google Calendar connect/disconnect and calendar picker, Tokens,
 Audit log viewer, alert rules).
 
 ### 8.4 Keyboard
@@ -560,8 +577,12 @@ Audit log viewer, alert rules).
 Insert task (Enter below / Ins), indent Tab, outdent Shift-Tab, link selected
 tasks Ctrl-L (unlink Ctrl-Shift-L), edit F2, delete Del (tombstone, undoable),
 undo Ctrl-Z / redo Ctrl-Shift-Z, find Ctrl-F, command palette Ctrl-K, quick add
-RAID R / A / I / D in the RAID view, Gantt zoom Ctrl-+/−, scroll to today T,
-switch views Ctrl-1…6, refresh F5. Cmd instead of Ctrl on macOS.
+RAID R / A / I / D in the RAID view, Gantt zoom Ctrl-Shift-+/− and
+Ctrl-wheel, scroll to today T, switch views Ctrl-1…6, refresh F5 (or Ctrl-R).
+Window-wide: UI text zoom Ctrl-+ / Ctrl-− / Ctrl-0 (as zterminal and zwriter),
+Preferences Ctrl-, , sidebar Ctrl-B, inspector Ctrl-I, go to the project list
+Ctrl-Shift-P, help F1, keyboard shortcuts Ctrl-/, quit Ctrl-Q. Cmd instead of
+Ctrl on macOS.
 
 ## 9. HTTP API
 

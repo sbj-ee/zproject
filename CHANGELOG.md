@@ -7,6 +7,56 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.7.0 — 2026-11-22
+
+Desktop client, PR 2 of the approved plan: the app shell. `zproject` now opens
+a real window wired to the 0.6.0 client core; the data views (outline, Gantt,
+resources, ...) and the updater follow. The CLI and server behave as before.
+
+- **Main window and menus:** a project sidebar fed from the cache, a central
+  area for the views to come, an inspector dock, and File (Refresh F5,
+  Connect to Server…, Preferences, Quit), View (Theme, Zoom In / Zoom Out /
+  Actual Size, Sidebar, Inspector, Go to Projects) and Help menus. One window
+  per user (`QLockFile` in the cache directory).
+- **Themes:** Light, Dark, High contrast and System, built zwriter's way (one
+  set of colour tokens, one application style sheet, forced Fusion) with the
+  z-suite accent `#2fa8f0`. System follows `QStyleHints::colorScheme()` on Qt
+  6.5+ and the platform palette on Qt 6.4. Every theme keeps text at ≥ 4.5:1
+  (High contrast ≥ 7:1); a test checks the ratios.
+- **UI text zoom:** Ctrl/Cmd + = / − / 0, 50–300 % in zwriter's steps, saved in
+  `zproject.ini`. The Gantt zoom moves to Ctrl+Shift + = / − and Ctrl+wheel
+  (SPEC.md §8.4).
+- **First run:** the server URL comes from `cli.ini`; if `zproject-cli` already
+  has a token, the app offers it by its label (`zpt_<id>`) and both share one
+  device identity. Otherwise a sign-in dialog takes a pasted device token in
+  a password field and stores it where the CLI does (0600 file or keychain, on
+  stdin). The secret is never displayed, logged or cached; dialogs show only
+  the label. After a 401 the same dialog asks for a new token.
+- **Status and offline:** the status bar shows the connection, the server's
+  version and the last refresh; a banner says "Offline — showing data from
+  <time>" (or the refused token, certificate or API version) with Retry now.
+  Editing is off whenever the server isn't answering (`editingAllowed()`),
+  and a Read-only marker shows it.
+- **Preferences** (Ctrl+, ; Settings on macOS): theme, text size, the offline
+  cache on/off (off deletes the copy) and **Clear cache** (only while online:
+  deletes the copy and reloads from seq 0), the server and the token label,
+  and Change server or token….
+- **Help** (zwriter's pattern): F1 opens a modeless guide from an embedded
+  Markdown resource with in-page links; external links open only if https.
+  Keyboard Shortcuts, API Reference, Report an Issue and About (app, Qt and
+  server versions, token label).
+- **Keyboard and accessibility:** every action has a shortcut or mnemonic, no
+  two share a key, Ctrl+1…6 and the other §8.4 keys stay free for the views,
+  and every focusable control has an accessible name.
+- **Tests:** `tst_appshell` (offscreen) drives the shell against the
+  fault-injecting mock server: themes and contrast, the System fallback,
+  zoom and shortcuts, menus, accessible names, online/offline/401 states,
+  first-run token secrecy and the 0600 write, Preferences → Clear cache,
+  cache off, Help links, About and the lock. With `ZPROJECT_SCREENSHOT_DIR`
+  set it renders `docs/screenshots/` from example data.
+- **Build:** the shell is a static `zproject_app_lib` linked by `zproject`
+  and the test; the desktop app now links the client core.
+
 ## 0.6.0 — 2026-11-22
 
 Desktop client, PR 1 of the approved plan: the client core the desktop app
