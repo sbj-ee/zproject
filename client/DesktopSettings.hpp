@@ -30,6 +30,8 @@ DesktopPaths desktopPaths(const QHash<QString, QString>& env, bool macos);
 struct DesktopSettings {
   QString serverUrl;          // empty: use cli.ini's
   bool cacheEnabled = true;   // off: nothing is written to the cache
+  QString theme = QStringLiteral("system");  // system, light, dark, high-contrast
+  int zoomPercent = 100;      // UI text zoom (View → Zoom)
 };
 DesktopSettings loadDesktopSettings(const DesktopPaths& paths);
 // Writes zproject.ini, mode 0600 in a 0700 directory. Never a token.
