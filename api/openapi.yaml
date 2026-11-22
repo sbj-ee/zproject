@@ -360,6 +360,93 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
         '412': {$ref: '#/components/responses/RevMismatch'}
         '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/tasks/{id}/move:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      operationId: moveTask
+      tags: [tasks]
+      summary: Move a task to a new parent and/or position within its project (If-Match honoured)
+      description: >-
+        Reparents and/or reorders a task and its subtree within the same
+        project (SPEC.md §7.1). `position` is the 0-based index among the
+        destination's live children, not counting the task itself; omitted,
+        the task goes last. The destination's children are renumbered 1..n
+        (`order`), each sibling whose order changes getting its own revision
+        and change record, and the old and new parents' summaries are rolled
+        up again (SPEC.md §5.3). Moving a task under itself or one of its
+        descendants is a 409 cycle; a milestone, deleted or missing parent, a
+        parent in another project or a position out of range is a 400. Moving
+        to the place it already has changes nothing. If-Match is the moved
+        task's rev.
+      x-zproject-scope: tasks:write
+      x-zproject-destructive: false
+      x-zproject-dry-run: true
+      parameters:
+        - $ref: '#/components/parameters/dryRun'
+        - $ref: '#/components/parameters/ifMatch'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TaskMove'}
+      responses:
+        '200':
+          description: The moved task, or a dry-run result with ?dryRun=true (op "move" for the task, "update" for renumbered siblings and summaries)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Task'
+                  - $ref: '#/components/schemas/DryRunResult'
+        '400': {$ref: '#/components/responses/Validation'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/RevMismatch'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/tasks/{id}/restore:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      operationId: restoreTask
+      tags: [tasks]
+      summary: Restore a deleted task and the subtree deleted with it (destructive)
+      description: >-
+        Undoes a task delete: the task and those of its descendants that the
+        same delete tombstoned come back with their old parent and order;
+        descendants deleted earlier stay deleted. Summaries are rolled up
+        again. 409 conflict if the task is not deleted, its project or parent
+        is deleted (restore the parent first), or its parent has become a
+        milestone. Destructive (SPEC.md §9.3): tokens with requireConfirm
+        need the confirmId of a dry run. If-Match is the deleted task's rev.
+        The body, if any, must be an empty object.
+      x-zproject-scope: tasks:write
+      x-zproject-destructive: true
+      x-zproject-dry-run: true
+      parameters:
+        - $ref: '#/components/parameters/dryRun'
+        - $ref: '#/components/parameters/ifMatch'
+        - $ref: '#/components/parameters/confirm'
+      responses:
+        '200':
+          description: The restored task, or a dry-run result with a confirmId (op "restore" for restored tasks, "update" for summaries)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Task'
+                  - $ref: '#/components/schemas/DryRunResult'
+        '400': {$ref: '#/components/responses/Validation'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/RevMismatch'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '429': {$ref: '#/components/responses/RateLimited'}
   /v1/tasks/{id}/history:
     parameters:
       - $ref: '#/components/parameters/id'
@@ -735,6 +822,18 @@ components:
           required: [project, title, type, duration, status]
           properties:
             project: {$ref: '#/components/schemas/Id'}
+    TaskMove:
+      type: object
+      additionalProperties: false
+      properties:
+        parent:
+          type: [string, 'null']
+          pattern: '^[0-9a-f]{20}$'
+          description: The new parent task (null = top level); omitted, the parent stays
+        position:
+          type: integer
+          minimum: 0
+          description: 0-based index among the new parent's live children, not counting the task; omitted = last
     ProjectPage:
       type: object
       required: [items, nextCursor]
@@ -779,7 +878,7 @@ components:
             type: object
             required: [op, entityKind, entityId, before, after]
             properties:
-              op: {type: string, enum: [create, update, delete, revoke]}
+              op: {type: string, enum: [create, update, delete, revoke, move, restore]}
               entityKind: {type: string}
               entityId: {type: [string, 'null']}
               before: {type: object}

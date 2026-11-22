@@ -56,6 +56,9 @@ QString cliUsage() {
       "                       [--actual-start D] [--actual-finish D] [add options]\n"
       "                       [--rev N] [--dry-run]\n"
       "  tasks done ID [--dry-run]\n"
+      "  tasks move ID [--parent ID|none] [--position N] [--rev N] [--dry-run]\n"
+      "                       reparent and/or reorder within the project; N counts\n"
+      "                       from 1 among the new parent's children (default: last)\n"
       "  tasks delete ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
       "  tasks history ID\n"
       "\n"
@@ -98,7 +101,8 @@ const QSet<QString>& valueOptions() {
       QStringLiteral("title"),      QStringLiteral("percent"),       QStringLiteral("actual-start"),
       QStringLiteral("actual-finish"), QStringLiteral("kind"),       QStringLiteral("scopes"),
       QStringLiteral("projects"),   QStringLiteral("expires"),       QStringLiteral("out-file"),
-      QStringLiteral("since"),      QStringLiteral("limit"),         QStringLiteral("token")};
+      QStringLiteral("since"),      QStringLiteral("limit"),         QStringLiteral("token"),
+      QStringLiteral("position")};
   return s;
 }
 const QSet<QString>& flagOptions() {
@@ -817,7 +821,7 @@ class Runner {
   }
 
   int tasks() {
-    if (a_.pos.isEmpty()) return usage(QStringLiteral("tasks: list, show, add, update, done, delete or history"));
+    if (a_.pos.isEmpty()) return usage(QStringLiteral("tasks: list, show, add, update, move, done, delete or history"));
     const QString sub = a_.pos.takeFirst();
     const QStringList addFields{QStringLiteral("parent"),   QStringLiteral("milestone"), QStringLiteral("duration"),
                                 QStringLiteral("start"),    QStringLiteral("finish"),    QStringLiteral("deadline"),
@@ -945,6 +949,38 @@ class Runner {
       return written(r, QStringLiteral("Done:"), QStringLiteral("title"));
     }
     if (sub == QLatin1String("delete")) return deleteCommand(QStringLiteral("tasks"), QStringLiteral("/v1/tasks/"), "task ID");
+    if (sub == QLatin1String("move")) {
+      if (!allow({QStringLiteral("parent"), QStringLiteral("position"), QStringLiteral("rev"),
+                  QStringLiteral("dry-run")})) {
+        return badOption();
+      }
+      if (a_.pos.size() != 1) return usage(QStringLiteral("tasks move ID [--parent ID|none] [--position N]"));
+      if (!checkId(a_.pos[0], "task ID")) return usage(badValue_);
+      QJsonObject b;
+      if (a_.has(QStringLiteral("parent"))) {
+        const QString p = a_.opt(QStringLiteral("parent"));
+        if (p == QLatin1String("none")) {
+          b.insert(QStringLiteral("parent"), QJsonValue());
+        } else {
+          if (!checkId(p, "--parent")) return usage(badValue_);
+          b.insert(QStringLiteral("parent"), p);
+        }
+      }
+      // --position counts from 1 (as WBS numbers do); the API's position from 0.
+      if (!intOpt(QStringLiteral("position"), QStringLiteral("position"), &b, 1, 1000000)) return usage(badValue_);
+      if (b.contains(QStringLiteral("position"))) {
+        b.insert(QStringLiteral("position"), b.value(QStringLiteral("position")).toInt() - 1);
+      }
+      if (b.isEmpty()) return usage(QStringLiteral("nothing to do: give --parent and/or --position"));
+      WriteOpts w;
+      if (!writeOpts(&w)) return usage(badValue_);
+      if (int c = connect(); c != kExitOk) return c;
+      const ApiResponse r =
+          api_->send("POST", QStringLiteral("/v1/tasks/%1/move").arg(a_.pos[0]), w.query, &b, w.headers);
+      if (!r.ok()) return apiError(r);
+      if (w.dryRun) return dryRunResult(r, QStringLiteral("tasks move ") + a_.pos[0]);
+      return written(r, QStringLiteral("Moved task"), QStringLiteral("title"));
+    }
     if (sub == QLatin1String("history")) {
       if (!allow({})) return badOption();
       if (a_.pos.size() != 1) return usage(QStringLiteral("tasks history ID"));

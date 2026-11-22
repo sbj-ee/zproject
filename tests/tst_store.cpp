@@ -282,6 +282,216 @@ class TstStore : public QObject {
     }
   }
 
+  // ---- move (SPEC.md §7.1, §9.4) ----
+
+  void moveReordersSiblings() {
+    auto s = openMemory();
+    const Project p = newProject(*s);
+    const Task a = newTask(*s, p.id, QStringLiteral("A"));
+    const Task b = newTask(*s, p.id, QStringLiteral("B"));
+    const Task c = newTask(*s, p.id, QStringLiteral("C"));
+    const Task d = newTask(*s, p.id, QStringLiteral("D"));
+    const qint64 seq = s->changesSince(0)->last().seq;
+
+    // D to the front: D, A, B, C, renumbered 1..4.
+    QCOMPARE(s->moveTask(d.id, {}, 0, 99, kCtx).error().code, QStringLiteral("rev_mismatch"));
+    auto r = s->moveTask(d.id, {}, 0, d.rev, kCtx);
+    QVERIFY2(r.ok(), r.ok() ? "" : qPrintable(r.error().message));
+    QCOMPARE(titles(s->tasks(p.id).value()), (QStringList{"D", "A", "B", "C"}));
+    QCOMPARE(r->order, 1);
+    QCOMPARE(r->rev, 2);
+    QCOMPARE(fresh(*s, a.id).order, 2);
+    QCOMPARE(fresh(*s, c.id).order, 4);
+    QCOMPARE(fresh(*s, c.id).rev, 2);
+    // One change row per row written, all with the same timestamp and request.
+    auto rows = s->changesSince(seq);
+    QCOMPARE(rows->size(), 4);
+    for (const ChangeRecord& ch : rows.value()) {
+      QCOMPARE(ch.ts, rows->first().ts);
+      QCOMPARE(ch.requestId, kCtx.requestId);
+      QVERIFY(ch.after.contains(QStringLiteral("order")));
+    }
+
+    // To the place it already has: nothing written.
+    const qint64 seq2 = s->changesSince(0)->last().seq;
+    r = s->moveTask(d.id, {}, 0, 2, kCtx);
+    QVERIFY(r.ok());
+    QCOMPARE(r->rev, 2);
+    QCOMPARE(s->changesSince(seq2)->size(), 0);
+    QVERIFY(s->planMove(d.id, {}, 0)->isEmpty());
+
+    // Default position: last. Only the moved task changes (dense order).
+    r = s->moveTask(a.id, {}, std::nullopt, fresh(*s, a.id).rev, kCtx);
+    QVERIFY(r.ok());
+    QCOMPARE(titles(s->tasks(p.id).value()), (QStringList{"D", "B", "C", "A"}));
+    QCOMPARE(fresh(*s, d.id).rev, 2);
+
+    // Out of range.
+    auto bad = s->moveTask(b.id, {}, 4, fresh(*s, b.id).rev, kCtx);
+    QCOMPARE(bad.error().code, QStringLiteral("validation"));
+    QCOMPARE(bad.error().details.value(QStringLiteral("max")).toInt(), 3);
+    QCOMPARE(s->planMove(b.id, {}, -1).error().code, QStringLiteral("validation"));
+    QCOMPARE(s->moveTask(QStringLiteral("ffffffffffffffffffff"), {}, 0, 1, kCtx).error().code,
+             QStringLiteral("not_found"));
+  }
+
+  void moveReparentsAndRollsUp() {
+    auto s = openMemory();
+    const Project p = newProject(*s);
+    const Task one = newTask(*s, p.id, QStringLiteral("One"));
+    const Task two = newTask(*s, p.id, QStringLiteral("Two"));
+    const Task x = newLeaf(*s, p.id, QStringLiteral("x"), one.id, 3);
+    const Task y = newLeaf(*s, p.id, QStringLiteral("y"), one.id, 1);
+    const Task z = newLeaf(*s, p.id, QStringLiteral("z"), two.id, 1);
+    QVERIFY(markDone(*s, x.id).ok());
+    QCOMPARE(fresh(*s, one.id).percentComplete, 75);  // 3 of 4 days done
+    QCOMPARE(fresh(*s, two.id).status, QStringLiteral("todo"));
+
+    // x moves from One to Two, as Two's first child; both summaries recompute.
+    auto r = s->moveTask(x.id, two.id, 0, fresh(*s, x.id).rev, kCtx);
+    QVERIFY2(r.ok(), r.ok() ? "" : qPrintable(r.error().message));
+    QCOMPARE(r->parent, two.id);
+    QCOMPARE(titles(s->tasks(p.id).value()), (QStringList{"One", "y", "Two", "x", "z"}));
+    QCOMPARE(fresh(*s, one.id).percentComplete, 0);
+    QCOMPARE(fresh(*s, one.id).status, QStringLiteral("todo"));
+    QCOMPARE(fresh(*s, two.id).percentComplete, 75);
+    QCOMPARE(fresh(*s, two.id).status, QStringLiteral("in_progress"));
+    QCOMPARE(fresh(*s, z.id).order, 2);
+    // The roll-up change rows carry the mover's actor and request.
+    const QList<ChangeRecord> twoRows = s->changesFor(QStringLiteral("task"), two.id).value();
+    const ChangeRecord& last = twoRows.last();
+    QCOMPARE(last.actor, kCtx.actor);
+    QCOMPARE(last.requestId, kCtx.requestId);
+
+    // To the top level, between One and Two. y leaves One, which keeps its
+    // last values and is a plain task again (SPEC.md §5.3).
+    r = s->moveTask(y.id, {}, 1, fresh(*s, y.id).rev, kCtx);
+    QVERIFY(r.ok());
+    QVERIFY(r->parent.isEmpty());
+    QCOMPARE(titles(s->tasks(p.id).value()), (QStringList{"One", "y", "Two", "x", "z"}));
+    QCOMPARE(fresh(*s, two.id).order, 3);
+    // Outdent x: it becomes Two's next sibling, and Two (renumbered) loses it.
+    r = s->moveTask(x.id, {}, 3, fresh(*s, x.id).rev, kCtx);
+    QVERIFY(r.ok());
+    QCOMPARE(titles(s->tasks(p.id).value()), (QStringList{"One", "y", "Two", "z", "x"}));
+    QCOMPARE(fresh(*s, two.id).percentComplete, 0);
+  }
+
+  void moveRefusesBadParents() {
+    auto s = openMemory();
+    const Project p = newProject(*s);
+    const Project other = newProject(*s, QStringLiteral("Other"));
+    const Task a = newTask(*s, p.id, QStringLiteral("A"));
+    const Task b = newTask(*s, p.id, QStringLiteral("B"), a.id);
+    const Task c = newTask(*s, p.id, QStringLiteral("C"), b.id);
+    const Task m = newTask(*s, p.id, QStringLiteral("M"), {}, true);
+    const Task gone = newTask(*s, p.id, QStringLiteral("Gone"));
+    QVERIFY(s->deleteTask(gone.id, gone.rev, kCtx).ok());
+    const Task far = newTask(*s, other.id, QStringLiteral("Far"));
+    const qint64 seq = s->changesSince(0)->last().seq;
+
+    // Under its own descendant, or itself: a cycle, with the path.
+    auto r = s->moveTask(a.id, c.id, 0, a.rev, kCtx);
+    QCOMPARE(r.error().code, QStringLiteral("cycle"));
+    QCOMPARE(r.error().details.value(QStringLiteral("cycle")).toArray().first().toString(), a.id);
+    QCOMPARE(s->moveTask(a.id, a.id, 0, a.rev, kCtx).error().code, QStringLiteral("cycle"));
+    // A milestone, a deleted task, another project's task, a missing task.
+    QCOMPARE(s->moveTask(b.id, m.id, 0, b.rev, kCtx).error().code, QStringLiteral("validation"));
+    QCOMPARE(s->moveTask(b.id, gone.id, 0, b.rev, kCtx).error().code, QStringLiteral("validation"));
+    QCOMPARE(s->moveTask(b.id, far.id, 0, b.rev, kCtx).error().code, QStringLiteral("validation"));
+    QCOMPARE(s->moveTask(b.id, QStringLiteral("ffffffffffffffffffff"), 0, b.rev, kCtx).error().code,
+             QStringLiteral("validation"));
+    // A deleted task can't be moved.
+    QCOMPARE(s->moveTask(gone.id, {}, 0, 2, kCtx).error().code, QStringLiteral("not_found"));
+    // Nothing was written by any of them.
+    QCOMPARE(s->changesSince(seq)->size(), 0);
+    QCOMPARE(fresh(*s, c.id).parent, b.id);
+  }
+
+  // ---- restore ----
+
+  void restoreBringsBackWhatTheDeleteTook() {
+    auto s = openMemory();
+    const Project p = newProject(*s);
+    const Task top = newTask(*s, p.id, QStringLiteral("Top"));
+    const Task early = newLeaf(*s, p.id, QStringLiteral("Early"), top.id, 1);
+    const Task mid = newTask(*s, p.id, QStringLiteral("Mid"), top.id);
+    const Task leaf = newLeaf(*s, p.id, QStringLiteral("Leaf"), mid.id, 2);
+    const Task other = newLeaf(*s, p.id, QStringLiteral("Other"), top.id, 2);
+    QVERIFY(markDone(*s, leaf.id).ok());
+    // Early is deleted on its own first; then Top and the rest of its subtree.
+    QVERIFY(s->deleteTask(early.id, early.rev, kCtx).ok());
+    const Task topNow = fresh(*s, top.id);
+    QCOMPARE(topNow.percentComplete, 50);
+    QVERIFY(s->deleteTask(top.id, topNow.rev, kCtx).ok());
+    QCOMPARE(s->tasks(p.id)->size(), 0);
+
+    auto plan = s->planRestore(top.id);
+    QVERIFY(plan.ok());
+    QCOMPARE(titles(plan.value()), (QStringList{"Top", "Mid", "Leaf", "Other"}));
+    const Task deletedTop = fresh(*s, top.id);
+    QCOMPARE(s->restoreTask(top.id, 1, kCtx).error().code, QStringLiteral("rev_mismatch"));
+    const qint64 seq = s->changesSince(0)->last().seq;
+    auto r = s->restoreTask(top.id, deletedTop.rev, kCtx);
+    QVERIFY2(r.ok(), r.ok() ? "" : qPrintable(r.error().message));
+    QVERIFY(!r->deleted);
+    QCOMPARE(r->rev, deletedTop.rev + 1);
+    // Old places; Early (deleted earlier) stays deleted.
+    QCOMPARE(titles(s->tasks(p.id).value()), (QStringList{"Top", "Mid", "Leaf", "Other"}));
+    QVERIFY(fresh(*s, early.id).deleted);
+    QCOMPARE(fresh(*s, leaf.id).parent, mid.id);
+    // One restore row each (deleted true -> false); summaries in step.
+    int restores = 0;
+    const QList<ChangeRecord> after = s->changesSince(seq).value();
+    for (const ChangeRecord& c : after) {
+      if (c.after.value(QStringLiteral("deleted")) == QJsonValue(false)) ++restores;
+    }
+    QCOMPARE(restores, 4);
+    QCOMPARE(fresh(*s, top.id).percentComplete, 50);
+    QCOMPARE(fresh(*s, mid.id).status, QStringLiteral("done"));
+
+    // Early can come back on its own now that its parent is live.
+    QCOMPARE(titles(s->planRestore(early.id).value()), QStringList{"Early"});
+    QVERIFY(s->restoreTask(early.id, fresh(*s, early.id).rev, kCtx).ok());
+    QCOMPARE(fresh(*s, top.id).percentComplete, 40);  // 2 of 5 days done
+    // A live task isn't restorable.
+    auto again = s->restoreTask(top.id, fresh(*s, top.id).rev, kCtx);
+    QCOMPARE(again.error().code, QStringLiteral("conflict"));
+    QCOMPARE(again.error().details.value(QStringLiteral("reason")).toString(), QStringLiteral("not_deleted"));
+  }
+
+  void restoreRefusesOrphans() {
+    auto s = openMemory();
+    const Project p = newProject(*s);
+    const Task a = newTask(*s, p.id, QStringLiteral("A"));
+    const Task b = newTask(*s, p.id, QStringLiteral("B"), a.id);
+    QVERIFY(s->deleteTask(a.id, a.rev, kCtx).ok());
+    // B went with A: its parent is deleted, so restore A first.
+    auto r = s->restoreTask(b.id, fresh(*s, b.id).rev, kCtx);
+    QCOMPARE(r.error().code, QStringLiteral("conflict"));
+    QCOMPARE(r.error().details.value(QStringLiteral("reason")).toString(), QStringLiteral("parent_deleted"));
+    QCOMPARE(r.error().details.value(QStringLiteral("parent")).toString(), a.id);
+
+    // A parent that became a milestone after losing its children.
+    const Task c = newTask(*s, p.id, QStringLiteral("C"));
+    const Task d = newTask(*s, p.id, QStringLiteral("D"), c.id);
+    QVERIFY(s->deleteTask(d.id, d.rev, kCtx).ok());
+    Task cm = fresh(*s, c.id);
+    cm.type = QStringLiteral("milestone");
+    cm.duration = 0;
+    QVERIFY(s->updateTask(cm, cm.rev, kCtx).ok());
+    r = s->restoreTask(d.id, fresh(*s, d.id).rev, kCtx);
+    QCOMPARE(r.error().details.value(QStringLiteral("reason")).toString(), QStringLiteral("parent_milestone"));
+
+    // A deleted project's tasks stay deleted.
+    const Task e = newTask(*s, p.id, QStringLiteral("E"));
+    QVERIFY(s->deleteProject(p.id, s->project(p.id)->rev, kCtx).ok());
+    r = s->restoreTask(e.id, fresh(*s, e.id).rev, kCtx);
+    QCOMPARE(r.error().details.value(QStringLiteral("reason")).toString(), QStringLiteral("project_deleted"));
+    QCOMPARE(s->restoreTask(QStringLiteral("ffffffffffffffffffff"), 1, kCtx).error().code,
+             QStringLiteral("not_found"));
+  }
+
   void deleteProjectTombstonesTasks() {
     auto s = openMemory();
     const Project p = newProject(*s);

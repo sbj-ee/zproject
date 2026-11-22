@@ -8,6 +8,7 @@
 #include <QUrlQuery>
 
 #include <algorithm>
+#include <functional>
 #include <optional>
 
 #include "core/Id.hpp"
@@ -249,6 +250,26 @@ void appendRollupChanges(QJsonArray& changes, const QList<Task>& before, QList<T
   }
 }
 
+// For dry runs that write several rows: every task whose row differs
+// between `before` and `next` once the summaries are rolled up, one entry
+// each (`opFor` names the op, e.g. "move" or "restore"; others "update").
+// Rows deleted in both are left out.
+QJsonArray treeChanges(const QList<Task>& before, QList<Task> next,
+                       const std::function<QString(const QString&)>& opFor) {
+  rollUpSummaries(next);
+  QHash<QString, qsizetype> prev;
+  for (qsizetype i = 0; i < before.size(); ++i) prev.insert(before[i].id, i);
+  QJsonArray out;
+  for (const Task& t : next) {
+    if (!prev.contains(t.id)) continue;
+    const Task& b = before[prev.value(t.id)];
+    if (t.deleted && b.deleted) continue;
+    const FieldDiff d = diffFields(toJson(b), toJson(t));
+    if (!d.empty()) out.append(change(opFor(t.id), kTask, t.id, d.before, d.after));
+  }
+  return out;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------- routing
@@ -285,6 +306,12 @@ const QList<Api::Route>& Api::routeTable() {
       {{"DELETE", QStringLiteral("/v1/tasks/{id}"), QStringLiteral("deleteTask"), QStringLiteral("tasks:write"), true,
         true},
        &Api::deleteTask, true},
+      {{"POST", QStringLiteral("/v1/tasks/{id}/move"), QStringLiteral("moveTask"), QStringLiteral("tasks:write"),
+        false, true},
+       &Api::moveTask, true},
+      {{"POST", QStringLiteral("/v1/tasks/{id}/restore"), QStringLiteral("restoreTask"),
+        QStringLiteral("tasks:write"), true, true},
+       &Api::restoreTask, true},
       {{"GET", QStringLiteral("/v1/tasks/{id}/history"), QStringLiteral("getTaskHistory"),
         QStringLiteral("tasks:read")},
        &Api::getTaskHistory, false},
@@ -998,6 +1025,107 @@ Response Api::deleteTask(Call& c) {
   if (!r) return storeError(r.error());
   c.before = kDeletedBefore;
   c.after = kDeletedAfter;
+  c.hasDiff = true;
+  return Response::json(200, toJson(r.value()));
+}
+
+Response Api::moveTask(Call& c) {
+  const QString id = c.params.value(0);
+  auto cur = store_.task(id);
+  if (!cur) return storeError(cur.error());
+  if (auto a = checkProjectAccess(c, cur->project); a.status) return a;
+  // Body: {"parent": id | null, "position": n}; both optional (keep the
+  // parent; last place).
+  QString parent = cur->parent;
+  std::optional<int> position;
+  for (auto it = c.body.constBegin(); it != c.body.constEnd(); ++it) {
+    const QString& key = it.key();
+    const QJsonValue v = it.value();
+    if (key == QLatin1String("parent")) {
+      if (v.isNull()) {
+        parent.clear();
+      } else if (v.isString() && isValidId(v.toString())) {
+        parent = v.toString();
+      } else {
+        return validation(QStringLiteral("parent must be a task id or null"),
+                          QJsonObject{{QStringLiteral("field"), key}});
+      }
+    } else if (key == QLatin1String("position")) {
+      const double d = v.toDouble(-1);
+      if (!v.isDouble() || d < 0 || d != static_cast<double>(static_cast<qint64>(d)) || d > 1e9) {
+        return validation(QStringLiteral("position must be a whole number, 0 or more"),
+                          QJsonObject{{QStringLiteral("field"), key}});
+      }
+      position = static_cast<int>(d);
+    } else {
+      return validation(QStringLiteral("unknown field '%1'").arg(key), QJsonObject{{QStringLiteral("field"), key}});
+    }
+  }
+  Response err = Response::empty(0);
+  const auto expected = ifMatch(c, &err);
+  if (err.status) return err;
+  if (expected && *expected != cur->rev) return storeError(Error::revMismatch(*expected, cur->rev));
+  c.entityKind = kTask;
+  c.entityId = id;
+  if (c.dryRun) {
+    auto plan = store_.planMove(id, parent, position);
+    if (!plan) return storeError(plan.error());
+    auto ts = store_.tasks(cur->project);
+    if (!ts) return storeError(ts.error());
+    QHash<QString, Task> writes;
+    for (const Task& t : plan.value()) writes.insert(t.id, t);
+    QList<Task> next = ts.value();
+    for (Task& row : next) {
+      if (writes.contains(row.id)) row = writes.value(row.id);
+    }
+    return dryRunResponse(c, treeChanges(ts.value(), next, [&id](const QString& tid) {
+                            return tid == id ? QStringLiteral("move") : QStringLiteral("update");
+                          }));
+  }
+  auto r = store_.moveTask(id, parent, position, expected.value_or(cur->rev), {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  const FieldDiff d = diffFields(toJson(cur.value()), toJson(r.value()));
+  c.before = d.before;
+  c.after = d.after;
+  c.hasDiff = true;
+  return Response::json(200, toJson(r.value()));
+}
+
+Response Api::restoreTask(Call& c) {
+  const QString id = c.params.value(0);
+  auto cur = store_.task(id, true);
+  if (!cur) return storeError(cur.error());
+  if (auto a = checkProjectAccess(c, cur->project); a.status) return a;
+  if (!c.body.isEmpty()) {
+    const QString key = c.body.constBegin().key();
+    return validation(QStringLiteral("unknown field '%1'").arg(key), QJsonObject{{QStringLiteral("field"), key}});
+  }
+  Response err = Response::empty(0);
+  const auto expected = ifMatch(c, &err);
+  if (err.status) return err;
+  if (expected && *expected != cur->rev) return storeError(Error::revMismatch(*expected, cur->rev));
+  c.entityKind = kTask;
+  c.entityId = id;
+  if (c.dryRun) {
+    auto plan = store_.planRestore(id);
+    if (!plan) return storeError(plan.error());
+    auto ts = store_.tasks(cur->project, true);
+    if (!ts) return storeError(ts.error());
+    QSet<QString> restored;
+    for (const Task& t : plan.value()) restored.insert(t.id);
+    QList<Task> next = ts.value();
+    for (Task& row : next) {
+      if (restored.contains(row.id)) row.deleted = false;
+    }
+    return dryRunResponse(c, treeChanges(ts.value(), next, [&restored](const QString& tid) {
+                            return restored.contains(tid) ? QStringLiteral("restore") : QStringLiteral("update");
+                          }));
+  }
+  if (auto refuse = requireConfirm(c)) return *refuse;
+  auto r = store_.restoreTask(id, expected.value_or(cur->rev), {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  c.before = kDeletedAfter;
+  c.after = kDeletedBefore;
   c.hasDiff = true;
   return Response::json(200, toJson(r.value()));
 }

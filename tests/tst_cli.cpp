@@ -384,6 +384,49 @@ class TestCli : public QObject {
     QCOMPARE(cliAs(owner_, {QStringLiteral("audit"), QStringLiteral("--limit"), QStringLiteral("5")}).code, 0);
   }
 
+  void tasksMove() {
+    const QString p = createProject(QStringLiteral("Garage"));
+    const QString a = addTask(p, QStringLiteral("Foundation"));
+    const QString b = addTask(p, QStringLiteral("Framing"));
+    const QString c = addTask(p, QStringLiteral("Roof"));
+    auto list = [&] {
+      return cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("list"), p}).out.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    };
+    // Roof first: --position counts from 1.
+    Run r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), c, QStringLiteral("--position"), QStringLiteral("1"),
+                           QStringLiteral("--dry-run")});
+    QCOMPARE(r.code, 0);
+    QVERIFY(r.out.startsWith(QStringLiteral("Dry run: 3 changes")));
+    QVERIFY(r.out.contains(QStringLiteral("move task ") + c));
+    QVERIFY(list()[1].endsWith(QStringLiteral("Foundation")));
+    r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), c, QStringLiteral("--position"), QStringLiteral("1"),
+                       QStringLiteral("--rev"), QStringLiteral("1")});
+    QCOMPARE(r.code, 0);
+    QVERIFY(r.out.startsWith(QStringLiteral("Moved task ") + c + QStringLiteral(" (rev 2): Roof")));
+    QVERIFY(list()[1].endsWith(QStringLiteral("Roof")));
+    // Under Foundation, then back to the top level.
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), b, QStringLiteral("--parent"), a}).code, 0);
+    QVERIFY(list()[3].startsWith(QStringLiteral("2.1")));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), b, QStringLiteral("--parent"), QStringLiteral("none")}).code, 0);
+    QVERIFY(list()[3].startsWith(QStringLiteral("3 ")));
+    // Usage errors, a cycle, a stale revision.
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), b}).code, int(kExitUsage));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), b, QStringLiteral("--position"), QStringLiteral("0")}).code,
+             int(kExitUsage));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), b, QStringLiteral("--parent"), QStringLiteral("x")}).code,
+             int(kExitUsage));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), b, QStringLiteral("--title"), QStringLiteral("x")}).code,
+             int(kExitUsage));
+    const QString kid = addTask(p, QStringLiteral("Slab"), {QStringLiteral("--parent"), a});
+    r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), a, QStringLiteral("--parent"), kid});
+    QCOMPARE(r.code, int(kExitConflict));
+    QVERIFY(r.err.contains(QStringLiteral("409")));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("move"), a, QStringLiteral("--position"), QStringLiteral("2"),
+                            QStringLiteral("--rev"), QStringLiteral("1")})
+                 .code,
+             int(kExitConflict));  // 412
+  }
+
   void tokenCreateNeverPrintsToATerminal() {
     const QString p = createProject(QStringLiteral("One"));
     const QString path = dir_->path() + QStringLiteral("/laptop.token");
