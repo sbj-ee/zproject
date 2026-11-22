@@ -352,20 +352,31 @@ class TestCli : public QObject {
     QCOMPARE(t.value(QStringLiteral("status")).toString(), QStringLiteral("done"));
     QCOMPARE(t.value(QStringLiteral("percentComplete")).toInt(), 100);
     QCOMPARE(t.value(QStringLiteral("actualFinish")).toString(), QStringLiteral("2026-11-23"));
+    // Dig was Foundation's only child, so Foundation rolls up to done too.
     r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("list"), p, QStringLiteral("--status"), QStringLiteral("done")});
-    QCOMPARE(r.out.split(QLatin1Char('\n'), Qt::SkipEmptyParts).size(), 2);
-    // Validation errors are exit 3.
-    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("update"), a, QStringLiteral("--percent"),
-                            QStringLiteral("50")})
-                 .code,
-             int(kExitConflict));  // needs actualStart
+    QCOMPARE(r.out.split(QLatin1Char('\n'), Qt::SkipEmptyParts).size(), 3);
+    // A summary's progress is derived: setting it is a validation error.
     QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("update"), a, QStringLiteral("--percent"),
                             QStringLiteral("50"), QStringLiteral("--actual-start"), QStringLiteral("2026-11-20")})
                  .code,
+             int(kExitConflict));
+    // Validation errors are exit 3.
+    const QString b = addTask(p, QStringLiteral("Framing"));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("update"), b, QStringLiteral("--percent"),
+                            QStringLiteral("50")})
+                 .code,
+             int(kExitConflict));  // needs actualStart
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("update"), b, QStringLiteral("--percent"),
+                            QStringLiteral("50"), QStringLiteral("--actual-start"), QStringLiteral("2026-11-20")})
+                 .code,
              0);
-    r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("history"), a});
+    r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("history"), b});
     QCOMPARE(r.code, 0);
     QCOMPARE(r.out.split(QLatin1Char('\n'), Qt::SkipEmptyParts).size(), 3);  // header, create, update
+    // Foundation's history shows the roll-up as its own change.
+    r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("history"), a});
+    QCOMPARE(r.code, 0);
+    QCOMPARE(r.out.split(QLatin1Char('\n'), Qt::SkipEmptyParts).size(), 3);  // header, create, roll-up
 
     // Owner deletes need no confirmation; the subtree goes too.
     QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("delete"), a}).code, 0);

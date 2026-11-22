@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.4.2**, the version in `CMakeLists.txt`
+This specification describes zproject **0.5.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -279,8 +279,11 @@ optimistic concurrency via `If-Match`).
 | `meta` | `schemaVersion`, `installationId`, `currency` (default `USD`) |
 
 Derived (never stored): WBS code, summary-task roll-ups (start, finish, work,
-cost, % complete weighted by duration), early/late dates, float, critical flag,
-variance, over-allocation, project health suggestion.
+cost), early/late dates, float, critical flag, variance, over-allocation,
+project health suggestion. A summary's progress fields (% complete weighted by
+duration, status, actual start and finish) are derived too, but the server
+keeps them stored and in step on every write (§5.3), so filters, history and
+the sync feed see them.
 
 ### 5.2 Integrity rules
 
@@ -293,6 +296,34 @@ variance, over-allocation, project health suggestion.
 - `actualFinish` implies `percentComplete = 100`; `percentComplete > 0` implies
   `actualStart` (defaulted to the scheduled start).
 - `changes` and `audit` reject `UPDATE` and `DELETE` through SQLite triggers.
+
+### 5.3 Summary-task progress roll-up
+
+A summary task is a task with at least one live (not deleted) child. Its
+`percentComplete`, `status`, `actualStart` and `actualFinish` come from its
+children (`core/Rollup.cpp`), recursively through nested summaries:
+
+- **% complete:** weighted by duration over the summary's leaf tasks,
+  Σ(% × duration) / Σ duration, as MS Project rolls it up; a nested summary
+  weighs as much as its leaves' work. Milestones (duration 0) carry no weight;
+  if every leaf is a milestone, the plain average. Rounded, but 100 only when
+  every leaf is at 100, and at least 1 once any weighted work is done.
+- **Status**, from the direct children: all `done` → `done`; all `todo` →
+  `todo`; anything else (a mix, or any `in_progress`) → `in_progress`. These
+  are the only task statuses; a status added later (`blocked`, `cancelled`)
+  must say how it rolls up, and until then counts as started.
+- **Actual start** is the children's earliest; **actual finish** their latest,
+  only once every child has one. The §5.2 progress rules therefore hold.
+- **When:** in the same transaction as any task create, update (including a
+  move to another parent) or delete. Each summary that changes gets its own
+  revision and `changes` row with the writer's actor and request id; the
+  request's audit row stays about the task the request named.
+- **Hand edits:** changing any of the four fields on a summary is a 400
+  validation error (sending the current value back is accepted). A summary
+  whose last child goes away keeps its last values and is a plain task again.
+- **Existing data:** opening the database recomputes every summary and
+  corrects stale ones (actor `system`), so data from before 0.5.0 is fixed on
+  the first start; afterwards this finds nothing to do.
 
 ## 6. Scheduling engine
 

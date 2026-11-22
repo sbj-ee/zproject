@@ -48,6 +48,13 @@ class SqliteStore final : public Store {
   Status writeTask(const Task& t, bool insert);
   Status checkParent(const Task& t);
   Status tombstoneTask(const Task& t, const WriteContext& ctx, const QString& ts);
+  // Recomputes the project's summary tasks (core/Rollup.hpp) and writes the
+  // ones that changed, each with its own revision and change row, inside the
+  // caller's transaction.
+  Status rollUp(const QString& projectId, const WriteContext& ctx);
+  // On open: corrects summaries left stale by earlier versions (actor
+  // "system"). A no-op when everything is already in step.
+  Status reconcileRollups();
 
   Database db_;
   int schemaVersion_ = 0;

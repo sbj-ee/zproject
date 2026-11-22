@@ -300,6 +300,12 @@ paths:
       operationId: updateTask
       tags: [tasks]
       summary: Change task fields (If-Match honoured)
+      description: >-
+        A summary task (one with live children) derives percentComplete,
+        status, actualStart and actualFinish from its children (SPEC.md §5.3);
+        changing any of them on a summary is a 400 validation error. A write
+        to a child also updates its summaries, each with its own revision and
+        change record; a dry run lists those updates too.
       x-zproject-scope: tasks:write
       x-zproject-destructive: false
       x-zproject-dry-run: true
@@ -711,7 +717,11 @@ components:
         constraint: {type: string, enum: [ASAP, SNET, FNLT]}
         constraintDate: {$ref: '#/components/schemas/Date'}
         deadline: {$ref: '#/components/schemas/Date'}
-        percentComplete: {type: integer, minimum: 0, maximum: 100}
+        percentComplete:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Derived (duration-weighted over leaf tasks) on a summary task.
         actualStart: {$ref: '#/components/schemas/Date'}
         actualFinish: {$ref: '#/components/schemas/Date'}
         status: {$ref: '#/components/schemas/TaskStatus'}

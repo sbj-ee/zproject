@@ -426,6 +426,87 @@ class TestApi : public QObject {
     QVERIFY(log.verify().ok());
   }
 
+  // SPEC.md §5.3: summaries follow their children through the API, dry runs
+  // show the roll-up, hand edits are refused, and the audit chain holds.
+  void summaryRollUp() {
+    Fixture f;
+    const QString p = f.createProject(QStringLiteral("zproject"));
+    const QString six = f.createTask(p, QStringLiteral("v0.4.2"));
+    QStringList kids;
+    for (int i = 1; i <= 4; ++i) kids << f.createTask(p, QStringLiteral("6.%1").arg(i), six);
+    const QByteArray sixPath = "/v1/tasks/" + six.toLatin1();
+    const QJsonObject done{{QStringLiteral("status"), QStringLiteral("done")},
+                           {QStringLiteral("percentComplete"), 100},
+                           {QStringLiteral("actualStart"), QStringLiteral("2026-11-20")},
+                           {QStringLiteral("actualFinish"), QStringLiteral("2026-11-22")}};
+    for (int i = 0; i < 3; ++i) {
+      QCOMPARE(f.call("PATCH", "/v1/tasks/" + kids[i].toLatin1(), f.owner, done).status, 200);
+    }
+    QJsonObject t = Fixture::json(f.call("GET", sixPath, f.owner));
+    QCOMPARE(t.value(QStringLiteral("status")).toString(), QStringLiteral("in_progress"));
+    QCOMPARE(t.value(QStringLiteral("percentComplete")).toInt(), 75);
+
+    // The dry run for the last child lists the summary's update too.
+    const QByteArray lastPath = "/v1/tasks/" + kids[3].toLatin1();
+    Response r = f.call("PATCH", lastPath + "?dryRun=true", f.owner, done);
+    QCOMPARE(r.status, 200);
+    const QJsonArray changes = Fixture::json(r).value(QStringLiteral("changes")).toArray();
+    QCOMPARE(changes.size(), 2);
+    QCOMPARE(changes[1].toObject().value(QStringLiteral("entityId")).toString(), six);
+    QCOMPARE(changes[1].toObject().value(QStringLiteral("after")).toObject().value(QStringLiteral("status")).toString(),
+             QStringLiteral("done"));
+    QCOMPARE(Fixture::json(f.call("GET", sixPath, f.owner)).value(QStringLiteral("status")).toString(),
+             QStringLiteral("in_progress"));
+
+    QCOMPARE(f.call("PATCH", lastPath, f.owner, done).status, 200);
+    t = Fixture::json(f.call("GET", sixPath, f.owner));
+    QCOMPARE(t.value(QStringLiteral("status")).toString(), QStringLiteral("done"));
+    QCOMPARE(t.value(QStringLiteral("percentComplete")).toInt(), 100);
+    r = f.call("GET", "/v1/projects/" + p.toLatin1() + "/tasks?status=done", f.owner);
+    QCOMPARE(Fixture::json(r).value(QStringLiteral("items")).toArray().size(), 5);
+    // The summary's history has the roll-up, from the same token and request.
+    r = f.call("GET", sixPath + "/history", f.owner);
+    const QJsonArray hist = Fixture::json(r).value(QStringLiteral("items")).toArray();
+    const QJsonArray kidHist =
+        Fixture::json(f.call("GET", lastPath + "/history", f.owner)).value(QStringLiteral("items")).toArray();
+    QCOMPARE(hist.last().toObject().value(QStringLiteral("requestId")),
+             kidHist.last().toObject().value(QStringLiteral("requestId")));
+    QCOMPARE(hist.last().toObject().value(QStringLiteral("actor")),
+             kidHist.last().toObject().value(QStringLiteral("actor")));
+
+    // Hand edits of a summary's progress are refused, in a dry run too.
+    QCOMPARE(code(f.call("PATCH", sixPath, f.owner, {{QStringLiteral("percentComplete"), 40}})),
+             QStringLiteral("validation"));
+    QCOMPARE(f.call("PATCH", sixPath + "?dryRun=true", f.owner, {{QStringLiteral("status"), QStringLiteral("todo")}}).status,
+             400);
+    QCOMPARE(f.call("PATCH", sixPath, f.owner, {{QStringLiteral("title"), QStringLiteral("v0.4.2 TLS fix")}}).status,
+             200);
+
+    // Creating and deleting children: dry runs preview, writes recompute.
+    r = f.call("POST", "/v1/projects/" + p.toLatin1() + "/tasks?dryRun=true", f.owner,
+               {{QStringLiteral("title"), QStringLiteral("6.5")}, {QStringLiteral("parent"), six}});
+    QCOMPARE(Fixture::json(r).value(QStringLiteral("changes")).toArray().size(), 2);
+    const QString extra = f.createTask(p, QStringLiteral("6.5"), six);
+    QCOMPARE(Fixture::json(f.call("GET", sixPath, f.owner)).value(QStringLiteral("percentComplete")).toInt(), 80);
+    r = f.call("DELETE", "/v1/tasks/" + extra.toLatin1() + "?dryRun=true", f.owner);
+    QCOMPARE(Fixture::json(r).value(QStringLiteral("changes")).toArray().size(), 2);
+    QCOMPARE(f.call("DELETE", "/v1/tasks/" + extra.toLatin1(), f.owner).status, 200);
+    QCOMPARE(Fixture::json(f.call("GET", sixPath, f.owner)).value(QStringLiteral("status")).toString(),
+             QStringLiteral("done"));
+
+    // The audit row for the child's write is about the child; the chain holds.
+    store::AuditLog log(f.store->database());
+    QVERIFY(log.verify().ok());
+    bool sawChild = false;
+    for (const auto& e : f.auditRows()) {
+      if (e.method == QLatin1String("PATCH") && e.entityId == kids[3] && !e.dryRun) {
+        sawChild = true;
+        QVERIFY(e.after.contains(QStringLiteral("\"status\":\"done\"")));
+      }
+    }
+    QVERIFY(sawChild);
+  }
+
   void failedWriteRollsBackButIsAudited() {
     Fixture f;
     const QString p = f.createProject(QStringLiteral("One"));

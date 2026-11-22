@@ -11,6 +11,7 @@
 #include <optional>
 
 #include "core/Id.hpp"
+#include "core/Rollup.hpp"
 #include "core/Version.hpp"
 #include "server/Auth.hpp"
 #include "server/Mcp.hpp"
@@ -232,6 +233,21 @@ QJsonObject change(const QString& op, const QString& kind, const QString& id, co
 
 const QJsonObject kDeletedBefore{{QStringLiteral("deleted"), false}};
 const QJsonObject kDeletedAfter{{QStringLiteral("deleted"), true}};
+
+// For dry runs: the summary-task updates (SPEC.md §5.3) that turning the
+// project's tasks `before` into `after` would cause. Rows in `skip` (the
+// task the request itself writes) and deleted rows are left out.
+void appendRollupChanges(QJsonArray& changes, const QList<Task>& before, QList<Task> after,
+                         const QString& skip) {
+  rollUpSummaries(after);
+  QHash<QString, qsizetype> prev;
+  for (qsizetype i = 0; i < before.size(); ++i) prev.insert(before[i].id, i);
+  for (const Task& t : after) {
+    if (t.deleted || t.id == skip || !prev.contains(t.id)) continue;
+    const FieldDiff d = diffFields(toJson(before[prev.value(t.id)]), toJson(t));
+    if (!d.empty()) changes.append(change(QStringLiteral("update"), kTask, t.id, d.before, d.after));
+  }
+}
 
 }  // namespace
 
@@ -874,7 +890,17 @@ Response Api::createTask(Call& c) {
     }
     QJsonObject after = toJson(t);
     for (const QString& k : baseReadOnly()) after.remove(k);
-    return dryRunResponse(c, QJsonArray{change(QStringLiteral("create"), kTask, {}, {}, after)});
+    QJsonArray changes{change(QStringLiteral("create"), kTask, {}, {}, after)};
+    if (!t.parent.isEmpty()) {
+      auto ts = store_.tasks(projectId);
+      if (!ts) return storeError(ts.error());
+      QList<Task> next = ts.value();
+      Task created = t;
+      created.id = QStringLiteral("(new)");
+      next.append(created);
+      appendRollupChanges(changes, ts.value(), next, created.id);
+    }
+    return dryRunResponse(c, changes);
   }
   auto r = store_.createTask(t, {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -911,9 +937,21 @@ Response Api::updateTask(Call& c) {
   t.project = cur->project;
   if (c.dryRun) {
     if (auto e = toValidationError(validateTask(t))) return storeError(*e);
+    auto ts = store_.tasks(cur->project);
+    if (!ts) return storeError(ts.error());
+    if (summaryIds(ts.value()).contains(id)) {
+      if (auto e = toValidationError(checkSummaryEdit(cur.value(), t))) return storeError(*e);
+    }
     const FieldDiff d = diffFields(toJson(cur.value()), toJson(t));
     QJsonArray changes;
-    if (!d.empty()) changes.append(change(QStringLiteral("update"), kTask, id, d.before, d.after));
+    if (!d.empty()) {
+      changes.append(change(QStringLiteral("update"), kTask, id, d.before, d.after));
+      QList<Task> next = ts.value();
+      for (Task& row : next) {
+        if (row.id == id) row = t;
+      }
+      appendRollupChanges(changes, ts.value(), next, id);
+    }
     return dryRunResponse(c, changes);
   }
   auto r = store_.updateTask(t, expected.value_or(cur->rev), {c.token.id, c.requestId});
@@ -944,12 +982,15 @@ Response Api::deleteTask(Call& c) {
     // The task and its subtree (tasks() is depth-first).
     QSet<QString> subtree{id};
     QJsonArray changes;
-    for (const Task& t : ts.value()) {
+    QList<Task> next = ts.value();
+    for (Task& t : next) {
       if (t.id == id || subtree.contains(t.parent)) {
         subtree.insert(t.id);
+        t.deleted = true;
         changes.append(change(QStringLiteral("delete"), kTask, t.id, kDeletedBefore, kDeletedAfter));
       }
     }
+    appendRollupChanges(changes, ts.value(), next, id);
     return dryRunResponse(c, changes);
   }
   if (auto refuse = requireConfirm(c)) return *refuse;
