@@ -175,4 +175,29 @@ Status TokenStore::removeKeychain() const {
   return Ok{};
 }
 
+Result<ResolvedToken> resolveDeviceToken(const QHash<QString, QString>& env, const QString& configuredStore,
+                                         const TokenStore& store) {
+  auto authError = [](const QString& message) { return Error{QStringLiteral("auth"), message, {}}; };
+  const QString envToken = env.value(QStringLiteral("ZPROJECT_TOKEN")).trimmed();
+  if (!envToken.isEmpty()) {
+    if (!looksLikeToken(envToken)) return authError(QStringLiteral("ZPROJECT_TOKEN is not a zproject token"));
+    return ResolvedToken{envToken, QStringLiteral("ZPROJECT_TOKEN")};
+  }
+  const bool keychainFirst = configuredStore == QLatin1String("keychain");
+  if (keychainFirst) {
+    auto t = store.readKeychain();
+    if (!t) return authError(t.error().message);
+    return ResolvedToken{t.value(), QStringLiteral("keychain")};
+  }
+  auto f = store.readFile();
+  if (f) return ResolvedToken{f.value(), QStringLiteral("file ") + store.tokenFile()};
+  if (f.error().code != QLatin1String("not_found")) return authError(f.error().message);
+  if (store.macos() && configuredStore.isEmpty()) {
+    auto t = store.readKeychain();
+    if (t) return ResolvedToken{t.value(), QStringLiteral("keychain")};
+    if (t.error().code != QLatin1String("not_found")) return authError(t.error().message);
+  }
+  return authError(QStringLiteral("no token: run `zproject-cli login` (or set ZPROJECT_TOKEN)"));
+}
+
 }  // namespace zproject::client

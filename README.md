@@ -1,8 +1,8 @@
 # zproject
 
-**0.5.0**
+**0.6.0**
 
-Current release: **0.4.2**
+Current release: **0.5.0**
 
 Project management for the z-suite: projects with a WBS, milestones,
 dependencies, a critical-path schedule, baselines, resources and cost, a RAID
@@ -12,7 +12,7 @@ one repository (C++20, Qt 6):
 | Program | What it is |
 |---|---|
 | `zprojectd` | Headless server (Qt Core/Network, SQLite). Listens on `127.0.0.1:8788` only and is published on the tailnet with `tailscale serve`. Runs on a home server (Pop!_OS 24.04, amd64). |
-| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. A placeholder window for now. |
+| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. A placeholder window for now; its client core (non-blocking `/v1` client, read-only cache, change-feed sync) is in `client/` and tested headless. |
 | `zproject-cli` | Command-line client of the `/v1` API, shipped with the desktop app (Linux `.deb`, inside `zproject.app` on macOS). |
 
 The full design is in [SPEC.md](SPEC.md).

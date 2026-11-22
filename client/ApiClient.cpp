@@ -4,6 +4,11 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QtNetwork/qtnetworkglobal.h>
+#if QT_CONFIG(ssl)
+#include <QSslConfiguration>
+#include <QSslSocket>
+#endif
 #include <QTimer>
 
 #include "core/Version.hpp"
@@ -34,22 +39,62 @@ ApiClient::~ApiClient() = default;
 
 ApiResponse ApiClient::get(const QString& path, const QUrlQuery& query) { return send("GET", path, query); }
 
-ApiResponse ApiClient::send(const QByteArray& method, const QString& path, const QUrlQuery& query,
-                            const QJsonObject* body, const QList<QPair<QByteArray, QByteArray>>& headers) {
-  QUrl url = base_;
+QNetworkRequest buildApiRequest(const QUrl& base, const QString& path, const QUrlQuery& query, const QByteArray& token,
+                                const QString& userAgent, bool hasBody,
+                                const QList<QPair<QByteArray, QByteArray>>& headers) {
+  QUrl url = base;
   url.setPath(path);
   if (!query.isEmpty()) url.setQuery(query);
   QNetworkRequest req(url);
   req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
-  req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("zproject-cli/%1").arg(appVersion()));
+  req.setHeader(QNetworkRequest::UserAgentHeader, userAgent);
   req.setRawHeader("Accept", "application/json");
-  if (!token_.isEmpty()) req.setRawHeader("Authorization", "Bearer " + token_);
+  if (!token.isEmpty()) req.setRawHeader("Authorization", "Bearer " + token);
   for (const auto& h : headers) req.setRawHeader(h.first, h.second);
-  QByteArray data;
-  if (body) {
-    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
-    data = QJsonDocument(*body).toJson(QJsonDocument::Compact);
+  if (hasBody) req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+#if QT_CONFIG(ssl)
+  if (url.scheme() == QLatin1String("https")) {
+    QSslConfiguration tls = QSslConfiguration::defaultConfiguration();
+    tls.setPeerVerifyMode(QSslSocket::VerifyPeer);
+    req.setSslConfiguration(tls);
   }
+#endif
+  return req;
+}
+
+bool isTlsError(int networkErrorCode) {
+  // Certificate errors are never ignored, so they end the handshake.
+  return networkErrorCode == QNetworkReply::SslHandshakeFailedError;
+}
+
+ApiResponse readApiReply(QNetworkReply* reply, const QUrl& base, bool timedOut, int timeoutMs) {
+  ApiResponse r;
+  r.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+  if (reply->isOpen()) r.body = reply->readAll();
+  for (const auto& h : reply->rawHeaderPairs()) r.headers.append(h);
+  if (timedOut) {
+    r.status = 0;
+    r.timedOut = true;
+    r.networkErrorCode = QNetworkReply::TimeoutError;
+    r.networkError = QStringLiteral("no answer from %1 within %2 s").arg(base.toString()).arg(timeoutMs / 1000);
+  } else if (r.status == 0) {
+    r.networkErrorCode = reply->error();
+    r.tlsFailure = isTlsError(r.networkErrorCode);
+    r.networkError = QStringLiteral("cannot reach %1: %2").arg(base.toString(), reply->errorString());
+  }
+  if (!r.body.isEmpty()) {
+    const QJsonDocument doc = QJsonDocument::fromJson(r.body);
+    if (doc.isObject()) r.json = doc.object();
+  }
+  return r;
+}
+
+ApiResponse ApiClient::send(const QByteArray& method, const QString& path, const QUrlQuery& query,
+                            const QJsonObject* body, const QList<QPair<QByteArray, QByteArray>>& headers) {
+  const QNetworkRequest req = buildApiRequest(base_, path, query, token_,
+                                              QStringLiteral("zproject-cli/%1").arg(appVersion()), body != nullptr, headers);
+  QByteArray data;
+  if (body) data = QJsonDocument(*body).toJson(QJsonDocument::Compact);
 
   QNetworkReply* reply = body ? nam_->sendCustomRequest(req, method, data) : nam_->sendCustomRequest(req, method);
   QEventLoop loop;
@@ -65,20 +110,7 @@ ApiResponse ApiClient::send(const QByteArray& method, const QString& path, const
   if (!reply->isFinished()) loop.exec();
   timer.stop();
 
-  ApiResponse r;
-  r.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-  r.body = reply->readAll();
-  for (const auto& h : reply->rawHeaderPairs()) r.headers.append(h);
-  if (timedOut) {
-    r.status = 0;
-    r.networkError = QStringLiteral("no answer from %1 within %2 s").arg(base_.toString()).arg(timeoutMs_ / 1000);
-  } else if (r.status == 0) {
-    r.networkError = QStringLiteral("cannot reach %1: %2").arg(base_.toString(), reply->errorString());
-  }
-  if (!r.body.isEmpty()) {
-    const QJsonDocument doc = QJsonDocument::fromJson(r.body);
-    if (doc.isObject()) r.json = doc.object();
-  }
+  ApiResponse r = readApiReply(reply, base_, timedOut, timeoutMs_);
   reply->deleteLater();
   return r;
 }

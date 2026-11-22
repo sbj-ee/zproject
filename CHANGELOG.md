@@ -7,6 +7,47 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.6.0 — 2026-11-22
+
+Desktop client, PR 1 of the approved plan: the client core the desktop app
+will be built on. No new windows yet; `zproject` still shows its placeholder.
+The CLI and server behave as before.
+
+- **`AsyncApiClient`:** a non-blocking `/v1` client on
+  `QNetworkAccessManager`. It shares request building with the CLI's client:
+  bearer token, no redirects, TLS peer verification always on (there is no
+  option to ignore a certificate error), a timeout per request. Up to 4 reads
+  at a time; writes to one entity run in order, one at a time; every `PATCH`
+  can carry `If-Match`, `?dryRun=true` and `X-Zproject-Confirm`. After a 429
+  nothing new starts until `Retry-After`. Nothing is retried blindly.
+- **Error mapping (`ApiError`):** every SPEC.md §9.3 answer maps to what the
+  app will do with it (inline field error, token dialog, conflict dialog,
+  offline with backoff, TLS hard stop, ...). The 0.5.0 refusal to hand-edit a
+  summary's progress gets its own message. A 2xx whose body isn't JSON is
+  refused.
+- **Version gate:** `/v1/health` is checked at connect; another API major is
+  refused, and an older or newer server gets an info message.
+- **Shared token store:** the token lookup (`ZPROJECT_TOKEN`, the `cli.ini`
+  store, the 0600 file, the Keychain) moved from the CLI into
+  `resolveDeviceToken()`, used by both. The desktop reuses this machine's CLI
+  token and server URL, so a machine set up for `zproject-cli` needs no second
+  setup. New desktop settings file `zproject.ini` (0600), never with a token.
+- **Read-only cache (`Cache`):** SQLite at `~/.cache/zproject/cache.db`
+  (macOS `~/Library/Caches/zproject/`), 0600 in a 0700 directory: projects,
+  tasks, WBS codes, the last 5,000 change records and the feed position.
+  Replaying records is a no-op; Clear cache deletes the files.
+- **Change-feed syncer:** `GET /v1/changes` every 15 s while active, 60 s in
+  the background, and on F5; offline backoff 5 s → 60 s; a full reload when
+  the server was restored (the cached position no longer matches) or its
+  schema changed; list polling every 30 s for project-limited tokens.
+- **Tests (headless):** `tst_clientcore`, `tst_cache`, `tst_asyncapi` and
+  `tst_syncer`, with a new fault-injecting mock server (`tests/MockServer`:
+  delays, hangs, dropped connections, cut-off and truncated bodies, 412, 429,
+  5xx, API-version mismatch) and a real `zprojectd` on loopback for end-to-end
+  sync, paging and restore detection. TLS tests: an `https://` URL to a plain
+  server, and a self-signed certificate (OpenSSL backend), both refused.
+- SPEC.md §4.1, §9.3 and §16.5 describe the client core.
+
 ## 0.5.0 — 2026-11-22
 
 Summary tasks now follow their children (SPEC.md §5.3). Before this, marking
