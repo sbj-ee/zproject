@@ -1,6 +1,8 @@
 // zproject-cli: thin command-line client of zprojectd's /v1 (SPEC.md §10).
 // The commands live in client/Cli.cpp; this file wires them to the process.
 #include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
 #include <QFile>
 #include <QProcessEnvironment>
 #include <QTextStream>
@@ -32,12 +34,28 @@ QString promptSecret(const QString& prompt) {
   return QString::fromLatin1(line).trimmed();
 }
 
+// macOS: zproject-cli lives in zproject.app/Contents/MacOS next to the GUI.
+// Qt finds the bundle's qt.conf (and so Contents/PlugIns) only for the
+// bundle's main executable, so the CLI would look for its TLS backend in
+// Contents/MacOS/tls and, outside a machine with Homebrew Qt, find none
+// (no https). Point it at the bundle's PlugIns before any network use.
+void addBundlePlugins() {
+#ifdef Q_OS_MACOS
+  const QDir exeDir(QCoreApplication::applicationDirPath());
+  const QString plugins = QDir::cleanPath(exeDir.absoluteFilePath(QStringLiteral("../PlugIns")));
+  if (exeDir.dirName() == QLatin1String("MacOS") && QFileInfo(plugins).isDir()) {
+    QCoreApplication::addLibraryPath(plugins);
+  }
+#endif
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
   QCoreApplication app(argc, argv);
   QCoreApplication::setApplicationName(QStringLiteral("zproject-cli"));
   QCoreApplication::setApplicationVersion(zproject::appVersion());
+  addBundlePlugins();
 
   zproject::client::CliIo io;
   const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();

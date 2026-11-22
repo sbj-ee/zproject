@@ -308,6 +308,9 @@ jobs:
           "$cli" --version
           "$cli" doctor
           file "$cli" | grep -q arm64
+          # As on a Mac without Homebrew Qt: the CLI must find the bundle's
+          # own TLS plugin (0.4.0 didn't, and this runner's Qt hid it).
+          tools/macos/check-cli-tls.sh "$mnt/zproject.app"
 
           db="$RUNNER_TEMP/smoke.db"
           build/server/zprojectd --db "$db" --migrate-only

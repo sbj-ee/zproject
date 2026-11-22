@@ -7,6 +7,26 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.4.2 — 2026-11-22
+
+Fix: on a Mac without Homebrew Qt, the `zproject-cli` in the v0.4.0 `.dmg`
+had no TLS backend (`doctor` printed `tls: no`), so it couldn't reach an
+`https://` server.
+
+- **Cause:** Qt reads the bundle's `qt.conf` (`Plugins = PlugIns`) only for
+  the bundle's main executable. The CLI, in `zproject.app/Contents/MacOS`
+  beside the GUI, looked for plugins in `Contents/MacOS/tls`. CI didn't
+  notice because the runner's Homebrew Qt supplied its own plugins.
+- **Fix:** on macOS, `zproject-cli` adds `Contents/PlugIns` to Qt's library
+  paths at startup, before any network use, so it loads the bundled OpenSSL
+  backend.
+- **New check:** `tools/macos/check-cli-tls.sh` runs the bundled CLI with
+  Homebrew's Qt kegs hidden and `QT_PLUGIN_PATH` unset, and requires
+  `tls: yes`. CI runs it on the `.dmg`, and so does the release workflow.
+- **Workaround for 0.4.0 and 0.4.1:** a `QT_PLUGIN_PATH` wrapper in place of
+  the symlink, described in DEPLOY.md. Once 0.4.2 is installed, replace the
+  wrapper with the plain symlink.
+
 ## 0.4.1 — 2026-11-22
 
 Documentation only.

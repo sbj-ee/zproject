@@ -216,6 +216,10 @@ CLI (`/usr/local/bin` is usually user-writable on Apple Silicon; otherwise use
 
 ```sh
 ln -s /Applications/zproject.app/Contents/MacOS/zproject-cli /usr/local/bin/zproject-cli
+# 0.4.0 / 0.4.1 only: the bundled CLI can't find its TLS plugin, so use a
+# wrapper instead of the symlink (fixed in 0.4.2, where the symlink is enough):
+#   printf '%s\n' '#!/bin/sh' 'QT_PLUGIN_PATH=/Applications/zproject.app/Contents/PlugIns exec /Applications/zproject.app/Contents/MacOS/zproject-cli "$@"' \
+#     > /usr/local/bin/zproject-cli && chmod 755 /usr/local/bin/zproject-cli
 zproject-cli --version && zproject-cli doctor                  # tls: yes
 chmod 600 <mac-client>.token
 zproject-cli login --url https://<server-host>.<tailnet>.ts.net --store file --from-file <mac-client>.token
