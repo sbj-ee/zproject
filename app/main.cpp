@@ -2,6 +2,7 @@
 #include <QApplication>
 #include <QIcon>
 #include <QMessageBox>
+#include <QProcess>
 #include <QStyleFactory>
 #include <QTextStream>
 #include <QTimer>
@@ -11,6 +12,7 @@
 #include "app/MainWindow.hpp"
 #include "app/SignInDialog.hpp"
 #include "app/SingleInstance.hpp"
+#include "app/UpdateManager.hpp"
 #include "core/Version.hpp"
 
 int main(int argc, char* argv[]) {
@@ -47,5 +49,13 @@ int main(int argc, char* argv[]) {
   if (window.needsSignIn()) {
     QTimer::singleShot(0, &window, [&window] { window.showSignIn(); });
   }
-  return QApplication::exec();
+  const int rc = QApplication::exec();
+  // Update → Restart Now: start the newly installed binary once our lock is
+  // free (SPEC.md §21). Only the .deb's own path; never a $PATH lookup.
+  if (rc == 0 && window.updater()->restartRequested() &&
+      QCoreApplication::applicationFilePath() == QLatin1String("/usr/bin/zproject")) {
+    instance.release();
+    QProcess::startDetached(QStringLiteral("/usr/bin/zproject"), {});
+  }
+  return rc;
 }

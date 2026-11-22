@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.7.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.8.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -533,7 +533,7 @@ Carlo, multi-user permissions.
   View (Gantt, List, Resources, RAID, Portfolio; zoom; critical only; baseline
   bars; calendar overlay), Project (Set baseline, Save as template, Reschedule,
   Project calendar), Help (zproject Help F1, Keyboard Shortcuts, API
-  Reference, Report an Issue, About; Check for updates with the updater).
+  Reference, Report an Issue, Check for Updates… (§21), About).
   View also has Theme (System, Light, Dark, High contrast) and UI text zoom
   (Zoom In / Zoom Out / Actual Size, 50–300 %). Help is zwriter's: one
   embedded Markdown guide in a modeless window; links open only if https.
@@ -569,7 +569,7 @@ Baselines and Variance table, Reports (rendered Markdown with export),
 Portfolio table and all-projects timeline, Calendar editor (work week and
 exceptions), Preferences (server and token label, appearance
 light/dark/high contrast/system, UI text size, offline cache on/off and Clear
-cache, updates, Google Calendar connect/disconnect and calendar picker, Tokens,
+cache, updates (check once a day on/off, Check Now), Google Calendar connect/disconnect and calendar picker, Tokens,
 Audit log viewer, alert rules).
 
 ### 8.4 Keyboard
@@ -864,7 +864,8 @@ schema 1 to head on fixture databases.
 
 - Linux: `~/.config/zproject/zproject.ini` (settings),
   `~/.config/zproject/device-id`, `~/.cache/zproject/cache.db` (read-only plan
-  cache), `update-state.ini`. macOS: `~/Library/Preferences/zproject/` and
+  cache), `update-state.ini` (beside `zproject.ini`, 0600: the last automatic
+  update check and a skipped version). macOS: `~/Library/Preferences/zproject/` and
   `~/Library/Caches/zproject/`. None of these are in Box.
 - Connection: the desktop app uses the same server URL (`cli.ini`, unless
   its own `zproject.ini` or `ZPROJECT_URL` names one) and the same device
@@ -998,6 +999,23 @@ compiled-in key and the trusted comment, SHA-256 match, then Linux
 manual `sudo apt install`) and macOS open-the-dmg. Install / Later / Skip this
 version. Nothing installs unless verification passes. The desktop app also
 shows when the server is older or newer than itself.
+
+- Help → Check for Updates… always checks and shows the result. The daily
+  check is asked about once on first run (default on), can be changed in
+  Preferences, runs at most once a day and speaks only when it has something
+  to offer (a skipped version is not offered again by it).
+- HTTPS only. Download and Verify fetches `SHA256SUMS` and
+  `SHA256SUMS.minisig` first; the signature (key `32960BBA77B36F1F`, trusted
+  comment `zproject <tag> SHA256SUMS`) is checked before the package is
+  downloaded, then the package's SHA-256. **Install…** is offered only after
+  both pass; any mismatch deletes the download and installs nothing. No
+  silent installs: the user starts every install.
+- The desktop updater only ever selects `zproject_<ver>_amd64.deb` or
+  `zproject-<ver>-Darwin.dmg`. It never downloads, verifies or installs
+  `zprojectd`; before `pkexec` it re-hashes a private copy of the `.deb` and
+  requires its control field `Package: zproject`.
+- Linux installs only when running as `/usr/bin/zproject` (the `.deb`);
+  afterwards **Restart Now** starts the new version.
 
 ## 22. Versioning rules
 

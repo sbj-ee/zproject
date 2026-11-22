@@ -32,6 +32,8 @@ struct DesktopSettings {
   bool cacheEnabled = true;   // off: nothing is written to the cache
   QString theme = QStringLiteral("system");  // system, light, dark, high-contrast
   int zoomPercent = 100;      // UI text zoom (View → Zoom)
+  bool updateCheckDaily = true;  // the updater's daily check (SPEC.md §21)
+  bool updateAsked = false;      // asked about it on first run
 };
 DesktopSettings loadDesktopSettings(const DesktopPaths& paths);
 // Writes zproject.ini, mode 0600 in a 0700 directory. Never a token.

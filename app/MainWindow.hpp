@@ -21,12 +21,15 @@ class QDockWidget;
 class QFrame;
 class QLabel;
 class QListWidget;
+class QMessageBox;
 class QPushButton;
 class QStackedWidget;
 
 namespace zproject::app {
 
 class HelpDialog;
+class UpdateDialog;
+class UpdateManager;
 class SignInDialog;
 
 // The desktop shell (SPEC.md §8.1): menus, the project sidebar, a central
@@ -45,6 +48,7 @@ class MainWindow : public QMainWindow {
     client::ChangeFeedSyncer::Timing timing;
     bool autoConnect = true;               // false: tests call connectToServer()
     QPalette systemPalette;                // the platform palette before ours
+    bool startupUpdateCheck = true;        // false: tests start the updater themselves
   };
   static Options defaultOptions();
 
@@ -79,6 +83,14 @@ class MainWindow : public QMainWindow {
   AboutDialog* showAbout();
   ShortcutsDialog* showShortcuts();
   PreferencesDialog* showPreferences();
+  // Help → Check for Updates (SPEC.md §21).
+  UpdateDialog* checkForUpdates();
+  UpdateManager* updater() const { return updater_; }
+  // First run: "Check for updates once a day?" (default yes), then the
+  // daily check if it is due. Returns the question box, or nullptr.
+  QMessageBox* startUpdates();
+  void setUpdateCheckDaily(bool daily);
+  QString updateStatePath() const;
   ConnectionInfo connectionInfo() const;
 
   // Tests: https links go here instead of the desktop browser.
@@ -147,6 +159,7 @@ class MainWindow : public QMainWindow {
   QPointer<ShortcutsDialog> shortcuts_;
   QPointer<PreferencesDialog> preferences_;
   QPointer<SignInDialog> signIn_;
+  UpdateManager* updater_ = nullptr;
 };
 
 }  // namespace zproject::app

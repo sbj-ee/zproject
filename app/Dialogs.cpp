@@ -5,6 +5,7 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
@@ -107,7 +108,7 @@ ShortcutsDialog::ShortcutsDialog(QWidget* parent) : QDialog(parent) {
 }
 
 PreferencesDialog::PreferencesDialog(const ConnectionInfo& info, const QString& theme, int zoomPercent,
-                                     bool cacheEnabled, QWidget* parent)
+                                     bool cacheEnabled, bool updateCheckDaily, QWidget* parent)
     : QDialog(parent) {
   setObjectName(QStringLiteral("preferencesDialog"));
   setWindowTitle(tr("Preferences"));
@@ -148,6 +149,18 @@ PreferencesDialog::PreferencesDialog(const ConnectionInfo& info, const QString& 
   cacheLayout->addLayout(row);
   layout->addWidget(cacheGroup);
 
+  auto* updGroup = new QGroupBox(tr("Software updates"), this);
+  auto* updLayout = new QHBoxLayout(updGroup);
+  updates_ = new QCheckBox(tr("Check for zproject updates once a day"), updGroup);
+  updates_->setObjectName(QStringLiteral("updatesBox"));
+  updates_->setChecked(updateCheckDaily);
+  updates_->setToolTip(tr("Asks GitHub for the latest release. Nothing is installed without your OK."));
+  updLayout->addWidget(updates_, 1);
+  checkNow_ = new QPushButton(tr("Check &Now…"), updGroup);
+  checkNow_->setObjectName(QStringLiteral("checkNowButton"));
+  updLayout->addWidget(checkNow_);
+  layout->addWidget(updGroup);
+
   auto* conn = new QGroupBox(tr("Connection"), this);
   auto* connLayout = new QVBoxLayout(conn);
   connection_ = new QLabel(conn);
@@ -168,6 +181,8 @@ PreferencesDialog::PreferencesDialog(const ConnectionInfo& info, const QString& 
           [this](int) { emit themeChosen(theme_->currentData().toString()); });
   connect(zoom_, &QSpinBox::valueChanged, this, &PreferencesDialog::zoomChosen);
   connect(cache_, &QCheckBox::toggled, this, &PreferencesDialog::cacheEnabledChosen);
+  connect(updates_, &QCheckBox::toggled, this, &PreferencesDialog::updateCheckChosen);
+  connect(checkNow_, &QPushButton::clicked, this, &PreferencesDialog::checkForUpdatesRequested);
   connect(clear_, &QPushButton::clicked, this, &PreferencesDialog::clearCacheRequested);
   connect(signIn_, &QPushButton::clicked, this, &PreferencesDialog::signInRequested);
 }

@@ -12,7 +12,7 @@ endif()
 # Single source of truth for the version (SPEC.md §22): bump ONLY the VERSION
 # here. It reaches all three binaries through generated/zproject/version.hpp,
 # and CPack names the packages from PROJECT_VERSION.
-project(zproject VERSION 0.7.0 LANGUAGES C CXX)
+project(zproject VERSION 0.8.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -38,6 +38,12 @@ if(ZPROJECT_BUILD_TESTS)
   list(APPEND ZPROJECT_QT_COMPONENTS Test)
 endif()
 find_package(Qt6 6.4 REQUIRED COMPONENTS ${ZPROJECT_QT_COMPONENTS})
+# The desktop updater verifies minisign signatures with libsodium (SPEC.md
+# §21). The server-only build doesn't need it.
+if(ZPROJECT_BUILD_GUI)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium>=1.0.18)
+endif()
 
 include(cmake/CompilerWarnings.cmake)
 include(cmake/Sanitizers.cmake)

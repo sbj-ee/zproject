@@ -1,6 +1,6 @@
 # zproject
 
-**0.7.0**
+**0.8.0**
 
 Current release: **0.5.0**
 
@@ -12,7 +12,7 @@ one repository (C++20, Qt 6):
 | Program | What it is |
 |---|---|
 | `zprojectd` | Headless server (Qt Core/Network, SQLite). Listens on `127.0.0.1:8788` only and is published on the tailnet with `tailscale serve`. Runs on a home server (Pop!_OS 24.04, amd64). |
-| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. A placeholder window for now; its client core (non-blocking `/v1` client, read-only cache, change-feed sync) is in `client/` and tested headless. |
+| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. The app shell (menus, themes, Help, Preferences) and the signed in-app updater; its client core (non-blocking `/v1` client, read-only cache, change-feed sync) is in `client/` and tested headless. |
 | `zproject-cli` | Command-line client of the `/v1` API, shipped with the desktop app (Linux `.deb`, inside `zproject.app` on macOS). |
 
 The full design is in [SPEC.md](SPEC.md).
@@ -29,14 +29,17 @@ reports and the desktop client's views follow (SPEC.md §24).
 
 The desktop app (`zproject`) has its shell: themes, the offline banner,
 first-run sign-in that reuses `zproject-cli`'s token, Preferences and Help.
+**Help → Check for Updates…** installs new desktop releases after checking
+their minisign signature and SHA-256 (SPEC.md §21); it never touches
+`zprojectd`.
 
 | Light | Dark | Offline |
 |---|---|---|
 | ![Main window, Light](docs/screenshots/main-light.png) | ![Main window, Dark](docs/screenshots/main-dark.png) | ![Offline banner](docs/screenshots/offline-light.png) |
 
 More in [docs/screenshots](docs/screenshots/): High contrast, first run,
-Preferences, Help and About, rendered offscreen from example data
-(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R tst_appshell`).
+Preferences, Help, About and the update dialog, rendered offscreen from example
+data (`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R 'tst_appshell|tst_update'`).
 
 ## Running the server
 

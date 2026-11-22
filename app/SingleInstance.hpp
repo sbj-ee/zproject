@@ -20,6 +20,8 @@ class SingleInstance {
   // False if another live process holds it; *holderPid is then its pid.
   bool acquire(qint64* holderPid = nullptr);
   bool held() const;
+  // Lets a restarted zproject (after an update) take the lock.
+  void release();
   QString path() const { return path_; }
 
  private:
