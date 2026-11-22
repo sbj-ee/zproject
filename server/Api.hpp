@@ -118,6 +118,8 @@ class Api {
   http::Response getTask(Call& c);
   http::Response updateTask(Call& c);
   http::Response deleteTask(Call& c);
+  http::Response moveTask(Call& c);
+  http::Response restoreTask(Call& c);
   http::Response getTaskHistory(Call& c);
   http::Response listChanges(Call& c);
   http::Response listTokens(Call& c);

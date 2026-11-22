@@ -496,6 +496,168 @@ Result<Task> SqliteStore::deleteTask(const QString& id, qint64 expectedRev, cons
   return task(id, true);
 }
 
+// ---- move and restore -------------------------------------------------------
+
+Status SqliteStore::writeRevision(const Task& cur, Task t, const WriteContext& ctx, const QString& ts) {
+  t.rev = cur.rev + 1;
+  t.updatedAt = ts;
+  if (auto s = writeTask(t, false); !s) return s;
+  const FieldDiff d = diffFields(toJson(cur), toJson(t));
+  return appendChange(kTask, t.id, d.before, d.after, ctx, ts);
+}
+
+Result<QList<Task>> SqliteStore::planMove(const QString& id, const QString& parent, std::optional<int> position) {
+  auto cur = task(id);
+  if (!cur) return cur.error();
+  Task moved = cur.value();
+  moved.parent = parent;
+  if (moved.parent != cur->parent) {
+    if (auto s = checkParent(moved); !s) return s.error();
+  }
+  auto all = tasks(cur->project);
+  if (!all) return all.error();
+  QList<Task> siblings;  // the destination's live children in order, without the task
+  qsizetype currentIndex = -1;
+  for (const Task& t : all.value()) {
+    if (t.parent != moved.parent) continue;
+    if (t.id == id) {
+      currentIndex = siblings.size();
+      continue;
+    }
+    siblings.append(t);
+  }
+  const qsizetype n = siblings.size();
+  const qsizetype at = position ? *position : n;
+  if (at < 0 || at > n) {
+    return Error::validation(QStringLiteral("position must be between 0 and %1").arg(n),
+                             QJsonObject{{QStringLiteral("field"), QStringLiteral("position")},
+                                         {QStringLiteral("max"), static_cast<qint64>(n)}});
+  }
+  // Same parent, same place: nothing to write (no revisions, no renumbering).
+  if (moved.parent == cur->parent && currentIndex == at) return QList<Task>{};
+
+  siblings.insert(at, moved);
+  QList<Task> writes;
+  for (qsizetype i = 0; i < siblings.size(); ++i) {
+    Task t = siblings[i];
+    const qint64 ord = i + 1;
+    if (t.id == id) {
+      t.order = ord;
+      if (t.parent != cur->parent || t.order != cur->order) writes.prepend(t);
+    } else if (t.order != ord) {
+      t.order = ord;
+      writes.append(t);
+    }
+  }
+  return writes;
+}
+
+Result<Task> SqliteStore::moveTask(const QString& id, const QString& parent, std::optional<int> position,
+                                   qint64 expectedRev, const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  auto cur = task(id);
+  if (!cur) return cur.error();
+  if (cur->rev != expectedRev) return Error::revMismatch(expectedRev, cur->rev);
+  auto plan = planMove(id, parent, position);
+  if (!plan) return plan.error();
+  if (plan->isEmpty()) return cur.value();
+  const QString ts = nextTimestamp();
+  for (const Task& t : plan.value()) {
+    auto now = task(t.id);
+    if (!now) return now.error();
+    if (auto s = writeRevision(now.value(), t, ctx, ts); !s) return s.error();
+  }
+  if (auto s = rollUp(cur->project, ctx); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return task(id);
+}
+
+Result<QString> SqliteStore::tombstoneTs(const QString& id) {
+  auto st = db_.prepare(QStringLiteral(
+      "SELECT ts, after FROM changes WHERE entityKind = ?1 AND entityId = ?2 ORDER BY seq DESC LIMIT 1"));
+  if (!st) return st.error();
+  st.value().bind(1, kTask).bind(2, id);
+  Error err;
+  if (!st.value().step(&err)) {
+    if (!err.code.isEmpty()) return err;
+    return QString();
+  }
+  const QJsonObject after = QJsonDocument::fromJson(st.value().text(1).toUtf8()).object();
+  if (after.value(QStringLiteral("deleted")).toBool()) return st.value().text(0);
+  return QString();
+}
+
+Result<QList<Task>> SqliteStore::planRestore(const QString& id) {
+  auto cur = task(id, true);
+  if (!cur) return cur.error();
+  if (!cur->deleted) {
+    return Error::conflict(QStringLiteral("task %1 is not deleted").arg(id),
+                           QJsonObject{{QStringLiteral("reason"), QStringLiteral("not_deleted")}});
+  }
+  auto proj = project(cur->project, true);
+  if (!proj) return proj.error();
+  if (proj->deleted) {
+    return Error::conflict(QStringLiteral("project %1 is deleted, so its tasks can't be restored").arg(proj->id),
+                           QJsonObject{{QStringLiteral("reason"), QStringLiteral("project_deleted")},
+                                       {QStringLiteral("project"), proj->id}});
+  }
+  if (!cur->parent.isEmpty()) {
+    auto parent = task(cur->parent, true);
+    if (!parent) return parent.error();
+    if (parent->deleted) {
+      return Error::conflict(QStringLiteral("the parent task %1 is deleted: restore it first").arg(parent->id),
+                             QJsonObject{{QStringLiteral("reason"), QStringLiteral("parent_deleted")},
+                                         {QStringLiteral("parent"), parent->id}});
+    }
+    if (parent->type == QLatin1String("milestone")) {
+      return Error::conflict(QStringLiteral("the parent task %1 is now a milestone, which can't have children")
+                                 .arg(parent->id),
+                             QJsonObject{{QStringLiteral("reason"), QStringLiteral("parent_milestone")},
+                                         {QStringLiteral("parent"), parent->id}});
+    }
+  }
+  auto rootTs = tombstoneTs(id);
+  if (!rootTs) return rootTs.error();
+
+  // The deleted descendants tombstoned by the same delete (one timestamp per
+  // delete request); a subtree deleted earlier keeps its own and stays deleted.
+  auto all = tasks(cur->project, true);
+  if (!all) return all.error();
+  QList<Task> out{cur.value()};
+  if (rootTs->isEmpty()) return out;
+  QSet<QString> restored{id};
+  for (const Task& t : all.value()) {  // depth-first: parents before children
+    if (!t.deleted || t.id == id || !restored.contains(t.parent)) continue;
+    auto ts = tombstoneTs(t.id);
+    if (!ts) return ts.error();
+    if (ts.value() == rootTs.value()) {
+      restored.insert(t.id);
+      out.append(t);
+    }
+  }
+  return out;
+}
+
+Result<Task> SqliteStore::restoreTask(const QString& id, qint64 expectedRev, const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  auto cur = task(id, true);
+  if (!cur) return cur.error();
+  if (cur->rev != expectedRev) return Error::revMismatch(expectedRev, cur->rev);
+  auto plan = planRestore(id);
+  if (!plan) return plan.error();
+  const QString ts = nextTimestamp();
+  for (const Task& t : plan.value()) {
+    Task live = t;
+    live.deleted = false;
+    if (auto s = writeRevision(t, live, ctx, ts); !s) return s.error();
+  }
+  if (auto s = rollUp(cur->project, ctx); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return task(id);
+}
+
 // ---- sync feed --------------------------------------------------------------
 
 namespace {

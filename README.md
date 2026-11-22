@@ -1,8 +1,8 @@
 # zproject
 
-**0.8.0**
+**0.9.0**
 
-Current release: **0.5.0**
+Current release: **0.8.0**
 
 Project management for the z-suite: projects with a WBS, milestones,
 dependencies, a critical-path schedule, baselines, resources and cost, a RAID

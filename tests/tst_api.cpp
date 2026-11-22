@@ -507,6 +507,187 @@ class TestApi : public QObject {
     QVERIFY(sawChild);
   }
 
+  void moveTask() {
+    Fixture f;
+    const QString p = f.createProject(QStringLiteral("House"));
+    const QString other = f.createProject(QStringLiteral("Other"));
+    const QString a = f.createTask(p, QStringLiteral("A"));
+    const QString b = f.createTask(p, QStringLiteral("B"));
+    const QString a1 = f.createTask(p, QStringLiteral("a1"), a);
+    const QString a2 = f.createTask(p, QStringLiteral("a2"), a);
+    const QString b1 = f.createTask(p, QStringLiteral("b1"), b);
+    const QString far = f.createTask(other, QStringLiteral("far"));
+    const QJsonObject done{{QStringLiteral("status"), QStringLiteral("done")},
+                           {QStringLiteral("percentComplete"), 100},
+                           {QStringLiteral("actualStart"), QStringLiteral("2026-11-20")},
+                           {QStringLiteral("actualFinish"), QStringLiteral("2026-11-22")}};
+    QCOMPARE(f.call("PATCH", "/v1/tasks/" + a1.toLatin1(), f.owner, done).status, 200);
+    const QByteArray movePath = "/v1/tasks/" + a1.toLatin1() + "/move";
+    const QJsonObject toB{{QStringLiteral("parent"), b}, {QStringLiteral("position"), 0}};
+    auto get = [&f](const QString& id) { return Fixture::json(f.call("GET", "/v1/tasks/" + id.toLatin1(), f.owner)); };
+    QCOMPARE(get(a).value(QStringLiteral("percentComplete")).toInt(), 50);
+
+    // Dry run: the moved task (op move), b1 renumbered, both summaries; nothing written.
+    const qsizetype changesBefore = f.store->changesSince(0)->size();
+    Response r = f.call("POST", movePath + "?dryRun=true", f.owner, toB);
+    QCOMPARE(r.status, 200);
+    QJsonObject dry = Fixture::json(r);
+    QVERIFY(dry.value(QStringLiteral("dryRun")).toBool());
+    QVERIFY(!dry.contains(QStringLiteral("confirmId")));  // not destructive
+    QHash<QString, QString> ops;
+    for (const auto& v : dry.value(QStringLiteral("changes")).toArray()) {
+      ops.insert(v.toObject().value(QStringLiteral("entityId")).toString(), v.toObject().value(QStringLiteral("op")).toString());
+    }
+    QCOMPARE(ops.value(a1), QStringLiteral("move"));
+    QCOMPARE(ops.value(b1), QStringLiteral("update"));
+    QCOMPARE(ops.value(a), QStringLiteral("update"));
+    QCOMPARE(ops.value(b), QStringLiteral("update"));
+    QCOMPARE(ops.size(), 4);  // a2 keeps its order: positions are indexes, gaps are harmless
+    QCOMPARE(f.store->changesSince(0)->size(), changesBefore);
+
+    // Validation, conflicts and preconditions.
+    QCOMPARE(f.call("POST", movePath, f.owner, {{QStringLiteral("parent"), b}, {QStringLiteral("title"), QStringLiteral("x")}}).status, 400);
+    QCOMPARE(f.call("POST", movePath, f.owner, {{QStringLiteral("position"), -1}}).status, 400);
+    QCOMPARE(f.call("POST", movePath, f.owner, {{QStringLiteral("position"), QStringLiteral("1")}}).status, 400);
+    QCOMPARE(f.call("POST", movePath, f.owner, {{QStringLiteral("position"), 9}}).status, 400);
+    QCOMPARE(f.call("POST", movePath, f.owner, {{QStringLiteral("parent"), QStringLiteral("nope")}}).status, 400);
+    QCOMPARE(f.call("POST", movePath, f.owner, {{QStringLiteral("parent"), far}}).status, 400);  // another project
+    r = f.call("POST", "/v1/tasks/" + a.toLatin1() + "/move", f.owner, {{QStringLiteral("parent"), a2}});
+    QCOMPARE(r.status, 409);
+    QCOMPARE(code(r), QStringLiteral("cycle"));
+    r = f.call("POST", "/v1/tasks/" + a.toLatin1() + "/move?dryRun=true", f.owner, {{QStringLiteral("parent"), a}});
+    QCOMPARE(r.status, 409);  // in a dry run too
+    r = f.call("POST", movePath, f.owner, toB, {{"if-match", "1"}});
+    QCOMPARE(r.status, 412);
+    QCOMPARE(code(r), QStringLiteral("rev_mismatch"));
+    QCOMPARE(f.call("POST", "/v1/tasks/ffffffffffffffffffff/move", f.owner, toB).status, 404);
+
+    // Permissions: scope, then the project allowlist.
+    const QByteArray reader = f.createToken({{QStringLiteral("name"), QStringLiteral("reader")}, {QStringLiteral("kind"), QStringLiteral("agent")},
+                                             {QStringLiteral("projects"), QJsonArray{p}}});
+    r = f.call("POST", movePath, reader, toB);
+    QCOMPARE(r.status, 403);
+    QCOMPARE(code(r), QStringLiteral("forbidden_scope"));
+    const QByteArray elsewhere = f.createToken({{QStringLiteral("name"), QStringLiteral("elsewhere")}, {QStringLiteral("kind"), QStringLiteral("agent")},
+                                                {QStringLiteral("projects"), QJsonArray{other}}, {QStringLiteral("scopes"), QJsonArray{QStringLiteral("write")}}});
+    r = f.call("POST", movePath, elsewhere, toB);
+    QCOMPARE(r.status, 403);
+    QCOMPARE(code(r), QStringLiteral("forbidden_project"));
+    QCOMPARE(f.store->changesSince(0)->size(), changesBefore);
+
+    // The move, by an agent with write on the project (no confirm: not destructive).
+    const QByteArray writer = f.createToken({{QStringLiteral("name"), QStringLiteral("writer")}, {QStringLiteral("kind"), QStringLiteral("agent")},
+                                             {QStringLiteral("projects"), QJsonArray{p}}, {QStringLiteral("scopes"), QJsonArray{QStringLiteral("write")}}});
+    const qint64 rev = get(a1).value(QStringLiteral("rev")).toInteger();
+    r = f.call("POST", movePath, writer, toB, {{"if-match", QByteArray::number(rev)}});
+    QCOMPARE(r.status, 200);
+    QJsonObject t = Fixture::json(r);
+    QCOMPARE(t.value(QStringLiteral("parent")).toString(), b);
+    QCOMPARE(t.value(QStringLiteral("order")).toInt(), 1);
+    QCOMPARE(t.value(QStringLiteral("rev")).toInteger(), rev + 1);
+    QCOMPARE(get(b1).value(QStringLiteral("order")).toInt(), 2);
+    // Roll-ups recomputed in the same request: A lost its done child, B gained it.
+    QCOMPARE(get(a).value(QStringLiteral("percentComplete")).toInt(), 0);
+    QCOMPARE(get(b).value(QStringLiteral("percentComplete")).toInt(), 50);
+    QCOMPARE(get(b).value(QStringLiteral("status")).toString(), QStringLiteral("in_progress"));
+
+    // Change feed: the move and every row it touched, one request id.
+    const QList<store::ChangeRecord> rows = f.store->changesSince(0).value().mid(changesBefore);
+    QSet<QString> touched;
+    for (const auto& c : rows) {
+      touched.insert(c.entityId);
+      QCOMPARE(c.requestId, rows.first().requestId);
+    }
+    QCOMPARE(touched, (QSet<QString>{a1, b1, a, b}));
+    QCOMPARE(rows.first().entityId, a1);
+    QCOMPARE(rows.first().after.value(QStringLiteral("parent")).toString(), b);
+
+    // The audit row names the task, with parent and order before and after.
+    const store::AuditEntry e = f.auditRows().last();
+    QCOMPARE(e.entityId, a1);
+    QCOMPARE(e.status, 200);
+    QVERIFY(e.before.contains(QStringLiteral("\"parent\":\"") + a + QLatin1Char('"')));
+    QVERIFY(e.after.contains(QStringLiteral("\"parent\":\"") + b + QLatin1Char('"')));
+    QVERIFY(!e.after.contains(QStringLiteral("\"order\"")));  // first under A, first under B: unchanged
+    QVERIFY(store::AuditLog(f.store->database()).verify().ok());
+
+    // Again to the same place: 200, nothing written. To the top level, last.
+    const qsizetype n = f.store->changesSince(0)->size();
+    QCOMPARE(Fixture::json(f.call("POST", movePath, f.owner, toB)).value(QStringLiteral("rev")).toInteger(), rev + 1);
+    QCOMPARE(f.store->changesSince(0)->size(), n);
+    r = f.call("POST", movePath, f.owner, {{QStringLiteral("parent"), QJsonValue()}});
+    QCOMPARE(r.status, 200);
+    QVERIFY(Fixture::json(r).value(QStringLiteral("parent")).isNull());
+    QCOMPARE(Fixture::json(r).value(QStringLiteral("order")).toInt(), 3);
+  }
+
+  void restoreTask() {
+    Fixture f;
+    const QString p = f.createProject(QStringLiteral("House"));
+    const QString a = f.createTask(p, QStringLiteral("A"));
+    const QString a1 = f.createTask(p, QStringLiteral("a1"), a);
+    const QString a2 = f.createTask(p, QStringLiteral("a2"), a);
+    const QByteArray aPath = "/v1/tasks/" + a.toLatin1();
+    QCOMPARE(f.call("DELETE", "/v1/tasks/" + a2.toLatin1(), f.owner).status, 200);
+    QCOMPARE(f.call("DELETE", aPath, f.owner).status, 200);
+    QCOMPARE(f.call("GET", aPath, f.owner).status, 404);
+
+    // A child of a deleted parent: 409 with the parent to restore first.
+    Response r = f.call("POST", "/v1/tasks/" + a1.toLatin1() + "/restore", f.owner);
+    QCOMPARE(r.status, 409);
+    QCOMPARE(Fixture::json(r).value(QStringLiteral("details")).toObject().value(QStringLiteral("reason")).toString(),
+             QStringLiteral("parent_deleted"));
+    QCOMPARE(f.call("POST", aPath + "/restore", f.owner, {{QStringLiteral("x"), 1}}).status, 400);
+    QCOMPARE(f.call("POST", aPath + "/restore", f.owner, {}, {{"if-match", "1"}}).status, 412);
+
+    // Restore is destructive: a requireConfirm agent needs the dry run's confirmId.
+    const QByteArray agent = f.createToken({{QStringLiteral("name"), QStringLiteral("writer")}, {QStringLiteral("kind"), QStringLiteral("agent")},
+                                            {QStringLiteral("projects"), QJsonArray{p}}, {QStringLiteral("scopes"), QJsonArray{QStringLiteral("write")}}});
+    const QByteArray reader = f.createToken({{QStringLiteral("name"), QStringLiteral("reader")}, {QStringLiteral("kind"), QStringLiteral("agent")},
+                                             {QStringLiteral("projects"), QJsonArray{p}}});
+    QCOMPARE(code(f.call("POST", aPath + "/restore", reader)), QStringLiteral("forbidden_scope"));
+    r = f.call("POST", aPath + "/restore", agent);
+    QCOMPARE(r.status, 409);
+    QCOMPARE(code(r), QStringLiteral("confirm_required"));
+    r = f.call("POST", aPath + "/restore?dryRun=true", agent);
+    QCOMPARE(r.status, 200);
+    const QJsonObject dry = Fixture::json(r);
+    const QByteArray confirm = dry.value(QStringLiteral("confirmId")).toString().toLatin1();
+    QVERIFY(!confirm.isEmpty());
+    QHash<QString, QString> ops;
+    for (const auto& v : dry.value(QStringLiteral("changes")).toArray()) {
+      ops.insert(v.toObject().value(QStringLiteral("entityId")).toString(), v.toObject().value(QStringLiteral("op")).toString());
+    }
+    QCOMPARE(ops, (QHash<QString, QString>{{a, QStringLiteral("restore")}, {a1, QStringLiteral("restore")}}));
+    QCOMPARE(f.call("GET", aPath, f.owner).status, 404);  // the dry run restored nothing
+
+    r = f.call("POST", aPath + "/restore", agent, {}, {{"x-zproject-confirm", confirm}});
+    QCOMPARE(r.status, 200);
+    QVERIFY(!Fixture::json(r).value(QStringLiteral("deleted")).toBool());
+    QCOMPARE(f.call("GET", "/v1/tasks/" + a1.toLatin1(), f.owner).status, 200);
+    QCOMPARE(f.call("GET", "/v1/tasks/" + a2.toLatin1(), f.owner).status, 404);  // deleted before, on its own
+    // In the project list again, and the change feed says so.
+    r = f.call("GET", "/v1/projects/" + p.toLatin1() + "/tasks", f.owner);
+    QCOMPARE(Fixture::json(r).value(QStringLiteral("items")).toArray().size(), 2);
+    const store::ChangeRecord last = f.store->changesFor(QStringLiteral("task"), a1)->last();
+    QCOMPARE(last.after.value(QStringLiteral("deleted")), QJsonValue(false));
+
+    // Audit: the restored task, deleted true -> false, with the confirmation.
+    const store::AuditEntry e = f.auditRows().last();
+    QCOMPARE(e.entityId, a);
+    QCOMPARE(e.confirmId, QString::fromLatin1(confirm));
+    QCOMPARE(e.before, QStringLiteral("{\"deleted\":true}"));
+    QCOMPARE(e.after, QStringLiteral("{\"deleted\":false}"));
+
+    // Restoring a live task is a conflict; the owner needs no confirmation.
+    r = f.call("POST", aPath + "/restore", f.owner);
+    QCOMPARE(r.status, 409);
+    QCOMPARE(Fixture::json(r).value(QStringLiteral("details")).toObject().value(QStringLiteral("reason")).toString(),
+             QStringLiteral("not_deleted"));
+    r = f.call("POST", "/v1/tasks/" + a2.toLatin1() + "/restore", f.owner);
+    QCOMPARE(r.status, 200);
+  }
+
   void failedWriteRollsBackButIsAudited() {
     Fixture f;
     const QString p = f.createProject(QStringLiteral("One"));

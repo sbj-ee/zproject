@@ -32,6 +32,11 @@ class SqliteStore final : public Store {
   Result<QList<Task>> tasks(const QString& projectId, bool includeDeleted = false) override;
   Result<Task> updateTask(const Task& t, qint64 expectedRev, const WriteContext& ctx) override;
   Result<Task> deleteTask(const QString& id, qint64 expectedRev, const WriteContext& ctx) override;
+  Result<QList<Task>> planMove(const QString& id, const QString& parent, std::optional<int> position) override;
+  Result<Task> moveTask(const QString& id, const QString& parent, std::optional<int> position, qint64 expectedRev,
+                        const WriteContext& ctx) override;
+  Result<QList<Task>> planRestore(const QString& id) override;
+  Result<Task> restoreTask(const QString& id, qint64 expectedRev, const WriteContext& ctx) override;
 
   Result<QList<ChangeRecord>> changesSince(qint64 since, int limit = 500) override;
   Result<QList<ChangeRecord>> changesFor(const QString& entityKind, const QString& entityId,
@@ -48,6 +53,11 @@ class SqliteStore final : public Store {
   Status writeTask(const Task& t, bool insert);
   Status checkParent(const Task& t);
   Status tombstoneTask(const Task& t, const WriteContext& ctx, const QString& ts);
+  // Writes `t` as the next revision of `cur` (rev + 1, updatedAt = ts) with
+  // its change row.
+  Status writeRevision(const Task& cur, Task t, const WriteContext& ctx, const QString& ts);
+  // The ts of the task's newest change row if that row tombstoned it, else empty.
+  Result<QString> tombstoneTs(const QString& id);
   // Recomputes the project's summary tasks (core/Rollup.hpp) and writes the
   // ones that changed, each with its own revision and change row, inside the
   // caller's transaction.

@@ -7,6 +7,36 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.9.0 — 2026-11-22
+
+Desktop client plan, PR 4: server move and restore, for the outline's
+indent/outdent, drag-to-reorder and undo of a delete. Server, OpenAPI and CLI
+only; no schema migration (`ord` and `deleted` are already in schema 1).
+
+- **`POST /v1/tasks/{id}/move`** (`tasks:write`, not destructive): body
+  `{parent?, position?}` reparents and/or reorders a task within its project.
+  `position` is the 0-based index among the new parent's live children
+  (default last); destination siblings are renumbered `order` 1..n, and only
+  rows that change get a revision and a change row. Old and new parents roll
+  up in the same transaction. 409 `cycle` for a move under itself or a
+  descendant; 400 for a milestone, deleted or other-project parent or an
+  out-of-range position; 412 on an `If-Match` mismatch; a move to the place it
+  already has writes nothing. `?dryRun=true` lists the move (`op: "move"`),
+  renumbered siblings and summary roll-ups.
+- **`POST /v1/tasks/{id}/restore`** (`tasks:write`, destructive, so
+  `requireConfirm` tokens need the dry run's `confirmId`): undeletes a task
+  and the descendants the same delete tombstoned; ones deleted earlier stay
+  deleted. 409 `conflict` with `details.reason` `not_deleted`,
+  `parent_deleted`, `parent_milestone` or `project_deleted`. Dry-run ops are
+  `restore`.
+- Both write audit rows (the task's parent/order or `deleted` before and
+  after) and change-feed rows for every task they touch, under one request.
+- **OpenAPI:** both operations, a `TaskMove` schema, and `move` / `restore` in
+  the dry-run `op` enum.
+- **CLI:** `zproject-cli tasks move ID [--parent ID|none] [--position N]
+  [--rev N] [--dry-run]`; N counts from 1, as WBS numbers do.
+- README "Current release" is now 0.8.0.
+
 ## 0.8.0 — 2026-11-22
 
 Desktop client, PR 3 of the approved plan: the signed in-app updater (SPEC.md

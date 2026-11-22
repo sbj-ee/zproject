@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.8.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.9.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -396,6 +396,15 @@ WBS column, summary brackets and milestone diamonds on the Gantt, "Convert to
 milestone", WBS-only tree view. API: `GET /v1/projects/{id}/wbs`,
 `POST /v1/tasks/{id}/move`.
 
+Move (0.9.0): body `{parent?, position?}` reparents and/or reorders a task
+within its project (a task never changes project). `position` is the 0-based
+index among the new parent's live children, default last. Destination siblings
+are renumbered (`order` 1..n); each row that changes gets its own revision and
+change row, and the old and new parents roll up in the same transaction
+(§5.3). A move under the task itself or a descendant is 409 `cycle`; a
+milestone, deleted or other-project parent is 400. Not destructive; honours
+`If-Match` and `dryRun`.
+
 ### 7.2 Critical path [approved] — phase 1
 
 As §6. UI: critical tasks and links shaded with colour and a hatch pattern,
@@ -683,6 +692,15 @@ expires in 90 days, `requireConfirm = true`; agents never get `admin`
 | Sync feed | `GET /v1/changes?since=<seq>&limit=` (for client caches) |
 | Admin | `GET/POST /v1/tokens`, `DELETE /v1/tokens/{id}` (revoke), `GET /v1/audit`, `POST /v1/admin/backup` |
 
+Task move (§7.1) and restore are implemented in 0.9.0. `POST
+/v1/tasks/{id}/restore` undeletes a tombstoned task together with the
+descendants its delete tombstoned (same delete timestamp); children deleted
+earlier stay deleted and can be restored on their own afterwards. 409
+`conflict` with `details.reason` `not_deleted`, `parent_deleted` (restore the
+parent first), `parent_milestone` or `project_deleted`. Restore is destructive
+(§9.3 confirm), honours `If-Match` and `dryRun`, and rolls summaries up. v1
+restores tasks only (Q13).
+
 ## 10. CLI
 
 `zproject-cli` is a thin client of `/v1`. Server URL from
@@ -703,6 +721,9 @@ zproject-cli export|import ...
 zproject-cli token create|list|revoke  --kind agent --scopes read --projects ID,ID --expires 90d
 zproject-cli audit [--token ID] [--since ...]
 ```
+
+`tasks move ID [--parent ID|none] [--position N]` counts N from 1, as WBS
+numbers do (the API's `position` is 0-based).
 
 On the server, `zprojectd` has its own admin flags: `--create-owner-token`,
 `--backup`, `--restore FILE` (service stopped), `--verify-audit`,
