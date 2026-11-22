@@ -509,13 +509,16 @@ Status SqliteStore::writeRevision(const Task& cur, Task t, const WriteContext& c
 Result<QList<Task>> SqliteStore::planMove(const QString& id, const QString& parent, std::optional<int> position) {
   auto cur = task(id);
   if (!cur) return cur.error();
-  Task moved = cur.value();
+  auto all = tasks(cur->project);
+  if (!all) return all.error();
+  Task moved;  // copied from the project's list (keeps clang-analyzer's view of Result simple)
+  for (const Task& t : all.value()) {
+    if (t.id == id) moved = t;
+  }
   moved.parent = parent;
   if (moved.parent != cur->parent) {
     if (auto s = checkParent(moved); !s) return s.error();
   }
-  auto all = tasks(cur->project);
-  if (!all) return all.error();
   QList<Task> siblings;  // the destination's live children in order, without the task
   qsizetype currentIndex = -1;
   for (const Task& t : all.value()) {
