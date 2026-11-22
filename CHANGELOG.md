@@ -5,7 +5,24 @@ All notable changes to zproject. The version is the single
 it ([semantic versioning](https://semver.org/): patch for fixes and
 documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
-[docs/RELEASING.md](docs/RELEASING.md)); there is no release yet.
+[docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
+
+## 0.4.1 — 2026-11-22
+
+Documentation only.
+
+- `docs/DEPLOY.md`: a step-by-step install for a server host and Linux and
+  macOS clients, based on what the packages actually ship. It covers:
+  - verifying a release (`sha256sum -c` and minisign);
+  - the packaged config and why it is `root:zproject 0640`;
+  - creating the owner token straight into a 0600 file;
+  - enabling the service and the backup timer, and `tailscale serve`;
+  - one 365-day device token per machine, stored with `--store file`
+    (0600) and copied with `scp -p`;
+  - smoke tests, including a read-only scope check and MCP;
+  - upgrade, restore and uninstall.
+- README: "Current release" is now **0.4.0**, and the server section links
+  to DEPLOY.md.
 
 ## 0.4.0 — 2026-11-21
 
