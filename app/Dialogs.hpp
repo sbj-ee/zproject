@@ -57,7 +57,7 @@ class PreferencesDialog : public QDialog {
   Q_OBJECT
  public:
   PreferencesDialog(const ConnectionInfo& info, const QString& theme, int zoomPercent, bool cacheEnabled,
-                    QWidget* parent = nullptr);
+                    bool updateCheckDaily, QWidget* parent = nullptr);
 
   void setConnectionInfo(const ConnectionInfo& info);
   void setClearResult(const QString& text);
@@ -65,6 +65,8 @@ class PreferencesDialog : public QDialog {
   QComboBox* themeBox() const { return theme_; }
   QSpinBox* zoomBox() const { return zoom_; }
   QCheckBox* cacheBox() const { return cache_; }
+  QCheckBox* updatesBox() const { return updates_; }
+  QPushButton* checkNowButton() const { return checkNow_; }
   QPushButton* clearCacheButton() const { return clear_; }
   QPushButton* signInButton() const { return signIn_; }
   QLabel* clearResult() const { return clearResult_; }
@@ -74,6 +76,8 @@ class PreferencesDialog : public QDialog {
   void themeChosen(const QString& theme);
   void zoomChosen(int percent);
   void cacheEnabledChosen(bool enabled);
+  void updateCheckChosen(bool daily);
+  void checkForUpdatesRequested();
   void clearCacheRequested();
   void signInRequested();
 
@@ -81,6 +85,8 @@ class PreferencesDialog : public QDialog {
   QComboBox* theme_ = nullptr;
   QSpinBox* zoom_ = nullptr;
   QCheckBox* cache_ = nullptr;
+  QCheckBox* updates_ = nullptr;
+  QPushButton* checkNow_ = nullptr;
   QPushButton* clear_ = nullptr;
   QPushButton* signIn_ = nullptr;
   QLabel* clearResult_ = nullptr;

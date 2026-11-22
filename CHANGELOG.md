@@ -7,6 +7,53 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.8.0 — 2026-11-22
+
+Desktop client, PR 3 of the approved plan: the signed in-app updater (SPEC.md
+§21), zterminal's design. The CLI, the server and the `zprojectd` package
+behave as before.
+
+- **Help → Check for Updates…** asks
+  `https://api.github.com/repos/sbj-ee/zproject/releases/latest` and says
+  whether a newer release exists (Download and Verify / Later / Skip This
+  Version, with the release notes).
+- **Verify before offering to install:** Download and Verify fetches
+  `SHA256SUMS` and `SHA256SUMS.minisig`, checks the minisign signature against
+  the compiled-in key `32960BBA77B36F1F` and the trusted comment
+  (`zproject <tag> SHA256SUMS`, so an old release's signature can't be
+  replayed) *before* downloading the package, then checks the package's
+  SHA-256. **Install…** appears only when both pass; any mismatch deletes the
+  download and installs nothing.
+- **HTTPS only**, assets only from `github.com/sbj-ee/zproject/releases/download/<tag>/`,
+  redirects only to GitHub's release-asset hosts.
+- **Install:** Linux runs `/usr/bin/pkexec /usr/bin/apt install -y` on a
+  private, re-hashed copy of the verified `.deb` (only when running as
+  `/usr/bin/zproject`; otherwise, or if pkexec fails, it shows the path and
+  the `sudo apt install` command), then offers **Restart Now**. macOS opens
+  the verified `.dmg`. Nothing is installed without the user's click.
+- **Never touches `zprojectd`:** the updater selects only
+  `zproject_<v>_amd64.deb` / `zproject-<v>-Darwin.dmg`, refuses any
+  `zprojectd*` asset, and checks the `.deb`'s `Package:` field is `zproject`
+  before pkexec.
+- **Daily check:** asked once on first run (default on), changeable in
+  Preferences ("Check for zproject updates once a day", Check Now…), at most
+  once a day, silent unless there is something to offer.
+  `update-state.ini` (0600, beside `zproject.ini`) keeps the last check and a
+  skipped version.
+- **Build:** the desktop app links libsodium (≥ 1.0.18) for minisign; the
+  desktop `.deb` gains `libsodium23`, the `.dmg` bundles it, and the
+  server-only build and `zprojectd` package don't need it (CI checks both).
+- **Tests:** `tst_update` drives the updater offscreen against a mock release
+  feed signed with a throwaway key: a valid update (verify, then install
+  through a stand-in installer, restart), bad signature, signature by another
+  key, tampered `SHA256SUMS`, a replayed trusted comment, bad package
+  checksum, no newer version, network errors (check and download), 404 and
+  rate limits, https-only, untrusted asset URLs, a foreign redirect, a
+  server-only release, a `.deb` whose control file says `zprojectd`, a
+  dismissed password prompt, macOS `.dmg` selection, Skip This Version, the
+  quiet daily check and Cancel. Screenshots of the dialog states are in
+  `docs/screenshots/update-*.png`.
+
 ## 0.7.0 — 2026-11-22
 
 Desktop client, PR 2 of the approved plan: the app shell. `zproject` now opens

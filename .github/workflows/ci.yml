@@ -65,7 +65,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            qt6-base-dev qt6-qpa-plugins libgl1-mesa-dev cmake ninja-build g++ dpkg-dev file
+            qt6-base-dev qt6-qpa-plugins libgl1-mesa-dev cmake ninja-build g++ dpkg-dev file \
+            libsodium-dev pkg-config
           dpkg-query -W -f='qt6-base-dev ${Version}\n' qt6-base-dev
 
       - name: Restore SQLite download cache
@@ -118,6 +119,9 @@ jobs:
           dpkg-deb -f zproject_*_amd64.deb Depends > desktop.depends
           grep -q 'libssl3' desktop.depends
           grep -q 'libqt6network6' desktop.depends
+          # The updater's minisign check (libsodium) is the desktop app's alone.
+          grep -q 'libsodium23' desktop.depends
+          if grep -q 'libsodium' server.depends; then echo "::error::zprojectd depends on libsodium"; exit 1; fi
           grep -q './usr/bin/zproject$' desktop.list
           grep -q './usr/bin/zproject-cli$' desktop.list
           grep -q './usr/share/applications/zproject.desktop$' desktop.list
@@ -265,7 +269,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Qt + build tools (brew)
-        run: brew install qt cmake ninja
+        run: brew install qt cmake ninja libsodium pkg-config
 
       - name: Restore SQLite download cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -302,6 +306,9 @@ jobs:
           hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg"
           trap 'hdiutil detach "$mnt" -quiet || true; kill "${pid:-0}" 2>/dev/null || true' EXIT
           tools/macos/check-bundle.sh "$mnt/zproject.app"
+          # The updater's libsodium is deployed into the bundle.
+          ls "$mnt/zproject.app/Contents/Frameworks" > "$RUNNER_TEMP/frameworks.txt"
+          grep -q 'libsodium' "$RUNNER_TEMP/frameworks.txt"
           codesign --verify --deep --strict --verbose=2 "$mnt/zproject.app"
           cli="$mnt/zproject.app/Contents/MacOS/zproject-cli"
           "$mnt/zproject.app/Contents/MacOS/zproject" --version
@@ -341,7 +348,8 @@ jobs:
       - name: Install Qt 6 + build tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qt6-base-dev qt6-qpa-plugins libgl1-mesa-dev cmake ninja-build g++
+          sudo apt-get install -y -qq qt6-base-dev qt6-qpa-plugins libgl1-mesa-dev cmake ninja-build g++ \
+            libsodium-dev pkg-config
 
       - name: Restore SQLite download cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -370,7 +378,8 @@ jobs:
       - name: Install Qt 6 + clang-tidy
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq qt6-base-dev libgl1-mesa-dev cmake ninja-build clang clang-tidy
+          sudo apt-get install -y -qq qt6-base-dev libgl1-mesa-dev cmake ninja-build clang clang-tidy \
+            libsodium-dev pkg-config
           clang-tidy --version
 
       - name: Restore SQLite download cache

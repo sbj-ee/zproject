@@ -46,7 +46,8 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            qt6-base-dev qt6-qpa-plugins libgl1-mesa-dev cmake ninja-build g++ dpkg-dev file
+            qt6-base-dev qt6-qpa-plugins libgl1-mesa-dev cmake ninja-build g++ dpkg-dev file \
+            libsodium-dev pkg-config
 
       - name: Restore SQLite download cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -123,7 +124,7 @@ jobs:
         run: scripts/check-version.sh --tag "${GITHUB_REF_NAME}"
 
       - name: Install Qt + build tools (brew)
-        run: brew install qt cmake ninja
+        run: brew install qt cmake ninja libsodium pkg-config
 
       - name: Restore SQLite download cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

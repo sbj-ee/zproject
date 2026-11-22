@@ -16,6 +16,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QRandomGenerator>
@@ -40,6 +41,9 @@
 #include "app/SignInDialog.hpp"
 #include "app/SingleInstance.hpp"
 #include "app/Theme.hpp"
+#include "app/UpdateChecker.hpp"
+#include "app/UpdateDialog.hpp"
+#include "app/UpdateManager.hpp"
 #include "client/TokenStore.hpp"
 #include "core/Version.hpp"
 
@@ -205,6 +209,7 @@ class TestAppShell : public QObject {
     o.macos = false;
     o.timing = fast();
     o.autoConnect = autoConnect;
+    o.startupUpdateCheck = false;
     o.systemPalette = lightPalette();
     return o;
   }
@@ -737,6 +742,56 @@ class TestAppShell : public QObject {
     qint64 pid = 0;
     QVERIFY(!second.acquire(&pid));
     QCOMPARE(pid, QCoreApplication::applicationPid());
+  }
+
+  // ---- updates (SPEC.md §21; the updater itself is tst_update) ----
+
+  void updatesMenuPreferencesAndFirstRun() {
+    MainWindow w(options(false));
+    // https only: this loopback http URL is refused before any request.
+    w.updater()->checker()->setApiUrl(QUrl(QStringLiteral("http://127.0.0.1:1/latest")));
+    QAction* check = w.action(QStringLiteral("actionCheckUpdates"));
+    QVERIFY(check);
+    QCOMPARE(check->menuRole(), QAction::ApplicationSpecificRole);
+    QVERIFY(w.menuBar()->actions().last()->menu()->actions().contains(check));  // under Help
+    check->trigger();
+    UpdateDialog* d = w.updater()->dialog();
+    QVERIFY(d);
+    QVERIFY(QTest::qWaitFor([d] { return d->state() == UpdateDialog::State::CheckFailed; }, 5000));
+    d->close();
+    QVERIFY(w.updateStatePath().endsWith(QStringLiteral("/update-state.ini")));
+    QCOMPARE(QFileInfo(w.updateStatePath()).absolutePath(), QFileInfo(options().paths.settingsFile).absolutePath());
+
+    // First run asks once, default yes.
+    QMessageBox* box = w.startUpdates();
+    QVERIFY(box);
+    auto* yes = box->findChild<QPushButton*>(QStringLiteral("updateQuestionYes"));
+    QVERIFY(yes);
+    QCOMPARE(box->defaultButton(), yes);
+    QTest::mouseClick(box->findChild<QPushButton*>(QStringLiteral("updateQuestionNo")), Qt::LeftButton);
+    client::DesktopSettings saved = client::loadDesktopSettings(options().paths);
+    QVERIFY(saved.updateAsked);
+    QVERIFY(!saved.updateCheckDaily);
+    QVERIFY(w.startUpdates() == nullptr);  // never asked again
+
+    PreferencesDialog* p = w.showPreferences();
+    QVERIFY(!p->updatesBox()->isChecked());
+    p->updatesBox()->setChecked(true);
+    QVERIFY(client::loadDesktopSettings(options().paths).updateCheckDaily);
+    QTest::mouseClick(p->checkNowButton(), Qt::LeftButton);
+    UpdateDialog* again = w.updater()->dialog();
+    QVERIFY(again != nullptr);
+    QVERIFY(QTest::qWaitFor([again] { return again->state() == UpdateDialog::State::CheckFailed; }, 5000));
+  }
+
+  void singleInstanceRelease() {
+    const QString path = dir_->filePath(QStringLiteral("release.lock"));
+    SingleInstance first(path);
+    QVERIFY(first.acquire());
+    first.release();
+    QVERIFY(!first.held());
+    SingleInstance second(path);
+    QVERIFY(second.acquire());  // the restarted app gets the lock
   }
 
   // ---- screenshots (docs/screenshots/), only on request ----

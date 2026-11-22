@@ -35,6 +35,8 @@ DesktopSettings loadDesktopSettings(const DesktopPaths& paths) {
   s.cacheEnabled = ini.value(QStringLiteral("cache/enabled"), true).toBool();
   s.theme = ini.value(QStringLiteral("appearance/theme"), s.theme).toString();
   s.zoomPercent = ini.value(QStringLiteral("appearance/zoomPercent"), s.zoomPercent).toInt();
+  s.updateCheckDaily = ini.value(QStringLiteral("updates/checkDaily"), s.updateCheckDaily).toBool();
+  s.updateAsked = ini.value(QStringLiteral("updates/asked"), s.updateAsked).toBool();
   return s;
 }
 
@@ -52,6 +54,8 @@ Status saveDesktopSettings(const DesktopPaths& paths, const DesktopSettings& set
     ini.setValue(QStringLiteral("cache/enabled"), settings.cacheEnabled);
     ini.setValue(QStringLiteral("appearance/theme"), settings.theme);
     ini.setValue(QStringLiteral("appearance/zoomPercent"), settings.zoomPercent);
+    ini.setValue(QStringLiteral("updates/checkDaily"), settings.updateCheckDaily);
+    ini.setValue(QStringLiteral("updates/asked"), settings.updateAsked);
     ini.sync();
     if (ini.status() != QSettings::NoError) {
       return Error{QStringLiteral("io"), QStringLiteral("cannot write %1").arg(paths.settingsFile), {}};

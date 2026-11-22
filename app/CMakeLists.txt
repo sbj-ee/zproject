@@ -11,8 +11,13 @@ add_library(zproject_app_lib STATIC
   SignInDialog.cpp SignInDialog.hpp
   SingleInstance.cpp SingleInstance.hpp
   Theme.cpp Theme.hpp
+  Minisign.cpp Minisign.hpp
+  Update.cpp Update.hpp
+  UpdateChecker.cpp UpdateChecker.hpp
+  UpdateDialog.cpp UpdateDialog.hpp
+  UpdateManager.cpp UpdateManager.hpp
   zproject_app.qrc)
-target_link_libraries(zproject_app_lib PUBLIC zproject_client Qt6::Widgets)
+target_link_libraries(zproject_app_lib PUBLIC zproject_client Qt6::Widgets PRIVATE PkgConfig::SODIUM)
 zproject_set_warnings(zproject_app_lib)
 
 add_executable(zproject main.cpp)

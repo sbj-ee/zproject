@@ -12,6 +12,7 @@ can't be reached, and follows changes made elsewhere — another computer,
 - [Offline](#offline)
 - [Appearance](#appearance)
 - [Preferences](#preferences)
+- [Updates](#updates)
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [Accessibility](#accessibility)
 - [Privacy and security](#privacy-and-security)
@@ -77,8 +78,34 @@ zoom the timeline instead.
   and keeps nothing on disk.
 - **Clear cache** deletes the copy and loads everything again from the
   server. It needs the server, so it is off while you are offline.
+- **Check for zproject updates once a day** turns the daily update check on
+  or off; **Check Now…** checks straight away.
 - **Connection** shows the server, its version, and the device token by its
   label only.
+
+## Updates
+
+**Help → Check for Updates…** asks GitHub for the latest zproject release.
+The first time zproject starts it asks whether to check once a day; you can
+change that in Preferences. A daily check only speaks up when there is a new
+version.
+
+When a new version is available:
+
+1. **Download and Verify** fetches the release's SHA256SUMS and its minisign
+   signature, checks the signature against zproject's release key
+   (32960BBA77B36F1F), then downloads the desktop package (the .deb on Linux,
+   the .dmg on macOS) and checks its SHA-256.
+2. Only when both checks pass does **Install…** appear. If anything doesn't
+   match, the download is deleted and nothing is installed.
+3. **Install…** on Linux runs `pkexec apt install` for the zproject desktop
+   package and asks for your password; on macOS it opens the disk image for
+   you to drag zproject.app to Applications. Then **Restart Now**.
+
+**Later** closes the window; **Skip This Version** stops the daily check
+offering that version. The updater never installs anything on its own and
+never touches the zprojectd server package; update the server with apt on
+the server machine.
 
 ## Keyboard shortcuts
 
@@ -105,7 +132,8 @@ keeps text at a contrast of at least 4.5 : 1.
 
 ## Privacy and security
 
-zproject talks only to your server, over HTTPS on your tailnet. The local
+zproject talks only to your server, over HTTPS on your tailnet, and to
+GitHub over HTTPS when it checks for updates. The local
 copy is a private file (readable only by you) in your cache folder. Tokens
 are never written to the cache, to logs, or to the screen.
 

@@ -4,7 +4,9 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QFileInfo>
 #include <QSpinBox>
 #include <QDockWidget>
 #include <QFrame>
@@ -15,17 +17,20 @@
 #include <QListWidget>
 #include <QLocale>
 #include <QMenuBar>
+#include <QMessageBox>
 #include <QProcessEnvironment>
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QStyleHints>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "app/HelpDialog.hpp"
 #include "app/Shortcuts.hpp"
 #include "app/SignInDialog.hpp"
 #include "app/Theme.hpp"
+#include "app/UpdateManager.hpp"
 #include "core/Version.hpp"
 
 namespace zproject::app {
@@ -78,6 +83,8 @@ MainWindow::MainWindow(Options options, QWidget* parent) : QMainWindow(parent), 
   settings_.zoomPercent = ViewZoom::clampPercent(settings_.zoomPercent);
   if (!Theme::choices().contains(settings_.theme)) settings_.theme = QStringLiteral("system");
 
+  updater_ = new UpdateManager({updateStatePath(), appVersion(), hostPackagePlatform()}, this);
+  updater_->setOpenUrlHandler([this](const QUrl& u) { openUrl(u); });
   buildCentral();
   buildDocks();
   buildMenus();
@@ -91,6 +98,11 @@ MainWindow::MainWindow(Options options, QWidget* parent) : QMainWindow(parent), 
   resize(1100, 700);
   if (options_.autoConnect) connectToServer();
   updateConnectionUi();
+  if (options_.startupUpdateCheck) {
+    QTimer::singleShot(3000, this, [this] {
+      if (!signIn_) startUpdates();
+    });
+  }
 }
 
 MainWindow::~MainWindow() {
@@ -254,6 +266,8 @@ void MainWindow::buildMenus() {
   add(help, QStringLiteral("actionReportIssue"), tr("&Report an Issue"),
       [this] { openUrl(QUrl(QString::fromLatin1(kIssuesUrl))); });
   help->addSeparator();
+  auto* updates = add(help, QStringLiteral("actionCheckUpdates"), tr("Check for &Updates…"), [this] { checkForUpdates(); });
+  updates->setMenuRole(QAction::ApplicationSpecificRole);
   auto* about = add(help, QStringLiteral("actionAbout"), tr("&About zproject"), [this] { showAbout(); });
   about->setMenuRole(QAction::AboutRole);
 }
@@ -634,7 +648,8 @@ ShortcutsDialog* MainWindow::showShortcuts() {
 PreferencesDialog* MainWindow::showPreferences() {
   PreferencesDialog* d = preferences_.data();
   if (d == nullptr) {
-    d = new PreferencesDialog(connectionInfo(), settings_.theme, settings_.zoomPercent, settings_.cacheEnabled, this);
+    d = new PreferencesDialog(connectionInfo(), settings_.theme, settings_.zoomPercent, settings_.cacheEnabled,
+                              settings_.updateCheckDaily, this);
     d->setAttribute(Qt::WA_DeleteOnClose);
     connect(d, &PreferencesDialog::themeChosen, this, &MainWindow::setTheme);
     connect(d, &PreferencesDialog::zoomChosen, this, &MainWindow::setZoomPercent);
@@ -645,6 +660,8 @@ PreferencesDialog* MainWindow::showPreferences() {
       if (PreferencesDialog* prefs = preferences_.data()) prefs->setClearResult(m);
     });
     connect(d, &PreferencesDialog::signInRequested, this, [this] { showSignIn(); });
+    connect(d, &PreferencesDialog::updateCheckChosen, this, &MainWindow::setUpdateCheckDaily);
+    connect(d, &PreferencesDialog::checkForUpdatesRequested, this, [this] { checkForUpdates(); });
     preferences_ = d;
   }
   d->show();
@@ -654,6 +671,50 @@ PreferencesDialog* MainWindow::showPreferences() {
 }
 
 void MainWindow::openUrl(const QUrl& url) { openHttpsUrl(url, openUrl_); }
+
+// ---- updates ----
+
+QString MainWindow::updateStatePath() const {
+  return QFileInfo(options_.paths.settingsFile).absolutePath() + QStringLiteral("/update-state.ini");
+}
+
+UpdateDialog* MainWindow::checkForUpdates() { return updater_->checkNow(); }
+
+void MainWindow::setUpdateCheckDaily(bool daily) {
+  settings_.updateCheckDaily = daily;
+  settings_.updateAsked = true;
+  saveSettings();
+}
+
+QMessageBox* MainWindow::startUpdates() {
+  if (settings_.updateAsked) {
+    updater_->startupCheckIfDue(settings_.updateCheckDaily);
+    return nullptr;
+  }
+  // Ask once (SPEC.md §21, plan Q12): default on.
+  auto* box = new QMessageBox(QMessageBox::Question, tr("Software Updates"),
+                              tr("Should zproject check GitHub once a day for a new version?\n\n"
+                                 "Updates are signed and verified, and nothing is installed without your OK. "
+                                 "You can change this in Preferences."),
+                              QMessageBox::NoButton, this);
+  box->setObjectName(QStringLiteral("updateQuestion"));
+  box->setAttribute(Qt::WA_DeleteOnClose);
+  QPushButton* yes = box->addButton(tr("Check Daily"), QMessageBox::YesRole);
+  yes->setObjectName(QStringLiteral("updateQuestionYes"));
+  QPushButton* no = box->addButton(tr("Don't Check"), QMessageBox::NoRole);
+  no->setObjectName(QStringLiteral("updateQuestionNo"));
+  box->setDefaultButton(yes);
+  connect(box, &QMessageBox::buttonClicked, this, [this, yes](QAbstractButton* b) {
+    setUpdateCheckDaily(b == yes);
+    if (PreferencesDialog* p = preferences_.data()) {
+      const QSignalBlocker block(p->updatesBox());
+      p->updatesBox()->setChecked(settings_.updateCheckDaily);
+    }
+    updater_->startupCheckIfDue(settings_.updateCheckDaily);
+  });
+  box->open();
+  return box;
+}
 
 // ---- events ----
 

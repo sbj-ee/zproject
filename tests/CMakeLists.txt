@@ -69,4 +69,6 @@ endif()
 # The desktop app shell (SPEC.md §8), offscreen.
 if(ZPROJECT_BUILD_GUI)
   zproject_add_test(tst_appshell zproject_app_lib zproject_test_mock)
+  # The signed in-app updater (SPEC.md §21) against a mock release feed.
+  zproject_add_test(tst_update zproject_app_lib zproject_test_mock PkgConfig::SODIUM)
 endif()

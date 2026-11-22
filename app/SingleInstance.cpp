@@ -31,4 +31,8 @@ bool SingleInstance::acquire(qint64* holderPid) {
 
 bool SingleInstance::held() const { return lock_->isLocked(); }
 
+void SingleInstance::release() {
+  if (lock_->isLocked()) lock_->unlock();
+}
+
 }  // namespace zproject::app
