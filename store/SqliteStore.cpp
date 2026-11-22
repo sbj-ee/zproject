@@ -11,6 +11,7 @@
 #include <functional>
 
 #include "core/Id.hpp"
+#include "core/Rollup.hpp"
 #include "store/Migrations.hpp"
 
 namespace zproject::store {
@@ -94,7 +95,38 @@ Result<std::unique_ptr<SqliteStore>> SqliteStore::open(const QString& path) {
   if (!db) return db.error();
   auto version = migrate(db.value());
   if (!version) return version.error();
-  return std::unique_ptr<SqliteStore>(new SqliteStore(std::move(db).value(), *version));
+  std::unique_ptr<SqliteStore> store(new SqliteStore(std::move(db).value(), *version));
+  if (auto s = store->reconcileRollups(); !s) return s.error();
+  return store;
+}
+
+Status SqliteStore::rollUp(const QString& projectId, const WriteContext& ctx) {
+  auto all = tasks(projectId);
+  if (!all) return all.error();
+  QList<Task> rows = all.value();
+  const QList<qsizetype> changed = rollUpSummaries(rows);
+  for (qsizetype i : changed) {
+    const Task& before = all.value()[i];
+    Task t = rows[i];
+    t.rev = before.rev + 1;
+    t.updatedAt = nextTimestamp();
+    if (auto s = writeTask(t, false); !s) return s;
+    const FieldDiff d = diffFields(toJson(before), toJson(t));
+    if (auto s = appendChange(kTask, t.id, d.before, d.after, ctx, t.updatedAt); !s) return s;
+  }
+  return Ok{};
+}
+
+Status SqliteStore::reconcileRollups() {
+  auto ps = projects();
+  if (!ps) return ps.error();
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  const WriteContext system;  // actor "system", no request id
+  for (const Project& p : ps.value()) {
+    if (auto s = rollUp(p.id, system); !s) return s;
+  }
+  return tx.commit();
 }
 
 QString SqliteStore::nextTimestamp() {
@@ -332,6 +364,7 @@ Result<Task> SqliteStore::createTask(const Task& in, const WriteContext& ctx) {
   if (auto s = writeTask(t, true); !s) return s.error();
   const FieldDiff d = diffFields({}, toJson(t));
   if (auto s = appendChange(kTask, t.id, d.before, d.after, ctx, t.updatedAt); !s) return s.error();
+  if (auto s = rollUp(t.project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return t;
 }
@@ -401,15 +434,18 @@ Result<Task> SqliteStore::updateTask(const Task& in, qint64 expectedRev, const W
   if (t.parent != cur->parent) {
     if (auto s = checkParent(t); !s) return s.error();
   }
-  if (t.type == QLatin1String("milestone") && cur->type != QLatin1String("milestone")) {
-    auto n = db_.prepare(QStringLiteral("SELECT COUNT(*) FROM task WHERE parent = ?1 AND deleted = 0"));
-    if (!n) return n.error();
-    n.value().bind(1, t.id);
-    n.value().step();
-    if (n.value().int64(0) > 0) {
-      return Error::validation(QStringLiteral("a task with children cannot become a milestone"),
-                               QJsonObject{{QStringLiteral("field"), QStringLiteral("type")}});
-    }
+  auto n = db_.prepare(QStringLiteral("SELECT COUNT(*) FROM task WHERE parent = ?1 AND deleted = 0"));
+  if (!n) return n.error();
+  n.value().bind(1, t.id);
+  n.value().step();
+  const bool isSummary = n.value().int64(0) > 0;
+  if (isSummary && t.type == QLatin1String("milestone") && cur->type != QLatin1String("milestone")) {
+    return Error::validation(QStringLiteral("a task with children cannot become a milestone"),
+                             QJsonObject{{QStringLiteral("field"), QStringLiteral("type")}});
+  }
+  // A summary's progress fields are derived (SPEC.md §5.3): refuse a change.
+  if (isSummary) {
+    if (auto e = toValidationError(checkSummaryEdit(*cur, t))) return *e;
   }
   const FieldDiff d = diffFields(toJson(*cur), toJson(t));
   if (d.empty()) return *cur;
@@ -418,8 +454,9 @@ Result<Task> SqliteStore::updateTask(const Task& in, qint64 expectedRev, const W
   t.updatedAt = nextTimestamp();
   if (auto s = writeTask(t, false); !s) return s.error();
   if (auto s = appendChange(kTask, t.id, d.before, d.after, ctx, t.updatedAt); !s) return s.error();
+  if (auto s = rollUp(t.project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
-  return t;
+  return task(t.id);
 }
 
 Status SqliteStore::tombstoneTask(const Task& cur, const WriteContext& ctx, const QString& ts) {
@@ -454,6 +491,7 @@ Result<Task> SqliteStore::deleteTask(const QString& id, qint64 expectedRev, cons
   for (auto it = subtree.crbegin(); it != subtree.crend(); ++it) {
     if (auto s = tombstoneTask(*it, ctx, ts); !s) return s.error();
   }
+  if (auto s = rollUp(cur->project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return task(id, true);
 }

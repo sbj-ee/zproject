@@ -7,6 +7,35 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.5.0 — 2026-11-22
+
+Summary tasks now follow their children (SPEC.md §5.3). Before this, marking
+every child done left the summary where it was (in one plan, children
+6.1–6.4 done and summary 6 still `in_progress`, 50 %).
+
+- **% complete** of a summary is weighted by duration over its leaf tasks,
+  Σ(% × duration) / Σ duration, the MS Project roll-up. Milestones carry no
+  weight; a summary of only milestones uses the plain average. It reads 100
+  only when every leaf is done and at least 1 once any work is done.
+- **Status:** all children `done` → `done`; all `todo` → `todo`; otherwise
+  `in_progress`. Actual start is the earliest child's, actual finish the
+  latest once every child has one.
+- Recursive through nested summaries, and recomputed in the same transaction
+  whenever a task is created, updated, moved or deleted. Each summary that
+  changes gets a new revision and its own change record, with the writer's
+  token and request id, so history and `/v1/changes` show it. Dry runs list
+  the summary updates too.
+- **Behaviour change:** setting `percentComplete`, `status`, `actualStart`
+  or `actualFinish` on a summary task is refused (400 validation, CLI exit
+  3); `tasks done` on a summary now fails unless it is already done. A task
+  whose last child is deleted or moved keeps its values and is editable again.
+- **Existing data:** `zprojectd` recomputes every summary when it opens the
+  database and corrects stale ones as actor `system`, so plans from 0.4.x are
+  fixed on the first start of 0.5.0. No schema change.
+- `core/Rollup.cpp` holds the rules; new tests in `tst_rollup`, `tst_store`,
+  `tst_api` and `tst_cli`. The OpenAPI description of `updateTask` says which
+  fields are derived.
+
 ## 0.4.2 — 2026-11-22
 
 Fix: on a Mac without Homebrew Qt, the `zproject-cli` in the v0.4.0 `.dmg`

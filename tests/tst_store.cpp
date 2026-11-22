@@ -1,4 +1,5 @@
 #include <QJsonArray>
+#include <QTemporaryDir>
 #include <QTest>
 
 #include "core/Id.hpp"
@@ -39,6 +40,30 @@ Task newTask(SqliteStore& s, const QString& project, const QString& title, const
   if (!r.ok()) qFatal("createTask: %s", qPrintable(r.error().message));
   return r.value();
 }
+
+Task newLeaf(SqliteStore& s, const QString& project, const QString& title, const QString& parent,
+             double duration) {
+  Task t;
+  t.project = project;
+  t.title = title;
+  t.parent = parent;
+  t.duration = duration;
+  auto r = s.createTask(t, kCtx);
+  if (!r.ok()) qFatal("createTask: %s", qPrintable(r.error().message));
+  return r.value();
+}
+
+// What `zproject-cli tasks done` sends.
+Result<Task> markDone(SqliteStore& s, const QString& id, const WriteContext& ctx = kCtx) {
+  Task t = s.task(id).value();
+  t.status = QStringLiteral("done");
+  t.percentComplete = 100;
+  t.actualStart = QStringLiteral("2026-11-20");
+  t.actualFinish = QStringLiteral("2026-11-22");
+  return s.updateTask(t, t.rev, ctx);
+}
+
+Task fresh(SqliteStore& s, const QString& id) { return s.task(id, true).value(); }
 
 QStringList titles(const QList<Task>& ts) {
   QStringList out;
@@ -290,6 +315,179 @@ class TstStore : public QObject {
     QCOMPARE(s->tasks(p.id, true)->size(), 0);
     // The connection is usable afterwards (the transaction was rolled back).
     QVERIFY(newTask(*s, p.id, QStringLiteral("ok")).rev == 1);
+  }
+
+  // Backlog 7.3: children 6.1-6.4 all done left summary 6 at in_progress, 50 %.
+  void summaryFollowsItsChildren() {
+    auto s = openMemory();
+    const Project p = newProject(*s);
+    const Task six = newTask(*s, p.id, QStringLiteral("v0.4.2"));
+    QStringList kids;
+    for (int i = 1; i <= 4; ++i) kids.append(newTask(*s, p.id, QStringLiteral("6.%1").arg(i), six.id).id);
+    QCOMPARE(fresh(*s, six.id).status, QStringLiteral("todo"));
+    QCOMPARE(fresh(*s, six.id).percentComplete, 0);
+
+    const int expected[] = {25, 50, 75};
+    for (int i = 0; i < 3; ++i) {
+      QVERIFY(markDone(*s, kids[i]).ok());
+      const Task t = fresh(*s, six.id);
+      QCOMPARE(t.status, QStringLiteral("in_progress"));
+      QCOMPARE(t.percentComplete, expected[i]);
+      QCOMPARE(t.actualStart, QStringLiteral("2026-11-20"));
+      QVERIFY(t.actualFinish.isEmpty());
+    }
+    const qint64 revBefore = fresh(*s, six.id).rev;
+    QVERIFY(markDone(*s, kids[3]).ok());
+    const Task done = fresh(*s, six.id);
+    QCOMPARE(done.status, QStringLiteral("done"));
+    QCOMPARE(done.percentComplete, 100);
+    QCOMPARE(done.actualFinish, QStringLiteral("2026-11-22"));
+    QCOMPARE(done.rev, revBefore + 1);
+    QVERIFY(validateTask(done).isEmpty());
+
+    // Each roll-up is its own change row, from the same actor and request.
+    const auto history = s->changesFor(QStringLiteral("task"), six.id).value();
+    QCOMPARE(history.size(), 5);  // create + four roll-ups
+    const ChangeRecord& last = history.last();
+    QCOMPARE(last.actor, kCtx.actor);
+    QCOMPARE(last.requestId, kCtx.requestId);
+    QCOMPARE(last.before.value(QStringLiteral("status")).toString(), QStringLiteral("in_progress"));
+    QCOMPARE(last.after.value(QStringLiteral("status")).toString(), QStringLiteral("done"));
+    QCOMPARE(last.after.value(QStringLiteral("percentComplete")).toInt(), 100);
+    // The child's own change comes first in the feed.
+    const auto feed = s->changesSince(0).value();
+    QCOMPARE(feed.last().entityId, six.id);
+    QCOMPARE(feed[feed.size() - 2].entityId, kids[3]);
+  }
+
+  void nestedSummariesRollUp() {
+    auto s = openMemory();
+    const Project p = newProject(*s);
+    const Task a = newTask(*s, p.id, QStringLiteral("A"));
+    const Task b = newTask(*s, p.id, QStringLiteral("B"), a.id);
+    const Task b1 = newLeaf(*s, p.id, QStringLiteral("b1"), b.id, 3);
+    const Task b2 = newLeaf(*s, p.id, QStringLiteral("b2"), b.id, 1);
+    const Task c = newLeaf(*s, p.id, QStringLiteral("c"), a.id, 4);
+    QVERIFY(markDone(*s, b1.id).ok());
+    QCOMPARE(fresh(*s, b.id).percentComplete, 75);
+    QCOMPARE(fresh(*s, a.id).percentComplete, 38);  // 3 of 8 working days
+    QCOMPARE(fresh(*s, a.id).status, QStringLiteral("in_progress"));
+    QVERIFY(markDone(*s, b2.id).ok());
+    QCOMPARE(fresh(*s, b.id).status, QStringLiteral("done"));
+    QCOMPARE(fresh(*s, a.id).percentComplete, 50);
+    QCOMPARE(fresh(*s, a.id).status, QStringLiteral("in_progress"));
+    QVERIFY(markDone(*s, c.id).ok());
+    QCOMPARE(fresh(*s, a.id).status, QStringLiteral("done"));
+    QCOMPARE(fresh(*s, a.id).percentComplete, 100);
+  }
+
+  void structuralChangesRecompute() {
+    auto s = openMemory();
+    const Project p = newProject(*s);
+    const Task parent = newTask(*s, p.id, QStringLiteral("P"));
+    const Task c1 = newTask(*s, p.id, QStringLiteral("c1"), parent.id);
+    QVERIFY(markDone(*s, c1.id).ok());
+    QCOMPARE(fresh(*s, parent.id).status, QStringLiteral("done"));
+
+    // Created: a new todo child reopens the summary.
+    const Task c2 = newTask(*s, p.id, QStringLiteral("c2"), parent.id);
+    QCOMPARE(fresh(*s, parent.id).status, QStringLiteral("in_progress"));
+    QCOMPARE(fresh(*s, parent.id).percentComplete, 50);
+    QVERIFY(fresh(*s, parent.id).actualFinish.isEmpty());
+
+    // Moved: out of P (P is done again) and under another summary.
+    const Task q = newTask(*s, p.id, QStringLiteral("Q"));
+    const Task q1 = newTask(*s, p.id, QStringLiteral("q1"), q.id);
+    QVERIFY(markDone(*s, q1.id).ok());
+    QCOMPARE(fresh(*s, q.id).status, QStringLiteral("done"));
+    Task move = fresh(*s, c2.id);
+    move.parent = q.id;
+    QVERIFY(s->updateTask(move, move.rev, kCtx).ok());
+    QCOMPARE(fresh(*s, parent.id).status, QStringLiteral("done"));
+    QCOMPARE(fresh(*s, parent.id).percentComplete, 100);
+    QCOMPARE(fresh(*s, q.id).status, QStringLiteral("in_progress"));
+    QCOMPARE(fresh(*s, q.id).percentComplete, 50);
+
+    // Deleted: Q is done once the open child is gone.
+    QVERIFY(s->deleteTask(c2.id, fresh(*s, c2.id).rev, kCtx).ok());
+    QCOMPARE(fresh(*s, q.id).status, QStringLiteral("done"));
+    QCOMPARE(fresh(*s, q.id).percentComplete, 100);
+
+    // Updated: reopening a child reopens the summary.
+    Task reopen = fresh(*s, q1.id);
+    reopen.status = QStringLiteral("in_progress");
+    reopen.percentComplete = 40;
+    reopen.actualFinish.clear();
+    QVERIFY(s->updateTask(reopen, reopen.rev, kCtx).ok());
+    QCOMPARE(fresh(*s, q.id).status, QStringLiteral("in_progress"));
+    QCOMPARE(fresh(*s, q.id).percentComplete, 40);
+    QVERIFY(fresh(*s, q.id).actualFinish.isEmpty());
+
+    // A summary whose last child goes keeps its values and is a plain task again.
+    QVERIFY(s->deleteTask(q1.id, fresh(*s, q1.id).rev, kCtx).ok());
+    Task plain = fresh(*s, q.id);
+    QCOMPARE(plain.percentComplete, 40);
+    plain.percentComplete = 60;
+    QVERIFY(s->updateTask(plain, plain.rev, kCtx).ok());
+  }
+
+  void summaryProgressCannotBeSetByHand() {
+    auto s = openMemory();
+    const Project p = newProject(*s);
+    const Task parent = newTask(*s, p.id, QStringLiteral("P"));
+    newTask(*s, p.id, QStringLiteral("c1"), parent.id);
+    const qsizetype changes = s->changesSince(0)->size();
+    auto r = markDone(*s, parent.id);
+    QVERIFY(!r.ok());
+    QCOMPARE(r.error().code, QStringLiteral("validation"));
+    QVERIFY(r.error().message.contains(QStringLiteral("derived")));
+    QCOMPARE(s->changesSince(0)->size(), changes);
+    QCOMPARE(fresh(*s, parent.id).status, QStringLiteral("todo"));
+    // Other fields, and the current derived values sent back, are fine.
+    Task t = fresh(*s, parent.id);
+    t.title = QStringLiteral("Renamed");
+    QVERIFY(s->updateTask(t, t.rev, kCtx).ok());
+    QCOMPARE(fresh(*s, parent.id).title, QStringLiteral("Renamed"));
+  }
+
+  void staleSummariesAreCorrectedOnOpen() {
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString path = dir.filePath(QStringLiteral("z.db"));
+    QString six;
+    QString project;
+    {
+      auto r = SqliteStore::open(path);
+      QVERIFY(r.ok());
+      auto s = std::move(r).value();
+      project = newProject(*s).id;
+      six = newTask(*s, project, QStringLiteral("6")).id;
+      for (int i = 1; i <= 4; ++i) {
+        QVERIFY(markDone(*s, newTask(*s, project, QStringLiteral("6.%1").arg(i), six).id).ok());
+      }
+      // What 0.4.x left behind: the summary never followed its children.
+      QVERIFY(s->database()
+                  .exec(QStringLiteral("UPDATE task SET status = 'in_progress', percentComplete = 50, "
+                                       "actualFinish = NULL WHERE id = '%1'")
+                            .arg(six))
+                  .ok());
+    }
+    qsizetype changes = 0;
+    {
+      auto s = SqliteStore::open(path).value();
+      const Task t = fresh(*s, six);
+      QCOMPARE(t.status, QStringLiteral("done"));
+      QCOMPARE(t.percentComplete, 100);
+      QCOMPARE(t.actualFinish, QStringLiteral("2026-11-22"));
+      const ChangeRecord last = s->changesFor(QStringLiteral("task"), six).value().last();
+      QCOMPARE(last.actor, QStringLiteral("system"));
+      QCOMPARE(last.before.value(QStringLiteral("percentComplete")).toInt(), 50);
+      QCOMPARE(last.after.value(QStringLiteral("status")).toString(), QStringLiteral("done"));
+      changes = s->changesSince(0)->size();
+    }
+    // Opening again finds nothing to correct.
+    auto s = SqliteStore::open(path).value();
+    QCOMPARE(s->changesSince(0)->size(), changes);
   }
 
   void schemaChecksBackTheModel() {
