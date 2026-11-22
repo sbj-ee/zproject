@@ -1,8 +1,8 @@
 # zproject
 
-**0.4.0**
+**0.4.1**
 
-Current release: none yet
+Current release: **0.4.0**
 
 Project management for the z-suite: projects with a WBS, milestones,
 dependencies, a critical-path schedule, baselines, resources and cost, a RAID
@@ -31,7 +31,10 @@ reports and the desktop client follow (SPEC.md §24).
 
 The `zprojectd` package installs the binary, `/etc/zproject/zprojectd.conf`,
 and three systemd units; its postinst creates the `zproject` user and
-`/var/lib/zproject`, and enables nothing. On the server host:
+`/var/lib/zproject`, and enables nothing. The full walkthrough, covering
+verification, the owner and device tokens, clients, smoke tests and
+uninstall, is in [docs/DEPLOY.md](docs/DEPLOY.md). In short, on the server
+host:
 
 ```sh
 sudoedit /etc/zproject/zprojectd.conf        # allowed_hosts, notify_hub_url
