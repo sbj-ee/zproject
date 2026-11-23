@@ -30,7 +30,9 @@ class QToolButton;
 namespace zproject::app {
 
 class HelpDialog;
+class OutlineView;
 class ProjectActions;
+class TaskActions;
 class UpdateDialog;
 class UpdateManager;
 class SignInDialog;
@@ -107,7 +109,7 @@ class MainWindow : public QMainWindow {
   QLabel* refreshStatus() const { return refreshed_; }
   QListWidget* projectList() const { return projects_; }
   // Projects (SPEC.md §7.10, §8.1): the all-projects table (View → All
-  // Projects, Ctrl+1), the details page (Ctrl+2) and the editing actions.
+  // Projects), the details page and the editing actions.
   QTableWidget* projectTable() const { return projectTable_; }
   QToolButton* showClosedButton() const { return showClosed_; }
   QStackedWidget* mainStack() const { return stack_; }
@@ -117,6 +119,10 @@ class MainWindow : public QMainWindow {
   void selectProject(const QString& id);
   void showProjectTable();
   void showProjectDetails();
+  // The WBS outline of the selected project (View → Outline; SPEC.md §7.1).
+  OutlineView* outline() const { return outline_; }
+  TaskActions* taskActions() const { return taskActions_; }
+  void showOutline();
   QAction* action(const QString& objectName) const;
 
  signals:
@@ -139,6 +145,7 @@ class MainWindow : public QMainWindow {
   void showProject(const QString& id);
   void fillProjectTable(const QList<QJsonObject>& projects);
   void updateEditActions();
+  void showTaskInspector(const QString& taskId);
   void openUrl(const QUrl& url);
   client::ClientConfig cliConfig() const;
   client::TokenStore tokenStore(const client::ClientConfig& cli) const;
@@ -169,6 +176,13 @@ class MainWindow : public QMainWindow {
   QPushButton* editButton_ = nullptr;
   QPushButton* deleteButton_ = nullptr;
   ProjectActions* projectActions_ = nullptr;
+  // What a selected project shows: its details or its outline.
+  enum class ProjectPage { Details, Outline };
+  ProjectPage page_ = ProjectPage::Details;
+  QWidget* detailsPage_ = nullptr;
+  QPushButton* outlineButton_ = nullptr;
+  OutlineView* outline_ = nullptr;
+  TaskActions* taskActions_ = nullptr;
   QString pendingSelect_;  // a project just created: select it once the feed has it
   QDockWidget* sidebarDock_ = nullptr;
   QDockWidget* inspectorDock_ = nullptr;

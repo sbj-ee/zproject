@@ -9,6 +9,7 @@ can't be reached, and follows changes made elsewhere — another computer,
 
 - [Connecting](#connecting)
 - [The window](#the-window)
+- [The outline](#the-outline)
 - [Offline](#offline)
 - [Appearance](#appearance)
 - [Preferences](#preferences)
@@ -38,14 +39,43 @@ or **Preferences → Change server or token…**.
 ## The window
 
 - **Projects** (left) lists the projects your token can see.
-- The **centre** shows the selected project. The outline, Gantt and resource
-  views arrive in later versions.
+- The **centre** shows the selected project: its details, or its tasks in
+  the outline (**View → Outline**). The Gantt and resource views arrive in
+  later versions.
 - The **Inspector** (right) shows the selected item's details.
 - The **status bar** shows the connection, the server's version and when the
   data was last refreshed. **Read-only** means editing is off.
 
 Press **F5** to refresh now. zproject also refreshes every 15 seconds while
 its window is active and every 60 seconds in the background.
+
+## The outline
+
+**View → Outline** shows the project's tasks as a tree with their WBS code,
+type, status, % complete, duration, dates, deadline and priority.
+
+- **Summary tasks** (tasks with subtasks) are bold. Their status and %
+  complete are rolled up from the subtasks, so those cells show a lock and
+  can't be edited; change the subtasks instead.
+- **Edit in place** with a double-click or F2: the title, the priority, and
+  the status and % complete of tasks without subtasks.
+- **Insert Task** (Ins or Enter) adds "New task" below the selected one and
+  lets you type its title. **Tab** indents a task under the one above it;
+  **Shift + Tab** outdents it. **Alt + ↑ / ↓** move it among its siblings.
+  **Ctrl + Tab** leaves the tree.
+- **Delete Task…** (Del) deletes a task and everything under it after
+  showing what goes; **Edit → Restore Deleted Task…** brings back what you
+  deleted in this window, and the history keeps everything.
+- **Convert to Milestone** turns a task into a zero-length milestone (shown
+  with a diamond) and back.
+- The **filter** above the tree shows all tasks, the ones not done, or one
+  status. **Find** (Ctrl + F) searches titles or a WBS code such as 2.1;
+  Enter and Shift + Enter step through matches, Esc closes it.
+
+When a change affects more than the task itself (a summary's progress, say)
+or deletes something, zproject shows what will change before writing
+anything. If someone else changed the task a moment ago, nothing is
+overwritten: you choose, or the outline refreshes so you can try again.
 
 ## Offline
 
@@ -117,6 +147,14 @@ the server machine.
 | Show or hide the sidebar | Ctrl + B |
 | Show or hide the inspector | Ctrl + I |
 | Go to the project list | Ctrl + Shift + P |
+| New project / edit project details | Ctrl + N / Ctrl + E |
+| Insert task (outline) | Ins or Enter |
+| Indent / outdent (outline) | Tab / Shift + Tab |
+| Move task up / down (outline) | Alt + ↑ / Alt + ↓ |
+| Rename task (outline) | F2 |
+| Delete task (outline) | Del or Backspace |
+| Leave the outline | Ctrl + Tab (Control, not ⌘, on macOS) |
+| Find / next / previous | Ctrl + F / F3 / Shift + F3 |
 | Help | F1 |
 | Keyboard shortcuts | Ctrl + / |
 | Quit | Ctrl + Q |

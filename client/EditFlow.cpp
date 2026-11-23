@@ -73,6 +73,20 @@ int DryRunPreview::otherChanges(const QString& entityKind, const QString& entity
   return n;
 }
 
+int DryRunPreview::ripples(const QString& entityKind, const QString& entityId) const {
+  int n = 0;
+  for (const Change& c : changes) {
+    const bool self = c.entityKind == entityKind &&
+                      (c.entityId == entityId || (entityId.isEmpty() && c.op == QLatin1String("create")));
+    if (self) continue;
+    QStringList keys = c.after.keys();
+    keys.removeAll(QStringLiteral("order"));
+    if (c.op == QLatin1String("update") && keys.isEmpty() && c.after.contains(QStringLiteral("order"))) continue;
+    ++n;
+  }
+  return n;
+}
+
 bool DryRunPreview::needsPreview(bool destructive, const QString& entityKind, const QString& entityId) const {
   return destructive || otherChanges(entityKind, entityId) > 0;
 }

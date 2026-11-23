@@ -380,8 +380,8 @@ class TestAppShell : public QObject {
     MainWindow w(options(false));
     QStringList menus;
     for (QAction* a : w.menuBar()->actions()) menus << a->text();
-    QCOMPARE(menus, (QStringList{QStringLiteral("&File"), QStringLiteral("&Project"), QStringLiteral("&View"),
-                                 QStringLiteral("&Help")}));
+    QCOMPARE(menus, (QStringList{QStringLiteral("&File"), QStringLiteral("&Edit"), QStringLiteral("&Project"),
+                                 QStringLiteral("&View"), QStringLiteral("&Help")}));
     // Every listed shortcut is wired to an action, and no two actions share a key.
     QSet<QString> keys;
     for (const ShortcutInfo& s : shellShortcuts()) {
@@ -399,12 +399,13 @@ class TestAppShell : public QObject {
     // The Gantt keeps Ctrl+Shift for its own zoom (SPEC.md §8.4).
     QVERIFY(!keys.contains(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Equal).toString()));
     QVERIFY(!keys.contains(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Minus).toString()));
-    // Ctrl+1…6 switch views, and other §8.4 keys stay free for later views.
+    // Ctrl+1…6 switch views, and other §8.4 keys stay free for later views
+    // (Ctrl+F and F2 are the outline's since 0.11.0).
     for (int k = Qt::Key_1; k <= Qt::Key_6; ++k) QVERIFY(!keys.contains(QKeySequence(QKeyCombination(Qt::ControlModifier, static_cast<Qt::Key>(k))).toString()));
     for (const QKeySequence& reserved :
          {QKeySequence(Qt::CTRL | Qt::Key_L), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L),
           QKeySequence(Qt::CTRL | Qt::Key_Z), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z),
-          QKeySequence(Qt::CTRL | Qt::Key_F), QKeySequence(Qt::CTRL | Qt::Key_K), QKeySequence(Qt::Key_F2)})
+          QKeySequence(Qt::CTRL | Qt::Key_K)})
       QVERIFY2(!keys.contains(reserved.toString()), qPrintable(reserved.toString()));
 
     ShortcutsDialog* d = w.showShortcuts();

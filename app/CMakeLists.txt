@@ -8,10 +8,13 @@ add_library(zproject_app_lib STATIC
   EditDialogs.cpp EditDialogs.hpp
   HelpDialog.cpp HelpDialog.hpp
   MainWindow.cpp MainWindow.hpp
+  OutlineModel.cpp OutlineModel.hpp
+  OutlineView.cpp OutlineView.hpp
   ProjectActions.cpp ProjectActions.hpp
   Shortcuts.cpp Shortcuts.hpp
   SignInDialog.cpp SignInDialog.hpp
   SingleInstance.cpp SingleInstance.hpp
+  TaskActions.cpp TaskActions.hpp
   Theme.cpp Theme.hpp
   Minisign.cpp Minisign.hpp
   Update.cpp Update.hpp

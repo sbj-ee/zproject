@@ -7,6 +7,59 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.11.0 — 2026-11-22
+
+Desktop client plan, PR 6: the WBS tree (plan §3.2). A project's tasks open
+as an outline over the cache, with read-only roll-ups and structural edits
+from the keyboard.
+
+- **View → Outline** (and Open Outline on the Details page): a tree of WBS
+  code, title, type, status, % complete, duration, start, finish, deadline and
+  priority. WBS codes are numbered like the server's and checked against the
+  cached `GET /v1/projects/{id}/wbs`; until the next refresh after a move the
+  header says "WBS codes update after the next refresh".
+- **Summary rows** are bold, with a lock on their status and % cells, the
+  tooltip "Rolled up from N child tasks", and an accessible name ending
+  "(rolled up)"; those cells can't be edited. If another change makes a task
+  a summary while you edit it, the 400 reads "This task now has subtasks; its
+  progress is rolled up" and the outline refreshes. A summary's start and
+  finish show the span of its subtasks (display only; the server doesn't roll
+  dates up yet) and its duration is left blank. Milestones show a diamond.
+- **Inline edits** (double-click or F2): title, priority, and status and %
+  complete on leaf tasks. Setting % above 0 on a task without an actual start
+  sends its scheduled start (else today) as the actual start.
+- **Edit menu:** Insert Task (Ins or Enter: below the current task, then its
+  title editor opens), Indent (Tab), Outdent (Shift-Tab), Move Up / Down
+  (Alt-↑/↓, via `POST /v1/tasks/{id}/move`), Rename Task (F2), Convert to
+  Milestone / Task, Delete Task… (Del or Backspace), Restore Deleted Task…,
+  Find… (Ctrl-F), Find Next (F3), Find Previous (Shift-F3). Structural keys
+  act only while the tree has focus.
+- **Previews (plan Q6):** every write is a dry run first; a preview appears
+  when the write ripples (a roll-up changes, say) or destroys. Siblings that
+  are only renumbered don't count, so a plain move up or down saves directly.
+  Delete always previews the subtree and its roll-ups and sends the
+  `confirmId`; Restore (tasks deleted from this window) previews too.
+- **412 on a field edit** opens the conflict dialog; on a structural change
+  it says the task changed, does nothing, and refreshes (never a blind
+  retry). 403, 404 and offline map as in 0.10.0.
+- **Filter** by status (All, Not done, To do, In progress, Done) keeps the
+  ancestors of matches; **Find** matches titles or an exact WBS code among the
+  visible rows (Enter / Shift-Enter step, Esc closes).
+- **Tests:** `tst_outline` (model unit tests with `QAbstractItemModelTester`,
+  and offscreen GUI tests against the real API on loopback: insert and name,
+  indent/outdent with preview, move without preview, delete and restore,
+  confirming tokens, convert to milestone, roll-up ripple, edit and
+  structural conflicts, the summary roll-up refusal, tree-scoped keys,
+  read-only token, offline); `tst_appshell` knows the Edit menu.
+- **Screenshots** (offscreen, example data): `outline-light/dark/high-contrast`,
+  `outline-filter-find`, `outline-indent-preview`, `outline-delete-preview`;
+  the main-window, offline, project-details and Help screenshots are
+  re-rendered (Edit menu, Open Outline, the Help section "The outline").
+- **Help:** a section on the outline and its keys; the shortcut table adds
+  them (and Ctrl-N / Ctrl-E). Ctrl-Tab leaves the tree, since Tab indents
+  there.
+- README "Current release" is now 0.10.0.
+
 ## 0.10.0 — 2026-11-22
 
 Desktop client plan, PR 5: the project list and project details, with
