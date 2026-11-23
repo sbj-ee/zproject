@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Version-drift check (SPEC.md §22): the CMake project() version, the top
-# CHANGELOG heading, the README header and the SPEC.md version line agree.
+# CHANGELOG heading, the README header, the SPEC.md version line and the
+# OpenAPI info.version agree.
 #   scripts/check-version.sh               # every PR / push (ci.yml)
 #   scripts/check-version.sh --tag vX.Y.Z  # tag builds: the tag must also be
 #                                          # v$VERSION and the heading dated
@@ -28,6 +29,11 @@ readme_ver=$(grep -m1 -oE '^\*\*[0-9]+\.[0-9]+\.[0-9]+\*\*' README.md | tr -d '*
 spec_ver=$(grep -m1 -oE '^This specification describes zproject \*\*[0-9]+\.[0-9]+\.[0-9]+\*\*' SPEC.md \
              | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
 [ "$spec_ver" = "$version" ] || err "SPEC.md describes '${spec_ver:-none}', CMakeLists.txt says $version"
+
+# The OpenAPI document's info.version tracks the product version, so a client
+# can tell which release's API description it is reading.
+api_ver=$(sed -nE 's/^  version: ([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' api/openapi.yaml | head -n1)
+[ "$api_ver" = "$version" ] || err "api/openapi.yaml info.version is '${api_ver:-none}', CMakeLists.txt says $version"
 
 # "Current release" names the newest tagged release: this version or (while it
 # is still in a PR) the newest other v* tag; "none yet" until the first tag.

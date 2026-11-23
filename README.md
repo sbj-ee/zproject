@@ -1,8 +1,8 @@
 # zproject
 
-**0.13.0**
+**0.13.1**
 
-Current release: **0.12.0**
+Current release: **0.13.0**
 
 Project management for the z-suite: projects with a WBS, milestones,
 dependencies, a critical-path schedule, baselines, resources and cost, a RAID
@@ -12,20 +12,20 @@ one repository (C++20, Qt 6):
 | Program | What it is |
 |---|---|
 | `zprojectd` | Headless server (Qt Core/Network, SQLite). Listens on `127.0.0.1:8788` only and is published on the tailnet with `tailscale serve`. Runs on a home server (Pop!_OS 24.04, amd64). |
-| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. The app shell (menus, themes, Help, Preferences), the signed in-app updater, the project list and project details editor, and the task outline (WBS tree); its client core (non-blocking `/v1` client, read-only cache, change-feed sync) is in `client/` and tested headless. |
+| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. The app shell (menus, themes, Help, Preferences), the signed in-app updater, the project list and project details editor, the task outline (WBS tree), the task editor and a read-only Gantt; its client core (non-blocking `/v1` client, read-only cache, change-feed sync) is in `client/` and tested headless. |
 | `zproject-cli` | Command-line client of the `/v1` API, shipped with the desktop app (Linux `.deb`, inside `zproject.app` on macOS). |
 
 The full design is in [SPEC.md](SPEC.md).
 
 ## Status
 
-Phase 1c: `zprojectd` serves the first slice of the `/v1` API (projects,
+Phases 1a and 1b (SPEC.md §24) are under way: `zprojectd` serves the first slice of the `/v1` API (projects,
 tasks, WBS, history, the change feed, tokens, the audit log, backups) and an
 MCP endpoint at `/mcp`, with scoped tokens, rate limits and a hash-chained
 audit log. `zproject-cli` covers all of it from Linux and macOS. The release
 workflow builds signed `.deb` and `.dmg` packages (see [Install](#install)).
 Dependencies, the scheduling engine, resources, baselines, the RAID log,
-reports and the desktop client's views follow (SPEC.md §24).
+reports and the rest of the desktop client's views follow.
 
 The desktop app (`zproject`) has its shell: themes, the offline banner,
 first-run sign-in that reuses `zproject-cli`'s token, Preferences and Help. Projects can be listed (sidebar

@@ -2,8 +2,9 @@
 
 1. Make sure `project(zproject VERSION x.y.z)` in `CMakeLists.txt` has the
    version to release. Every PR already bumps it, adds its dated
-   `CHANGELOG.md` entry and updates the version lines in `README.md` and
-   `SPEC.md`, so change nothing else.
+   `CHANGELOG.md` entry and updates the version lines in `README.md`,
+   `SPEC.md` and `api/openapi.yaml` (`info.version`, then
+   `scripts/openapi-json.py`), so change nothing else.
 2. Merge to `main`, then tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 3. `.github/workflows/release.yml` runs `scripts/check-version.sh --tag`. It
    then builds and tests on Ubuntu 24.04 and macOS 15 and packages

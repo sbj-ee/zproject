@@ -7,6 +7,22 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.13.1 — 2026-11-23
+
+Documentation and version drift fixes.
+
+- README: **Current release** is 0.13.0 (it still said 0.12.0 after v0.13.0
+  was published).
+- README: the Status section said "Phase 1c", which SPEC.md §24 defines as
+  baselines, resources, RAID and templates, none of which exist yet. What is
+  built is phase 1a (without dependencies, calendars or CPM) and phase 1b, so
+  it now says that.
+- README: the program table lists the task editor and the read-only Gantt.
+- `api/openapi.yaml` `info.version` was still 0.3.0, though the move and
+  restore endpoints (0.9.0) and later changes are in the document. It now
+  follows the product version, and `scripts/check-version.sh` fails CI when
+  the two differ. `api/openapi.json` is regenerated.
+
 ## 0.13.0 — 2026-11-23
 
 Desktop client plan, PR 8: the read-only Gantt (plan §3.4; SPEC §8.2 v1
