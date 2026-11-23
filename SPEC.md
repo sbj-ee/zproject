@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.16.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.17.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -351,6 +351,22 @@ instant previews and the offline cache).
   (not preloaded) **(decided, Q14)**.
 - Resource calendars inherit from the project calendar and add exceptions
   (vacation, part-time).
+
+As built (0.17.0, scheduling plan S1; core only, no API yet):
+`core/WorkCalendar` resolves a calendar through its `base` chain (at most 8
+deep; a loop or an unknown id is an error). A calendar without its own work
+week takes its base's, and at the root Standard's (Monday–Friday, 8 hours).
+Exceptions add to the base's, and the calendar's own exception wins on a
+day both cover. `holiday` and `non_working` make a day non-working;
+`custom_hours` only sets its hours. One exception spans at most 366 days.
+Day arithmetic counts whole days: `addWorkingDays(d, n)` is the n-th working
+day after d (n < 0: before), not counting d, and `workingDaysBetween(a, b)`
+counts [a, b). A bitmap with prefix counts over a prepared range makes these
+O(log n). A search that finds no working day within ten years gives no date
+rather than looping. `core/Holidays` computes the US federal holidays
+(5 U.S.C. 6103) whose observed day falls in a year: Saturday → Friday,
+Sunday → Monday, Juneteenth from 2021. So New Year's Day can be observed on
+31 December of the year before, as OPM lists it.
 
 ### 6.2 Algorithm
 
