@@ -17,6 +17,7 @@
 
 #include <cerrno>
 #include <fcntl.h>
+#include <array>
 #include <optional>
 #include <unistd.h>
 
@@ -46,6 +47,7 @@ QString cliUsage() {
       "  projects create NAME [--description T] [--owner T] [--start D] [--finish D]\n"
       "                       [--status S] [--rag R] [--priority N] [--dry-run]\n"
       "  projects update ID [--name T] [same options] [--rev N] [--dry-run]\n"
+      "                       [--calendar ID|none] (create too): its working calendar"
       "  projects delete ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
       "\n"
       "Tasks (dates are YYYY-MM-DD; \"none\" clears a date)\n"
@@ -53,7 +55,7 @@ QString cliUsage() {
       "  tasks show ID\n"
       "  tasks add PROJECT TITLE [--parent ID] [--milestone] [--duration DAYS]\n"
       "                       [--start D] [--finish D] [--deadline D] [--priority 1-4]\n"
-      "                       [--notes T] [--manual] [--dry-run]\n"
+      "                       [--notes T] [--manual] [--calendar ID|none] [--dry-run]\n"
       "  tasks update ID [--title T] [--parent ID|none] [--status S] [--percent N]\n"
       "                       [--actual-start D] [--actual-finish D] [add options]\n"
       "                       [--rev N] [--dry-run]\n"
@@ -72,6 +74,21 @@ QString cliUsage() {
       "                       \"1.2SS\", \"4FF-1d\", several separated by commas\n"
       "  deps update ID [--type FS|SS|FF] [--lag DAYS] [--rev N] [--dry-run]\n"
       "  deps remove ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
+      "\n"
+      "Calendars (shared by every project; writing needs a token for all projects)\n"
+      "  calendars list [--all]\n"
+      "  calendars show ID   the calendar and its holidays and other exceptions\n"
+      "  calendars create NAME [--base ID] [--week DAYS[:HOURS]] [--hours-per-day N]\n"
+      "                       [--dry-run]   DAYS like Mon-Fri or Mon,Tue,Thu (default\n"
+      "                       the base's week, at the root Mon-Fri, 8 hours)\n"
+      "  calendars update ID [--name T] [--base ID|none] [--week DAYS[:HOURS]|inherit]\n"
+      "                       [--hours-per-day N] [--rev N] [--dry-run]\n"
+      "  calendars delete ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
+      "  calendars exception add ID FROM [TO] [--kind holiday|non_working|custom_hours]\n"
+      "                       [--hours N] [--label T] [--dry-run]\n"
+      "  calendars exception remove EXCEPTION_ID [--dry-run] [--confirm CONFIRM_ID]\n"
+      "  calendars import-holidays ID YEAR [--country US] [--dry-run]\n"
+      "                       a year's public holidays, computed (not fetched)\n"
       "\n"
       "Administration (owner token)\n"
       "  token list\n"
@@ -114,7 +131,9 @@ const QSet<QString>& valueOptions() {
       QStringLiteral("projects"),   QStringLiteral("expires"),       QStringLiteral("out-file"),
       QStringLiteral("since"),      QStringLiteral("limit"),         QStringLiteral("token"),
       QStringLiteral("position"),   QStringLiteral("task"),          QStringLiteral("type"),
-      QStringLiteral("lag")};
+      QStringLiteral("lag"),        QStringLiteral("base"),          QStringLiteral("week"),
+      QStringLiteral("hours-per-day"), QStringLiteral("calendar"),   QStringLiteral("hours"),
+      QStringLiteral("label"),      QStringLiteral("country")};
   return s;
 }
 const QSet<QString>& flagOptions() {
@@ -297,6 +316,7 @@ class Runner {
     if (cmd == QLatin1String("projects")) return projects();
     if (cmd == QLatin1String("tasks")) return tasks();
     if (cmd == QLatin1String("deps")) return deps();
+    if (cmd == QLatin1String("calendars")) return calendars();
     if (cmd == QLatin1String("token")) return token();
     if (cmd == QLatin1String("audit")) return audit();
     if (cmd == QLatin1String("backup")) return backup();
@@ -686,10 +706,23 @@ class Runner {
     strOpt(QStringLiteral("rag"), QStringLiteral("rag"), &b);
     if (!dateOpt(QStringLiteral("start"), QStringLiteral("start"), &b) ||
         !dateOpt(QStringLiteral("finish"), QStringLiteral("finish"), &b) ||
-        !intOpt(QStringLiteral("priority"), QStringLiteral("priority"), &b, 1, 4)) {
+        !intOpt(QStringLiteral("priority"), QStringLiteral("priority"), &b, 1, 4) ||
+        !calendarOpt(&b)) {
       b.insert(QStringLiteral("__invalid"), true);
     }
     return b;
+  }
+  // --calendar ID|none: a calendar id, or null (Standard / the project's).
+  bool calendarOpt(QJsonObject* b) {
+    if (!a_.has(QStringLiteral("calendar"))) return true;
+    const QString v = a_.opt(QStringLiteral("calendar"));
+    if (v == QLatin1String("none")) {
+      b->insert(QStringLiteral("calendar"), QJsonValue());
+      return true;
+    }
+    if (!checkId(v, "--calendar")) return false;
+    b->insert(QStringLiteral("calendar"), v);
+    return true;
   }
 
   int projects() {
@@ -697,7 +730,7 @@ class Runner {
     const QString sub = a_.pos.takeFirst();
     const QStringList fields{QStringLiteral("description"), QStringLiteral("owner"), QStringLiteral("start"),
                              QStringLiteral("finish"),      QStringLiteral("status"), QStringLiteral("rag"),
-                             QStringLiteral("priority"),    QStringLiteral("dry-run")};
+                             QStringLiteral("priority"),    QStringLiteral("dry-run"),  QStringLiteral("calendar")};
     if (sub == QLatin1String("list")) {
       if (!allow({QStringLiteral("all")})) return badOption();
       if (!a_.pos.isEmpty()) return usage(QStringLiteral("projects list takes no arguments"));
@@ -823,7 +856,7 @@ class Runner {
         b->insert(QStringLiteral("parent"), p);
       }
     }
-    return numOpt(QStringLiteral("duration"), QStringLiteral("duration"), b) &&
+    return calendarOpt(b) && numOpt(QStringLiteral("duration"), QStringLiteral("duration"), b) &&
            dateOpt(QStringLiteral("start"), QStringLiteral("start"), b) &&
            dateOpt(QStringLiteral("finish"), QStringLiteral("finish"), b) &&
            dateOpt(QStringLiteral("deadline"), QStringLiteral("deadline"), b) &&
@@ -839,7 +872,7 @@ class Runner {
     const QStringList addFields{QStringLiteral("parent"),   QStringLiteral("milestone"), QStringLiteral("duration"),
                                 QStringLiteral("start"),    QStringLiteral("finish"),    QStringLiteral("deadline"),
                                 QStringLiteral("priority"), QStringLiteral("notes"),     QStringLiteral("manual"),
-                                QStringLiteral("dry-run")};
+                                QStringLiteral("dry-run"),  QStringLiteral("calendar")};
     if (sub == QLatin1String("list")) {
       if (!allow({QStringLiteral("status"), QStringLiteral("search"), QStringLiteral("all")})) return badOption();
       if (a_.pos.size() != 1) return usage(QStringLiteral("tasks list PROJECT"));
@@ -1017,6 +1050,242 @@ class Runner {
       return kExitOk;
     }
     return usage(QStringLiteral("unknown tasks command '%1'").arg(sub));
+  }
+
+  // ---------------------------------------------------------- calendars
+  // "Mon-Fri", "Mon,Tue,Thu", "Mon-Thu:10" -> a work week (hours default 8).
+  static std::optional<QJsonArray> parseWeek(const QString& spec, QString* why) {
+    static const QStringList names{QStringLiteral("mon"), QStringLiteral("tue"), QStringLiteral("wed"),
+                                   QStringLiteral("thu"), QStringLiteral("fri"), QStringLiteral("sat"),
+                                   QStringLiteral("sun")};
+    QString days = spec.trimmed().toLower();
+    double hours = 8;
+    if (const qsizetype colon = days.indexOf(QLatin1Char(':')); colon >= 0) {
+      bool ok = false;
+      hours = days.mid(colon + 1).toDouble(&ok);
+      if (!ok || hours <= 0 || hours > 24) {
+        *why = QStringLiteral("--week hours must be more than 0 and at most 24");
+        return std::nullopt;
+      }
+      days = days.left(colon);
+    }
+    std::array<bool, 7> on{};
+    for (const QString& part : days.split(QLatin1Char(','), Qt::SkipEmptyParts)) {
+      const QStringList ends = part.trimmed().split(QLatin1Char('-'));
+      const qsizetype a = names.indexOf(ends.value(0).left(3));
+      const qsizetype b = ends.size() == 2 ? names.indexOf(ends.value(1).left(3)) : a;
+      if (a < 0 || b < 0 || b < a || ends.size() > 2) {
+        *why = QStringLiteral("--week: days like Mon-Fri or Mon,Tue,Thu, optionally :HOURS");
+        return std::nullopt;
+      }
+      for (qsizetype i = a; i <= b; ++i) on[static_cast<size_t>(i)] = true;
+    }
+    QJsonArray week;
+    for (bool w : on) {
+      week.append(QJsonObject{{QStringLiteral("working"), w}, {QStringLiteral("hours"), w ? hours : 0.0}});
+    }
+    return week;
+  }
+  static QString weekText(const QJsonValue& v) {
+    if (!v.isArray()) return QStringLiteral("(inherited)");
+    static const QStringList names{QStringLiteral("Mon"), QStringLiteral("Tue"), QStringLiteral("Wed"),
+                                   QStringLiteral("Thu"), QStringLiteral("Fri"), QStringLiteral("Sat"),
+                                   QStringLiteral("Sun")};
+    QStringList on;
+    for (int i = 0; i < 7 && i < v.toArray().size(); ++i) {
+      const QJsonObject d = v.toArray().at(i).toObject();
+      if (d.value(QStringLiteral("working")).toBool()) {
+        on << QStringLiteral("%1 %2h").arg(names.at(i)).arg(d.value(QStringLiteral("hours")).toDouble());
+      }
+    }
+    return on.join(QStringLiteral(", "));
+  }
+  bool calendarBody(QJsonObject* b) {
+    strOpt(QStringLiteral("name"), QStringLiteral("name"), b);
+    if (a_.has(QStringLiteral("base"))) {
+      const QString v = a_.opt(QStringLiteral("base"));
+      if (v == QLatin1String("none")) {
+        b->insert(QStringLiteral("base"), QJsonValue());
+      } else {
+        if (!checkId(v, "--base")) return false;
+        b->insert(QStringLiteral("base"), v);
+      }
+    }
+    if (a_.has(QStringLiteral("week"))) {
+      if (a_.opt(QStringLiteral("week")) == QLatin1String("inherit")) {
+        b->insert(QStringLiteral("workWeek"), QJsonValue());
+      } else {
+        auto w = parseWeek(a_.opt(QStringLiteral("week")), &badValue_);
+        if (!w) return false;
+        b->insert(QStringLiteral("workWeek"), *w);
+      }
+    }
+    if (a_.has(QStringLiteral("hours-per-day"))) {
+      bool ok = false;
+      const double h = a_.opt(QStringLiteral("hours-per-day")).toDouble(&ok);
+      if (!ok || h <= 0 || h > 24) {
+        badValue_ = QStringLiteral("--hours-per-day must be more than 0 and at most 24");
+        return false;
+      }
+      b->insert(QStringLiteral("hoursPerDay"), h);
+    }
+    return true;
+  }
+
+  int calendars() {
+    if (a_.pos.isEmpty()) {
+      return usage(QStringLiteral("calendars: list, show, create, update, delete, exception or import-holidays"));
+    }
+    const QString sub = a_.pos.takeFirst();
+    if (sub == QLatin1String("list")) {
+      if (!allow({QStringLiteral("all")})) return badOption();
+      if (!a_.pos.isEmpty()) return usage(QStringLiteral("calendars list"));
+      if (int c = connect(); c != kExitOk) return c;
+      QUrlQuery q;
+      if (flag("all")) q.addQueryItem(QStringLiteral("includeDeleted"), QStringLiteral("true"));
+      int code = kExitOk;
+      auto items = listAll(QStringLiteral("/v1/calendars"), q, &code);
+      if (!items) return code;
+      if (json_) {
+        printJson(*items);
+        return kExitOk;
+      }
+      QList<QStringList> rows;
+      for (const auto& v : *items) {
+        const QJsonObject o = v.toObject();
+        QString name = o.value(QStringLiteral("name")).toString();
+        if (o.value(QStringLiteral("deleted")).toBool()) name += QStringLiteral(" (deleted)");
+        rows << QStringList{str(o.value(QStringLiteral("id"))), name, str(o.value(QStringLiteral("base"))),
+                            weekText(o.value(QStringLiteral("workWeek"))), str(o.value(QStringLiteral("hoursPerDay")))};
+      }
+      printTable(out_, {QStringLiteral("ID"), QStringLiteral("NAME"), QStringLiteral("BASE"), QStringLiteral("WEEK"),
+                        QStringLiteral("HOURS/DAY")},
+                 rows);
+      return kExitOk;
+    }
+    if (sub == QLatin1String("show")) {
+      if (!allow({})) return badOption();
+      if (a_.pos.size() != 1) return usage(QStringLiteral("calendars show ID"));
+      if (!checkId(a_.pos[0], "calendar ID")) return usage(badValue_);
+      if (int c = connect(); c != kExitOk) return c;
+      const ApiResponse r = api_->get(QStringLiteral("/v1/calendars/") + a_.pos[0]);
+      if (!r.ok()) return apiError(r);
+      int code = kExitOk;
+      auto excs = listAll(QStringLiteral("/v1/calendars/%1/exceptions").arg(a_.pos[0]), {}, &code);
+      if (!excs) return code;
+      if (json_) {
+        QJsonObject o = r.json;
+        o.insert(QStringLiteral("exceptions"), *excs);
+        printJson(o);
+        return kExitOk;
+      }
+      QJsonObject shown = r.json;
+      shown.insert(QStringLiteral("workWeek"), weekText(r.json.value(QStringLiteral("workWeek"))));
+      printFields(out_, shown,
+                  {QStringLiteral("id"), QStringLiteral("name"), QStringLiteral("base"), QStringLiteral("workWeek"),
+                   QStringLiteral("hoursPerDay"), QStringLiteral("rev")});
+      QList<QStringList> rows;
+      for (const auto& v : *excs) {
+        const QJsonObject e = v.toObject();
+        const QString from = e.value(QStringLiteral("from")).toString();
+        const QString to = e.value(QStringLiteral("to")).toString();
+        QString kind = e.value(QStringLiteral("kind")).toString();
+        if (kind == QLatin1String("custom_hours")) kind += QStringLiteral(" %1h").arg(e.value(QStringLiteral("hours")).toDouble());
+        rows << QStringList{str(e.value(QStringLiteral("id"))), from == to ? from : from + QStringLiteral("..") + to, kind,
+                            e.value(QStringLiteral("label")).toString()};
+      }
+      out_ << '\n';
+      printTable(out_, {QStringLiteral("EXCEPTION"), QStringLiteral("DATES"), QStringLiteral("KIND"), QStringLiteral("LABEL")},
+                 rows);
+      return kExitOk;
+    }
+    if (sub == QLatin1String("create") || sub == QLatin1String("update")) {
+      const bool create = sub == QLatin1String("create");
+      QStringList opts{QStringLiteral("base"), QStringLiteral("week"), QStringLiteral("hours-per-day"),
+                       QStringLiteral("dry-run")};
+      if (!create) opts << QStringLiteral("name") << QStringLiteral("rev");
+      if (!allow(opts)) return badOption();
+      if (a_.pos.size() != 1) return usage(create ? QStringLiteral("calendars create NAME") : QStringLiteral("calendars update ID"));
+      if (!create && !checkId(a_.pos[0], "calendar ID")) return usage(badValue_);
+      QJsonObject b;
+      if (!calendarBody(&b)) return usage(badValue_);
+      if (create) {
+        b.insert(QStringLiteral("name"), a_.pos[0]);
+      } else if (b.isEmpty()) {
+        return usage(QStringLiteral("nothing to change: give at least one option"));
+      }
+      WriteOpts w;
+      if (!writeOpts(&w)) return usage(badValue_);
+      if (int c = connect(); c != kExitOk) return c;
+      const ApiResponse r = create ? api_->send("POST", QStringLiteral("/v1/calendars"), w.query, &b, w.headers)
+                                   : api_->send("PATCH", QStringLiteral("/v1/calendars/") + a_.pos[0], w.query, &b, w.headers);
+      if (!r.ok()) return apiError(r);
+      if (w.dryRun) return dryRunResult(r, QStringLiteral("calendars ") + sub);
+      return written(r, create ? QStringLiteral("Created calendar") : QStringLiteral("Updated calendar"), QStringLiteral("name"));
+    }
+    if (sub == QLatin1String("delete")) {
+      return deleteCommand(QStringLiteral("calendars"), QStringLiteral("/v1/calendars/"), "calendar ID");
+    }
+    if (sub == QLatin1String("exception")) {
+      const QString what = a_.pos.isEmpty() ? QString() : a_.pos.takeFirst();
+      if (what == QLatin1String("remove") || what == QLatin1String("delete")) {
+        return deleteCommand(QStringLiteral("calendars exception"), QStringLiteral("/v1/calendar-exceptions/"),
+                             "exception ID");
+      }
+      if (what != QLatin1String("add")) return usage(QStringLiteral("calendars exception add|remove ..."));
+      if (!allow({QStringLiteral("kind"), QStringLiteral("hours"), QStringLiteral("label"), QStringLiteral("dry-run")})) {
+        return badOption();
+      }
+      if (a_.pos.size() < 2 || a_.pos.size() > 3) return usage(QStringLiteral("calendars exception add ID FROM [TO]"));
+      if (!checkId(a_.pos[0], "calendar ID")) return usage(badValue_);
+      QJsonObject b{{QStringLiteral("from"), a_.pos[1]}, {QStringLiteral("to"), a_.pos.value(2, a_.pos[1])}};
+      for (const QString& d : {b.value(QStringLiteral("from")).toString(), b.value(QStringLiteral("to")).toString()}) {
+        if (d.size() != 10 || !QDate::fromString(d, Qt::ISODate).isValid()) return usage(QStringLiteral("dates are YYYY-MM-DD"));
+      }
+      strOpt(QStringLiteral("kind"), QStringLiteral("kind"), &b);
+      strOpt(QStringLiteral("label"), QStringLiteral("label"), &b);
+      if (!numOpt(QStringLiteral("hours"), QStringLiteral("hours"), &b)) return usage(badValue_);
+      WriteOpts w;
+      if (!writeOpts(&w)) return usage(badValue_);
+      if (int c = connect(); c != kExitOk) return c;
+      const ApiResponse r =
+          api_->send("POST", QStringLiteral("/v1/calendars/%1/exceptions").arg(a_.pos[0]), w.query, &b, w.headers);
+      if (!r.ok()) return apiError(r);
+      if (w.dryRun) return dryRunResult(r, QStringLiteral("calendars exception add"));
+      return written(r, QStringLiteral("Added exception"), QStringLiteral("from"));
+    }
+    if (sub == QLatin1String("import-holidays")) {
+      if (!allow({QStringLiteral("country"), QStringLiteral("dry-run")})) return badOption();
+      if (a_.pos.size() != 2) return usage(QStringLiteral("calendars import-holidays ID YEAR"));
+      if (!checkId(a_.pos[0], "calendar ID")) return usage(badValue_);
+      bool ok = false;
+      const int year = a_.pos[1].toInt(&ok);
+      if (!ok) return usage(QStringLiteral("YEAR must be a year, like 2027"));
+      WriteOpts w;
+      if (!writeOpts(&w)) return usage(badValue_);
+      w.query.addQueryItem(QStringLiteral("country"), a_.has(QStringLiteral("country")) ? a_.opt(QStringLiteral("country"))
+                                                                                         : QStringLiteral("US"));
+      w.query.addQueryItem(QStringLiteral("year"), QString::number(year));
+      if (int c = connect(); c != kExitOk) return c;
+      QJsonObject none;  // POSTs are JSON, even with nothing to say
+      const ApiResponse r = api_->send("POST", QStringLiteral("/v1/calendars/%1/import-holidays").arg(a_.pos[0]),
+                                       w.query, &none, w.headers);
+      if (!r.ok()) return apiError(r);
+      if (w.dryRun) return dryRunResult(r, QStringLiteral("calendars import-holidays"));
+      const QJsonArray items = r.json.value(QStringLiteral("items")).toArray();
+      if (json_) {
+        printJson(items);
+        return kExitOk;
+      }
+      out_ << "Imported " << items.size() << (items.size() == 1 ? " holiday" : " holidays") << " for " << year
+           << (items.isEmpty() ? " (all were there already).\n" : ":\n");
+      for (const auto& v : items) {
+        const QJsonObject e = v.toObject();
+        out_ << "  " << e.value(QStringLiteral("from")).toString() << "  " << e.value(QStringLiteral("label")).toString() << '\n';
+      }
+      return kExitOk;
+    }
+    return usage(QStringLiteral("unknown calendars command '%1'").arg(sub));
   }
 
   // ------------------------------------------------------- dependencies

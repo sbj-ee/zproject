@@ -1,5 +1,6 @@
 #include "core/WorkCalendar.hpp"
 
+#include <QJsonArray>
 #include <QSet>
 
 #include <algorithm>
@@ -69,6 +70,100 @@ QList<FieldError> validateCalendar(const CalendarDef& c) {
     }
   }
   return errs;
+}
+
+namespace {
+
+QJsonValue optText(const QString& s) { return s.isEmpty() ? QJsonValue() : QJsonValue(s); }
+QString text(const QJsonObject& o, const char* key) {
+  const QJsonValue v = o.value(QLatin1String(key));
+  return v.isString() ? v.toString() : QString();
+}
+void baseOut(QJsonObject& o, const EntityBase& e) {
+  o.insert(QStringLiteral("id"), e.id);
+  o.insert(QStringLiteral("createdAt"), e.createdAt);
+  o.insert(QStringLiteral("updatedAt"), e.updatedAt);
+  o.insert(QStringLiteral("deleted"), e.deleted);
+  o.insert(QStringLiteral("rev"), e.rev);
+}
+void baseIn(EntityBase& e, const QJsonObject& o) {
+  e.id = text(o, "id");
+  e.createdAt = text(o, "createdAt");
+  e.updatedAt = text(o, "updatedAt");
+  e.deleted = o.value(QStringLiteral("deleted")).toBool(false);
+  e.rev = static_cast<qint64>(o.value(QStringLiteral("rev")).toDouble(0));
+}
+
+}  // namespace
+
+QJsonObject toJson(const CalendarDef& c) {
+  QJsonObject o;
+  baseOut(o, c);
+  o.insert(QStringLiteral("name"), c.name);
+  o.insert(QStringLiteral("base"), optText(c.base));
+  if (c.workWeek) {
+    QJsonArray days;
+    for (int i = 0; i < 7; ++i) {
+      days.append(QJsonObject{{QStringLiteral("working"), c.workWeek->working[static_cast<size_t>(i)]},
+                              {QStringLiteral("hours"), c.workWeek->hours[static_cast<size_t>(i)]}});
+    }
+    o.insert(QStringLiteral("workWeek"), days);
+  } else {
+    o.insert(QStringLiteral("workWeek"), QJsonValue());
+  }
+  o.insert(QStringLiteral("hoursPerDay"), c.hoursPerDay);
+  return o;
+}
+
+CalendarDef calendarFromJson(const QJsonObject& o) {
+  CalendarDef c;
+  baseIn(c, o);
+  c.name = text(o, "name");
+  c.base = text(o, "base");
+  c.hoursPerDay = o.value(QStringLiteral("hoursPerDay")).toDouble(c.hoursPerDay);
+  const QJsonValue w = o.value(QStringLiteral("workWeek"));
+  if (w.isArray()) {
+    // Anything but seven {working, hours} days becomes a week validation refuses.
+    WorkWeek week;
+    week.working.fill(false);
+    week.hours.fill(0);
+    const QJsonArray days = w.toArray();
+    if (days.size() == 7) {
+      for (int i = 0; i < 7; ++i) {
+        const QJsonObject d = days.at(i).toObject();
+        week.working[static_cast<size_t>(i)] = d.value(QStringLiteral("working")).toBool(false);
+        week.hours[static_cast<size_t>(i)] = d.value(QStringLiteral("hours")).toDouble(-1);
+      }
+    }
+    c.workWeek = week;
+  }
+  return c;
+}
+
+QJsonObject toJson(const CalendarException& e) {
+  QJsonObject o;
+  baseOut(o, e);
+  o.insert(QStringLiteral("calendar"), e.calendar);
+  o.insert(QStringLiteral("from"), e.from.toString(Qt::ISODate));
+  o.insert(QStringLiteral("to"), e.to.toString(Qt::ISODate));
+  o.insert(QStringLiteral("kind"), e.kind);
+  o.insert(QStringLiteral("hours"), e.hours);
+  o.insert(QStringLiteral("label"), e.label);
+  return o;
+}
+
+CalendarException calendarExceptionFromJson(const QJsonObject& o) {
+  CalendarException e;
+  baseIn(e, o);
+  e.calendar = text(o, "calendar");
+  // Strictly YYYY-MM-DD; anything else is an invalid date.
+  auto day = [](const QString& s) { return s.size() == 10 ? QDate::fromString(s, Qt::ISODate) : QDate(); };
+  e.from = day(text(o, "from"));
+  e.to = o.contains(QStringLiteral("to")) ? day(text(o, "to")) : e.from;
+  e.kind = o.contains(QStringLiteral("kind")) ? text(o, "kind") : e.kind;
+  e.hours = o.value(QStringLiteral("hours")).toDouble(0);
+  e.label = text(o, "label");
+  return e;
 }
 
 Result<WorkCalendar> WorkCalendar::resolve(const QString& id, const QHash<QString, CalendarDef>& defs) {

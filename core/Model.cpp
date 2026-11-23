@@ -1,5 +1,7 @@
 #include "Model.hpp"
 
+#include "core/Id.hpp"
+
 #include <QDate>
 #include <QJsonArray>
 #include <QJsonValue>
@@ -103,11 +105,17 @@ QList<FieldError> validateProject(const Project& p) {
   if (!p.color.isEmpty() && !color.match(p.color).hasMatch()) {
     errs.append({QStringLiteral("color"), QStringLiteral("must be #rrggbb")});
   }
+  if (!p.calendar.isEmpty() && !isValidId(p.calendar)) {
+    errs.append({QStringLiteral("calendar"), QStringLiteral("must be a calendar id")});
+  }
   return errs;
 }
 
 QList<FieldError> validateTask(const Task& t) {
   QList<FieldError> errs;
+  if (!t.calendar.isEmpty() && !isValidId(t.calendar)) {
+    errs.append({QStringLiteral("calendar"), QStringLiteral("must be a calendar id")});
+  }
   if (t.title.trimmed().isEmpty()) {
     errs.append({QStringLiteral("title"), QStringLiteral("is required")});
   } else if (t.title.size() > kMaxTitle) {
@@ -208,6 +216,7 @@ QJsonObject toJson(const Project& p) {
   o.insert(QStringLiteral("finish"), optString(p.finish));
   o.insert(QStringLiteral("budget"), p.budget ? QJsonValue(*p.budget) : QJsonValue());
   o.insert(QStringLiteral("color"), optString(p.color));
+  o.insert(QStringLiteral("calendar"), optString(p.calendar));
   o.insert(QStringLiteral("order"), p.order);
   return o;
 }
@@ -232,6 +241,7 @@ Project projectFromJson(const QJsonObject& o) {
     p.budget = o.value(QStringLiteral("budget")).toDouble();
   }
   p.color = str(o, "color");
+  p.calendar = str(o, "calendar");
   p.order = static_cast<qint64>(num(o, "order", 0));
   return p;
 }
@@ -252,6 +262,7 @@ QJsonObject toJson(const Task& t) {
   o.insert(QStringLiteral("constraint"), t.constraintType);
   o.insert(QStringLiteral("constraintDate"), optString(t.constraintDate));
   o.insert(QStringLiteral("deadline"), optString(t.deadline));
+  o.insert(QStringLiteral("calendar"), optString(t.calendar));
   o.insert(QStringLiteral("percentComplete"), t.percentComplete);
   o.insert(QStringLiteral("actualStart"), optString(t.actualStart));
   o.insert(QStringLiteral("actualFinish"), optString(t.actualFinish));
@@ -302,6 +313,7 @@ Task taskFromJson(const QJsonObject& o) {
   t.constraintType = str(o, "constraint", t.constraintType);
   t.constraintDate = str(o, "constraintDate");
   t.deadline = str(o, "deadline");
+  t.calendar = str(o, "calendar");
   t.percentComplete = static_cast<int>(num(o, "percentComplete", 0));
   t.actualStart = str(o, "actualStart");
   t.actualFinish = str(o, "actualFinish");

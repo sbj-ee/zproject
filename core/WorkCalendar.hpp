@@ -27,8 +27,8 @@ struct WorkWeek {
 // One exception: `holiday` and `non_working` make every day in [from, to]
 // non-working; `custom_hours` changes the hours of the days that are
 // working anyway (for work and cost), never whether a day counts.
-struct CalendarException {
-  QString id;
+struct CalendarException : EntityBase {
+  QString calendar;  // the calendar it belongs to (stored rows)
   QDate from;
   QDate to;
   QString kind = QStringLiteral("holiday");  // holiday, non_working, custom_hours
@@ -39,14 +39,27 @@ struct CalendarException {
 // A calendar as stored (SPEC.md §5.1). `workWeek` empty: the base's (or,
 // at the root, Standard's). Exceptions add to the base's; where both cover
 // a day, this calendar's own exception wins.
-struct CalendarDef {
-  QString id;
+struct CalendarDef : EntityBase {
   QString name;
   QString base;  // empty = none
   std::optional<WorkWeek> workWeek;
   double hoursPerDay = 8;
-  QList<CalendarException> exceptions;
+  QList<CalendarException> exceptions;  // live ones; not part of the calendar's own JSON
 };
+
+// The Standard calendar every installation has (seeded by schema 4): a
+// project with no calendar uses it, so holidays added to it apply
+// everywhere. Monday–Friday, 8 hours, until someone changes it.
+inline constexpr QLatin1String kStandardCalendarId("00000000000000000001");
+
+// JSON with the API's field names. A work week is an array of seven
+// {"working": bool, "hours": number}, Monday first, or null (inherited).
+// Dates are YYYY-MM-DD. fromJson ignores unknown keys; a malformed work
+// week or date decodes to something validate*() refuses.
+QJsonObject toJson(const CalendarDef& c);
+CalendarDef calendarFromJson(const QJsonObject& o);
+QJsonObject toJson(const CalendarException& e);
+CalendarException calendarExceptionFromJson(const QJsonObject& o);
 
 inline constexpr int kMaxExceptionDays = 366;  // one exception spans at most a year
 inline constexpr int kMaxCalendarDepth = 8;    // base chains deeper than this are refused

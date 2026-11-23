@@ -37,6 +37,7 @@ struct Project : EntityBase {
   QString finish;                             // optional target
   std::optional<double> budget;
   QString color;   // #rrggbb or empty
+  QString calendar;  // calendar id; empty = Standard
   qint64 order = 0;
 };
 

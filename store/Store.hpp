@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonObject>
+#include <QHash>
 #include <QList>
 #include <QSet>
 #include <QString>
@@ -9,6 +10,7 @@
 
 #include "core/Error.hpp"
 #include "core/Model.hpp"
+#include "core/WorkCalendar.hpp"
 
 namespace zproject::store {
 
@@ -97,6 +99,35 @@ class Store {
   // 409 cycle if the project's live links would loop with its tasks as given
   // (e.g. a task tree after a move); dry runs use it as the writes do.
   virtual Status checkLinkCycles(const QList<Task>& tasks) = 0;
+
+  // Calendars (SPEC.md §5.1, §6.1, §7.4): one pool for the installation.
+  // Standard (kStandardCalendarId) always exists: it has no base and can't be
+  // deleted. checkCalendar validates without writing (dry runs): the fields,
+  // a live base, no loop of bases (400). A calendar that a live project,
+  // task or calendar still uses can't be deleted (409 conflict, reason
+  // in_use, details.usedBy); deleting one tombstones its exceptions. A
+  // project's or task's `calendar` must name a live calendar (400).
+  virtual Status checkCalendar(const CalendarDef& c) = 0;
+  virtual Result<CalendarDef> createCalendar(const CalendarDef& c, const WriteContext& ctx) = 0;
+  virtual Result<CalendarDef> calendar(const QString& id, bool includeDeleted = false) = 0;
+  virtual Result<QList<CalendarDef>> calendars(bool includeDeleted = false) = 0;
+  virtual Result<CalendarDef> updateCalendar(const CalendarDef& c, qint64 expectedRev, const WriteContext& ctx) = 0;
+  virtual Status checkCalendarDelete(const QString& id) = 0;
+  virtual Result<CalendarDef> deleteCalendar(const QString& id, qint64 expectedRev, const WriteContext& ctx) = 0;
+  virtual Result<QList<CalendarException>> calendarExceptions(const QString& calendarId, bool includeDeleted = false) = 0;
+  virtual Result<CalendarException> calendarException(const QString& id, bool includeDeleted = false) = 0;
+  virtual Result<CalendarException> addCalendarException(const CalendarException& e, const WriteContext& ctx) = 0;
+  virtual Result<CalendarException> deleteCalendarException(const QString& id, qint64 expectedRev,
+                                                            const WriteContext& ctx) = 0;
+  // A year's holidays (core/Holidays.hpp; country "US") not already on the
+  // calendar as a holiday that day: planImportHolidays lists them,
+  // importHolidays adds them (each its own exception, deletable alone).
+  virtual Result<QList<CalendarException>> planImportHolidays(const QString& calendarId, const QString& country,
+                                                              int year) = 0;
+  virtual Result<QList<CalendarException>> importHolidays(const QString& calendarId, const QString& country, int year,
+                                                          const WriteContext& ctx) = 0;
+  // Every live calendar, resolved through its bases, by id (the scheduler's input).
+  virtual Result<QHash<QString, WorkCalendar>> workCalendars() = 0;
 
   // The sync feed: change rows with seq > since, oldest first (limit <= 500).
   virtual Result<QList<ChangeRecord>> changesSince(qint64 since, int limit = 500) = 0;

@@ -2,7 +2,7 @@
  "openapi": "3.1.0",
  "info": {
   "title": "zproject API",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "Plans served by zprojectd on 127.0.0.1:8788, published on the tailnet by\n`tailscale serve`. Every request except `GET /v1/health` needs\n`Authorization: Bearer zpt_<id>.<secret>`. Each operation names the\nscope it needs (`x-zproject-scope`; `any` = any valid token), whether\nit is destructive (`x-zproject-destructive`; tokens with\n`requireConfirm` must confirm it) and whether it takes `?dryRun=true`\n(`x-zproject-dry-run`).\n",
   "license": {
    "name": "MIT",
@@ -36,6 +36,10 @@
   {
    "name": "dependencies",
    "description": "Links between tasks (FS, SS, FF with lag)"
+  },
+  {
+   "name": "calendars",
+   "description": "Working calendars, holidays and other exceptions"
   },
   {
    "name": "sync",
@@ -913,6 +917,546 @@
            }
           }
          }
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/calendars": {
+   "get": {
+    "operationId": "listCalendars",
+    "tags": [
+     "calendars"
+    ],
+    "summary": "Every calendar, Standard first",
+    "x-zproject-scope": "resources:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/limit"
+     },
+     {
+      "$ref": "#/components/parameters/cursor"
+     },
+     {
+      "$ref": "#/components/parameters/includeDeleted"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "A page of calendars",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CalendarPage"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "post": {
+    "operationId": "createCalendar",
+    "tags": [
+     "calendars"
+    ],
+    "summary": "Add a calendar",
+    "description": "Calendars are shared by every project, so writing one needs a token for all projects (403 forbidden_project otherwise). `base` must be a live calendar, with no loop of bases and at most 8 deep.",
+    "x-zproject-scope": "resources:write",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CalendarInput"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/DryRun"
+     },
+     "201": {
+      "description": "Created",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Calendar"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "415": {
+      "$ref": "#/components/responses/UnsupportedMediaType"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/calendars/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "operationId": "getCalendar",
+    "tags": [
+     "calendars"
+    ],
+    "summary": "One calendar",
+    "x-zproject-scope": "resources:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "responses": {
+     "200": {
+      "description": "The calendar",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/Calendar"
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "patch": {
+    "operationId": "updateCalendar",
+    "tags": [
+     "calendars"
+    ],
+    "summary": "Change a calendar (If-Match honoured)",
+    "description": "Standard has no base. Needs a token for all projects.",
+    "x-zproject-scope": "resources:write",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     },
+     {
+      "$ref": "#/components/parameters/ifMatch"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CalendarInput"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "The updated calendar, or a dry-run result with ?dryRun=true",
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "$ref": "#/components/schemas/Calendar"
+          },
+          {
+           "$ref": "#/components/schemas/DryRunResult"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "412": {
+      "$ref": "#/components/responses/RevMismatch"
+     },
+     "415": {
+      "$ref": "#/components/responses/UnsupportedMediaType"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "delete": {
+    "operationId": "deleteCalendar",
+    "tags": [
+     "calendars"
+    ],
+    "summary": "Tombstone a calendar and its exceptions (destructive)",
+    "description": "409 conflict with details.reason `standard` for Standard, or `in_use` with details.usedBy {projects, tasks, calendars} while a live project, task or calendar still uses it. Needs a token for all projects.",
+    "x-zproject-scope": "resources:write",
+    "x-zproject-destructive": true,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     },
+     {
+      "$ref": "#/components/parameters/ifMatch"
+     },
+     {
+      "$ref": "#/components/parameters/confirm"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The tombstoned calendar, or a dry-run result with a confirmId",
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "$ref": "#/components/schemas/Calendar"
+          },
+          {
+           "$ref": "#/components/schemas/DryRunResult"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "412": {
+      "$ref": "#/components/responses/RevMismatch"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/calendars/{id}/exceptions": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "get": {
+    "operationId": "listCalendarExceptions",
+    "tags": [
+     "calendars"
+    ],
+    "summary": "A calendar's own exceptions, by date",
+    "x-zproject-scope": "resources:read",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": false,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/limit"
+     },
+     {
+      "$ref": "#/components/parameters/cursor"
+     },
+     {
+      "$ref": "#/components/parameters/includeDeleted"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "A page of exceptions",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CalendarExceptionPage"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   },
+   "post": {
+    "operationId": "addCalendarException",
+    "tags": [
+     "calendars"
+    ],
+    "summary": "Add a holiday, a non-working stretch or custom hours",
+    "description": "`holiday` and `non_working` take days out of the calendar; `custom_hours` changes the hours of days that are working anyway. One exception spans at most 366 days. Needs a token for all projects.",
+    "x-zproject-scope": "resources:write",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CalendarExceptionInput"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "$ref": "#/components/responses/DryRun"
+     },
+     "201": {
+      "description": "Created",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/CalendarException"
+        }
+       }
+      }
+     },
+     "400": {
+      "$ref": "#/components/responses/Validation"
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "415": {
+      "$ref": "#/components/responses/UnsupportedMediaType"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/calendar-exceptions/{id}": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "delete": {
+    "operationId": "deleteCalendarException",
+    "tags": [
+     "calendars"
+    ],
+    "summary": "Tombstone one exception (destructive)",
+    "x-zproject-scope": "resources:write",
+    "x-zproject-destructive": true,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     },
+     {
+      "$ref": "#/components/parameters/ifMatch"
+     },
+     {
+      "$ref": "#/components/parameters/confirm"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The tombstoned exception, or a dry-run result with a confirmId",
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "$ref": "#/components/schemas/CalendarException"
+          },
+          {
+           "$ref": "#/components/schemas/DryRunResult"
+          }
+         ]
+        }
+       }
+      }
+     },
+     "401": {
+      "$ref": "#/components/responses/Unauthenticated"
+     },
+     "403": {
+      "$ref": "#/components/responses/Forbidden"
+     },
+     "404": {
+      "$ref": "#/components/responses/NotFound"
+     },
+     "409": {
+      "$ref": "#/components/responses/Conflict"
+     },
+     "412": {
+      "$ref": "#/components/responses/RevMismatch"
+     },
+     "429": {
+      "$ref": "#/components/responses/RateLimited"
+     }
+    }
+   }
+  },
+  "/v1/calendars/{id}/import-holidays": {
+   "parameters": [
+    {
+     "$ref": "#/components/parameters/id"
+    }
+   ],
+   "post": {
+    "operationId": "importHolidays",
+    "tags": [
+     "calendars"
+    ],
+    "summary": "Add a year's public holidays (computed, not fetched)",
+    "description": "Adds the year's US federal holidays (observed dates, so New Year's Day of the next year can fall on 31 December) that the calendar doesn't already have as a holiday that day; each is its own exception. The body, if any, must be empty. Needs a token for all projects.",
+    "x-zproject-scope": "resources:write",
+    "x-zproject-destructive": false,
+    "x-zproject-dry-run": true,
+    "parameters": [
+     {
+      "$ref": "#/components/parameters/dryRun"
+     },
+     {
+      "name": "country",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "enum": [
+        "US"
+       ]
+      }
+     },
+     {
+      "name": "year",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "minimum": 1971,
+       "maximum": 9998
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "The exceptions added, or a dry-run result with ?dryRun=true",
+      "content": {
+       "application/json": {
+        "schema": {
+         "oneOf": [
+          {
+           "type": "object",
+           "required": [
+            "items"
+           ],
+           "properties": {
+            "items": {
+             "type": "array",
+             "items": {
+              "$ref": "#/components/schemas/CalendarException"
+             }
+            }
+           }
+          },
+          {
+           "$ref": "#/components/schemas/DryRunResult"
+          }
+         ]
         }
        }
       }
@@ -1879,6 +2423,14 @@
      },
      "order": {
       "type": "integer"
+     },
+     "calendar": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "pattern": "^[0-9a-f]{20}$",
+      "description": "A live calendar's id; null = Standard"
      }
     }
    },
@@ -1964,6 +2516,14 @@
      "deadline": {
       "$ref": "#/components/schemas/Date"
      },
+     "calendar": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "pattern": "^[0-9a-f]{20}$",
+      "description": "A live calendar's id; null = the project's"
+     },
      "percentComplete": {
       "type": "integer",
       "minimum": 0,
@@ -2037,6 +2597,184 @@
       "type": "integer",
       "minimum": 0,
       "description": "0-based index among the new parent's live children, not counting the task; omitted = last"
+     }
+    }
+   },
+   "WorkDay": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "working",
+     "hours"
+    ],
+    "properties": {
+     "working": {
+      "type": "boolean"
+     },
+     "hours": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 24,
+      "description": "More than 0 on a working day; 0 otherwise"
+     }
+    }
+   },
+   "CalendarInput": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string",
+      "minLength": 1
+     },
+     "base": {
+      "type": [
+       "string",
+       "null"
+      ],
+      "pattern": "^[0-9a-f]{20}$",
+      "description": "The calendar this one inherits from (its work week, if this has none, and its exceptions)"
+     },
+     "workWeek": {
+      "type": [
+       "array",
+       "null"
+      ],
+      "minItems": 7,
+      "maxItems": 7,
+      "items": {
+       "$ref": "#/components/schemas/WorkDay"
+      },
+      "description": "Monday first, with at least one working day; null = the base's (at the root, Monday\u2013Friday 8 h)"
+     },
+     "hoursPerDay": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 24
+     }
+    }
+   },
+   "Calendar": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/EntityBase"
+     },
+     {
+      "$ref": "#/components/schemas/CalendarInput"
+     },
+     {
+      "required": [
+       "name",
+       "base",
+       "workWeek",
+       "hoursPerDay"
+      ]
+     }
+    ]
+   },
+   "CalendarExceptionInput": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "from"
+    ],
+    "properties": {
+     "from": {
+      "$ref": "#/components/schemas/Date"
+     },
+     "to": {
+      "allOf": [
+       {
+        "$ref": "#/components/schemas/Date"
+       }
+      ],
+      "description": "Defaults to `from`"
+     },
+     "kind": {
+      "type": "string",
+      "enum": [
+       "holiday",
+       "non_working",
+       "custom_hours"
+      ]
+     },
+     "hours": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 24,
+      "description": "custom_hours only"
+     },
+     "label": {
+      "type": "string",
+      "maxLength": 200
+     }
+    }
+   },
+   "CalendarException": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/EntityBase"
+     },
+     {
+      "$ref": "#/components/schemas/CalendarExceptionInput"
+     },
+     {
+      "type": "object",
+      "required": [
+       "calendar",
+       "from",
+       "to",
+       "kind",
+       "hours",
+       "label"
+      ],
+      "properties": {
+       "calendar": {
+        "$ref": "#/components/schemas/Id"
+       }
+      }
+     }
+    ]
+   },
+   "CalendarPage": {
+    "type": "object",
+    "required": [
+     "items",
+     "nextCursor"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/Calendar"
+      }
+     },
+     "nextCursor": {
+      "type": [
+       "string",
+       "null"
+      ]
+     }
+    }
+   },
+   "CalendarExceptionPage": {
+    "type": "object",
+    "required": [
+     "items",
+     "nextCursor"
+    ],
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "$ref": "#/components/schemas/CalendarException"
+      }
+     },
+     "nextCursor": {
+      "type": [
+       "string",
+       "null"
+      ]
      }
     }
    },
