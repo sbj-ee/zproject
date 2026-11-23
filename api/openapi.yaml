@@ -7,7 +7,7 @@
 openapi: 3.1.0
 info:
   title: zproject API
-  version: 0.13.1
+  version: 0.13.2
   description: |
     Plans served by zprojectd on 127.0.0.1:8788, published on the tailnet by
     `tailscale serve`. Every request except `GET /v1/health` needs
