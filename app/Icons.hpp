@@ -28,6 +28,7 @@ enum class Glyph {
   CheckUpdates,
   Gantt,
   Milestones,
+  Activity,
 };
 
 QIcon glyph(Glyph g, const ThemeColors& c);

@@ -7,6 +7,32 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.15.0 — 2026-11-23
+
+Desktop client plan, PR 10: project activity (plan §3.6; SPEC §8.3, §18).
+Without the audit-log viewer: device tokens keep no `audit:read` (plan Q7).
+
+- **View → Activity** (Ctrl + Shift + A, and an Activity button on the
+  toolbar after Milestones): the project's changes, newest first, from the
+  change records the cache already keeps (no extra request; works
+  offline). Columns: when (local time), who, the item ("1.2 Drawings" or
+  "Project details") and what changed.
+- **Who**: "This computer" for this device's token, "system" for the
+  server's roll-ups, otherwise the token label (whole label in the
+  tooltip). **Filters**: by who, and by tasks or project details; both, and
+  the selection, survive refreshes.
+- **Enter** (or a double-click) on a task's row opens it in the outline. A
+  deleted task keeps the last title its records carry, marked "(deleted)".
+- Each row is described in words for screen readers. The note under the
+  list counts the changes and says when only the newest 1,000 are shown.
+- With a project-limited token (no change feed) the view says so and
+  points to the task's History tab.
+- The History tab and the activity view now share one wording of a change
+  (`app/ChangeText`), which also names a created project by its name
+  rather than listing every field.
+- A new Activity icon (a clock face). Help has an Activity section and the
+  new shortcut.
+
 ## 0.14.0 — 2026-11-23
 
 Desktop client plan, PR 9: the milestones view (plan §3.5; SPEC §7.1, §8.3,

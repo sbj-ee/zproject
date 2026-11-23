@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.14.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.15.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",

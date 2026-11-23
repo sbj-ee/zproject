@@ -33,6 +33,7 @@ class QToolButton;
 namespace zproject::app {
 
 class HelpDialog;
+class ActivityView;
 class GanttView;
 class MilestonesView;
 class OutlineView;
@@ -134,6 +135,8 @@ class MainWindow : public QMainWindow {
   GanttView* gantt() const { return gantt_; }
   // View → Milestones (plan §3.5, SPEC.md §7.1).
   MilestonesView* milestones() const { return milestones_; }
+  // View → Activity (plan §3.6, SPEC.md §8.3).
+  ActivityView* activity() const { return activity_; }
   TaskActions* taskActions() const { return taskActions_; }
   TaskInspector* taskInspector() const { return taskInspector_; }
   // The "Save your changes?" question while one is open (tests).
@@ -141,6 +144,7 @@ class MainWindow : public QMainWindow {
   void showOutline();
   void showGantt();
   void showMilestones();
+  void showActivity();
   // The window title for a project (empty: none selected).
   static QString titleFor(const QString& projectName);
   QString viewTaskId() const;
@@ -208,13 +212,14 @@ class MainWindow : public QMainWindow {
   QPushButton* deleteButton_ = nullptr;
   ProjectActions* projectActions_ = nullptr;
   // What a selected project shows: its details or its outline.
-  enum class ProjectPage { Details, Outline, Gantt, Milestones };
+  enum class ProjectPage { Details, Outline, Gantt, Milestones, Activity };
   ProjectPage page_ = ProjectPage::Details;
   QWidget* detailsPage_ = nullptr;
   QPushButton* outlineButton_ = nullptr;
   OutlineView* outline_ = nullptr;
   GanttView* gantt_ = nullptr;
   MilestonesView* milestones_ = nullptr;
+  ActivityView* activity_ = nullptr;
   TaskActions* taskActions_ = nullptr;
   QString pendingSelect_;  // a project just created: select it once the feed has it
   QDockWidget* sidebarDock_ = nullptr;

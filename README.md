@@ -1,6 +1,6 @@
 # zproject
 
-**0.14.0**
+**0.15.0**
 
 Current release: **0.13.0**
 
@@ -12,7 +12,7 @@ one repository (C++20, Qt 6):
 | Program | What it is |
 |---|---|
 | `zprojectd` | Headless server (Qt Core/Network, SQLite). Listens on `127.0.0.1:8788` only and is published on the tailnet with `tailscale serve`. Runs on a home server (Pop!_OS 24.04, amd64). |
-| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. The app shell (menus, themes, Help, Preferences), the signed in-app updater, the project list and project details editor, the task outline (WBS tree), the task editor, a read-only Gantt and the milestones list; its client core (non-blocking `/v1` client, read-only cache, change-feed sync) is in `client/` and tested headless. |
+| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. The app shell (menus, themes, Help, Preferences), the signed in-app updater, the project list and project details editor, the task outline (WBS tree), the task editor, a read-only Gantt, the milestones list and project activity; its client core (non-blocking `/v1` client, read-only cache, change-feed sync) is in `client/` and tested headless. |
 | `zproject-cli` | Command-line client of the `/v1` API, shipped with the desktop app (Linux `.deb`, inside `zproject.app` on macOS). |
 
 The full design is in [SPEC.md](SPEC.md).
@@ -44,7 +44,11 @@ stored dates, summary brackets, milestone diamonds, progress and deadline
 flags, all readable by screen readers. View → Milestones (Ctrl + Shift + M)
 lists the project's milestones, or every project's, by date, with days to
 go or days late and missed deadlines; Enter opens one in the outline, and
-Show in Gantt on the timeline. The title bar shows the version.
+Show in Gantt on the timeline. View → Activity (Ctrl + Shift + A) lists
+what changed in the project, newest first, from the change feed the app
+already keeps: when, who ("This computer" for this device's token), which
+task, and what changed, filtered by who and by tasks or project details.
+The title bar shows the version.
 The project sidebar, the menus and the toolbar (View → Show Toolbar) use
 zproject's own icons (a folder per project with its RAG colour), drawn the
 same on every platform; on Linux the menu bar always stays in the window.
@@ -72,6 +76,10 @@ their minisign signature and SHA-256 (SPEC.md §21); it never touches
 |---|---|
 | ![Milestones, all projects, Light](docs/screenshots/milestones-light.png) | ![Milestones, all projects, Dark](docs/screenshots/milestones-dark.png) |
 
+| Activity, Light | Activity, Dark |
+|---|---|
+| ![Project activity, Light](docs/screenshots/activity-light.png) | ![Project activity, Dark](docs/screenshots/activity-dark.png) |
+
 | Task editor | Checks before saving | Task history |
 |---|---|---|
 | ![Task editor, Details tab](docs/screenshots/taskeditor-details-light.png) | ![Schedule tab with field errors](docs/screenshots/taskeditor-schedule-errors.png) | ![History tab](docs/screenshots/taskeditor-history.png) |
@@ -80,7 +88,7 @@ More in [docs/screenshots](docs/screenshots/): High contrast, first run,
 Preferences, Help, About, the update dialog, the project editor, the delete
 previews, the outline and the task editor in Dark and High contrast, the
 ripple preview and the sidebar's icons, rendered offscreen from example data
-(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R 'tst_appshell|tst_update|tst_projects|tst_outline|tst_taskeditor|tst_gantt|tst_milestones'`).
+(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R 'tst_appshell|tst_update|tst_projects|tst_outline|tst_taskeditor|tst_gantt|tst_milestones|tst_activity'`).
 
 ## Running the server
 
