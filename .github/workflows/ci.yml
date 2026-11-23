@@ -401,7 +401,7 @@ jobs:
             -DZPROJECT_FUZZ=ON -DZPROJECT_BUILD_GUI=OFF -DZPROJECT_BUILD_TESTS=OFF
 
       - name: Build the harnesses
-        run: cmake --build build-fuzz --target fuzz_link_notation fuzz_dependency_json
+        run: cmake --build build-fuzz --target fuzz_link_notation fuzz_dependency_json fuzz_calendar_json
 
       - name: Fuzz
         env:
@@ -410,7 +410,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/artifacts"
-          for h in link_notation dependency_json; do
+          for h in link_notation dependency_json calendar_json; do
             corpus="$RUNNER_TEMP/corpus-$h"
             cp -R "fuzz/corpus/$h" "$corpus"
             build-fuzz/fuzz/fuzz_$h -max_total_time=60 -print_final_stats=1 \

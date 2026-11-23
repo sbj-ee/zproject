@@ -11,6 +11,7 @@
 #include <functional>
 #include <tuple>
 
+#include "core/Holidays.hpp"
 #include "core/Id.hpp"
 #include "core/Rollup.hpp"
 #include "core/Schedule.hpp"
@@ -28,12 +29,12 @@ const QString kDependencyColumns =
 
 const QString kProjectColumns = QStringLiteral(
     "id, createdAt, updatedAt, deleted, rev, name, description, objectives, scope, outOfScope, "
-    "successCriteria, owner, sponsor, status, rag, priority, start, finish, budget, color, ord");
+    "successCriteria, owner, sponsor, status, rag, priority, start, finish, budget, color, ord, calendar");
 
 const QString kTaskColumns = QStringLiteral(
     "id, createdAt, updatedAt, deleted, rev, project, parent, ord, title, notes, type, mode, "
     "duration, start, finish, constraintType, constraintDate, deadline, percentComplete, "
-    "actualStart, actualFinish, status, priority, fixedCost");
+    "actualStart, actualFinish, status, priority, fixedCost, calendar");
 
 Project readProject(const Statement& s) {
   Project p;
@@ -58,6 +59,7 @@ Project readProject(const Statement& s) {
   if (!s.isNull(18)) p.budget = s.real(18);
   p.color = s.text(19);
   p.order = s.int64(20);
+  p.calendar = s.text(21);
   return p;
 }
 
@@ -87,6 +89,7 @@ Task readTask(const Statement& s) {
   t.status = s.text(21);
   t.priority = static_cast<int>(s.int64(22));
   t.fixedCost = s.real(23);
+  t.calendar = s.text(24);
   return t;
 }
 
@@ -176,13 +179,13 @@ Status SqliteStore::appendChange(const QString& kind, const QString& id, const Q
 Status SqliteStore::writeProject(const Project& p, bool insert) {
   const QString sql =
       insert ? QStringLiteral("INSERT INTO project (%1) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, "
-                              "?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)")
+                              "?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)")
                    .arg(kProjectColumns)
              : QStringLiteral(
                    "UPDATE project SET createdAt = ?2, updatedAt = ?3, deleted = ?4, rev = ?5, name = ?6, "
                    "description = ?7, objectives = ?8, scope = ?9, outOfScope = ?10, successCriteria = ?11, "
                    "owner = ?12, sponsor = ?13, status = ?14, rag = ?15, priority = ?16, start = ?17, "
-                   "finish = ?18, budget = ?19, color = ?20, ord = ?21 WHERE id = ?1");
+                   "finish = ?18, budget = ?19, color = ?20, ord = ?21, calendar = ?22 WHERE id = ?1");
   auto st = db_.prepare(sql);
   if (!st) return st.error();
   Statement& s = st.value();
@@ -196,21 +199,21 @@ Status SqliteStore::writeProject(const Project& p, bool insert) {
   } else {
     s.bindNull(19);
   }
-  s.bindNullable(20, p.color).bind(21, p.order);
+  s.bindNullable(20, p.color).bind(21, p.order).bindNullable(22, p.calendar);
   return s.run();
 }
 
 Status SqliteStore::writeTask(const Task& t, bool insert) {
   const QString sql =
       insert ? QStringLiteral("INSERT INTO task (%1) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, "
-                              "?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)")
+                              "?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)")
                    .arg(kTaskColumns)
              : QStringLiteral(
                    "UPDATE task SET createdAt = ?2, updatedAt = ?3, deleted = ?4, rev = ?5, project = ?6, "
                    "parent = ?7, ord = ?8, title = ?9, notes = ?10, type = ?11, mode = ?12, duration = ?13, "
                    "start = ?14, finish = ?15, constraintType = ?16, constraintDate = ?17, deadline = ?18, "
                    "percentComplete = ?19, actualStart = ?20, actualFinish = ?21, status = ?22, "
-                   "priority = ?23, fixedCost = ?24 WHERE id = ?1");
+                   "priority = ?23, fixedCost = ?24, calendar = ?25 WHERE id = ?1");
   auto st = db_.prepare(sql);
   if (!st) return st.error();
   Statement& s = st.value();
@@ -220,7 +223,7 @@ Status SqliteStore::writeTask(const Task& t, bool insert) {
   s.bindNullable(14, t.start).bindNullable(15, t.finish).bind(16, t.constraintType);
   s.bindNullable(17, t.constraintDate).bindNullable(18, t.deadline).bind(19, t.percentComplete);
   s.bindNullable(20, t.actualStart).bindNullable(21, t.actualFinish).bind(22, t.status);
-  s.bind(23, t.priority).bind(24, t.fixedCost);
+  s.bind(23, t.priority).bind(24, t.fixedCost).bindNullable(25, t.calendar);
   return s.run();
 }
 
@@ -230,6 +233,7 @@ Result<Project> SqliteStore::createProject(const Project& in, const WriteContext
   if (auto e = toValidationError(validateProject(in))) return *e;
   Transaction tx(db_);
   if (!tx.ok()) return tx.error();
+  if (auto s = checkCalendarRef(in.calendar); !s) return s.error();
 
   Project p = in;
   p.id = newId();
@@ -286,6 +290,9 @@ Result<Project> SqliteStore::updateProject(const Project& in, qint64 expectedRev
   p.rev = cur->rev;
   p.updatedAt = cur->updatedAt;
   if (auto e = toValidationError(validateProject(p))) return *e;
+  if (p.calendar != cur->calendar) {
+    if (auto s = checkCalendarRef(p.calendar); !s) return s.error();
+  }
   const FieldDiff d = diffFields(toJson(*cur), toJson(p));
   if (d.empty()) return *cur;  // nothing changed: no new revision
 
@@ -368,6 +375,7 @@ Result<Task> SqliteStore::createTask(const Task& in, const WriteContext& ctx) {
   if (!tx.ok()) return tx.error();
   auto proj = project(in.project);
   if (!proj) return proj.error();
+  if (auto s = checkCalendarRef(in.calendar); !s) return s.error();
 
   Task t = in;
   t.id.clear();
@@ -455,6 +463,9 @@ Result<Task> SqliteStore::updateTask(const Task& in, qint64 expectedRev, const W
   t.deleted = false;
   t.rev = cur->rev;
   if (auto e = toValidationError(validateTask(t))) return *e;
+  if (t.calendar != cur->calendar) {
+    if (auto s = checkCalendarRef(t.calendar); !s) return s.error();
+  }
   if (t.parent != cur->parent) {
     if (auto s = checkParent(t); !s) return s.error();
     auto all = tasks(t.project);
@@ -946,6 +957,362 @@ Result<QList<Dependency>> SqliteStore::planRestoreLinks(const QString& taskId) {
     next.append(d);
   }
   if (auto s = checkCycles(after, next); !s) return s.error();
+  return out;
+}
+
+// ---- calendars --------------------------------------------------------------
+
+namespace {
+
+const QString kCalendar = QStringLiteral("calendar");
+const QString kCalendarException = QStringLiteral("calendar_exception");
+const QString kCalendarColumns =
+    QStringLiteral("id, createdAt, updatedAt, deleted, rev, name, base, workWeek, hoursPerDay");
+const QString kExceptionColumns =
+    QStringLiteral("id, createdAt, updatedAt, deleted, rev, calendar, fromDate, toDate, kind, hours, label");
+
+CalendarDef readCalendar(const Statement& s) {
+  QJsonObject o{{QStringLiteral("workWeek"), QJsonDocument::fromJson(s.text(7).toUtf8()).array()}};
+  CalendarDef c = s.isNull(7) ? CalendarDef{} : calendarFromJson(o);
+  c.id = s.text(0);
+  c.createdAt = s.text(1);
+  c.updatedAt = s.text(2);
+  c.deleted = s.int64(3) != 0;
+  c.rev = s.int64(4);
+  c.name = s.text(5);
+  c.base = s.text(6);
+  c.hoursPerDay = s.real(8);
+  return c;
+}
+
+CalendarException readException(const Statement& s) {
+  CalendarException e;
+  e.id = s.text(0);
+  e.createdAt = s.text(1);
+  e.updatedAt = s.text(2);
+  e.deleted = s.int64(3) != 0;
+  e.rev = s.int64(4);
+  e.calendar = s.text(5);
+  e.from = QDate::fromString(s.text(6), Qt::ISODate);
+  e.to = QDate::fromString(s.text(7), Qt::ISODate);
+  e.kind = s.text(8);
+  e.hours = s.real(9);
+  e.label = s.text(10);
+  return e;
+}
+
+Error calendarField(const char* field, const QString& message) {
+  return Error::validation(message, QJsonObject{{QStringLiteral("field"), QLatin1String(field)}});
+}
+
+}  // namespace
+
+Status SqliteStore::writeCalendar(const CalendarDef& c, bool insert) {
+  const QString sql = insert ? QStringLiteral("INSERT INTO calendar (%1) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)")
+                                   .arg(kCalendarColumns)
+                             : QStringLiteral(
+                                   "UPDATE calendar SET createdAt = ?2, updatedAt = ?3, deleted = ?4, rev = ?5, "
+                                   "name = ?6, base = ?7, workWeek = ?8, hoursPerDay = ?9 WHERE id = ?1");
+  auto st = db_.prepare(sql);
+  if (!st) return st.error();
+  Statement& s = st.value();
+  s.bind(1, c.id).bind(2, c.createdAt).bind(3, c.updatedAt).bind(4, c.deleted).bind(5, c.rev);
+  s.bind(6, c.name).bindNullable(7, c.base);
+  if (c.workWeek) {
+    s.bind(8, QString::fromUtf8(
+                  QJsonDocument(toJson(c).value(QStringLiteral("workWeek")).toArray()).toJson(QJsonDocument::Compact)));
+  } else {
+    s.bindNull(8);
+  }
+  s.bind(9, c.hoursPerDay);
+  return s.run();
+}
+
+Status SqliteStore::writeCalendarException(const CalendarException& e, bool insert) {
+  const QString sql =
+      insert ? QStringLiteral("INSERT INTO calendar_exception (%1) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)")
+                   .arg(kExceptionColumns)
+             : QStringLiteral(
+                   "UPDATE calendar_exception SET createdAt = ?2, updatedAt = ?3, deleted = ?4, rev = ?5, "
+                   "calendar = ?6, fromDate = ?7, toDate = ?8, kind = ?9, hours = ?10, label = ?11 WHERE id = ?1");
+  auto st = db_.prepare(sql);
+  if (!st) return st.error();
+  Statement& s = st.value();
+  s.bind(1, e.id).bind(2, e.createdAt).bind(3, e.updatedAt).bind(4, e.deleted).bind(5, e.rev);
+  s.bind(6, e.calendar).bind(7, e.from.toString(Qt::ISODate)).bind(8, e.to.toString(Qt::ISODate));
+  s.bind(9, e.kind).bind(10, e.hours).bind(11, e.label);
+  return s.run();
+}
+
+Status SqliteStore::checkCalendarRef(const QString& id) {
+  if (id.isEmpty()) return Ok{};
+  if (!calendar(id)) return calendarField("calendar", QStringLiteral("calendar %1 not found").arg(id));
+  return Ok{};
+}
+
+Result<CalendarDef> SqliteStore::calendar(const QString& id, bool includeDeleted) {
+  auto st = db_.prepare(QStringLiteral("SELECT %1 FROM calendar WHERE id = ?1").arg(kCalendarColumns));
+  if (!st) return st.error();
+  st.value().bind(1, id);
+  Error err;
+  if (!st.value().step(&err)) {
+    if (!err.code.isEmpty()) return err;
+    return Error::notFound(QStringLiteral("calendar %1 not found").arg(id));
+  }
+  CalendarDef c = readCalendar(st.value());
+  if (c.deleted && !includeDeleted) return Error::notFound(QStringLiteral("calendar %1 is deleted").arg(id));
+  return c;
+}
+
+Result<QList<CalendarDef>> SqliteStore::calendars(bool includeDeleted) {
+  // Standard first, then by name.
+  auto st = db_.prepare(QStringLiteral("SELECT %1 FROM calendar %2 ORDER BY id <> ?1, name COLLATE NOCASE, id")
+                            .arg(kCalendarColumns, includeDeleted ? QString() : QStringLiteral("WHERE deleted = 0")));
+  if (!st) return st.error();
+  st.value().bind(1, QString(kStandardCalendarId));
+  QList<CalendarDef> out;
+  Error err;
+  while (st.value().step(&err)) out.append(readCalendar(st.value()));
+  if (!err.code.isEmpty()) return err;
+  return out;
+}
+
+Status SqliteStore::checkCalendar(const CalendarDef& c) {
+  if (auto e = toValidationError(validateCalendar(c))) return *e;
+  if (c.id == kStandardCalendarId && !c.base.isEmpty()) {
+    return calendarField("base", QStringLiteral("Standard has no base calendar"));
+  }
+  if (c.base.isEmpty()) return Ok{};
+  if (!calendar(c.base)) return calendarField("base", QStringLiteral("calendar %1 not found").arg(c.base));
+  // No loop of bases (and not too deep): resolve with this calendar as it would be.
+  auto all = calendars();
+  if (!all) return all.error();
+  QHash<QString, CalendarDef> defs;
+  for (const CalendarDef& d : all.value()) defs.insert(d.id, d);
+  CalendarDef next = c;
+  if (next.id.isEmpty()) next.id = QStringLiteral("(new)");
+  defs.insert(next.id, next);
+  if (auto r = WorkCalendar::resolve(next.id, defs); !r) {
+    return calendarField("base", r.error().message);
+  }
+  return Ok{};
+}
+
+Result<CalendarDef> SqliteStore::createCalendar(const CalendarDef& in, const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  CalendarDef c = in;
+  c.id.clear();
+  c.exceptions.clear();
+  if (auto s = checkCalendar(c); !s) return s.error();
+  c.id = newId();
+  c.createdAt = c.updatedAt = nextTimestamp();
+  c.deleted = false;
+  c.rev = 1;
+  if (auto s = writeCalendar(c, true); !s) return s.error();
+  const FieldDiff d = diffFields({}, toJson(c));
+  if (auto s = appendChange(kCalendar, c.id, d.before, d.after, ctx, c.updatedAt); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return c;
+}
+
+Result<CalendarDef> SqliteStore::updateCalendar(const CalendarDef& in, qint64 expectedRev, const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  auto cur = calendar(in.id);
+  if (!cur) return cur.error();
+  if (cur->rev != expectedRev) return Error::revMismatch(expectedRev, cur->rev);
+  CalendarDef c = in;
+  c.createdAt = cur->createdAt;
+  c.updatedAt = cur->updatedAt;
+  c.deleted = false;
+  c.rev = cur->rev;
+  c.exceptions.clear();
+  if (auto s = checkCalendar(c); !s) return s.error();
+  const FieldDiff d = diffFields(toJson(cur.value()), toJson(c));
+  if (d.empty()) return cur.value();
+  c.rev = cur->rev + 1;
+  c.updatedAt = nextTimestamp();
+  if (auto s = writeCalendar(c, false); !s) return s.error();
+  if (auto s = appendChange(kCalendar, c.id, d.before, d.after, ctx, c.updatedAt); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return calendar(c.id);
+}
+
+Status SqliteStore::checkCalendarDelete(const QString& id) {
+  auto cur = calendar(id);
+  if (!cur) return cur.error();
+  if (id == kStandardCalendarId) {
+    return Error::conflict(QStringLiteral("Standard can't be deleted"),
+                           QJsonObject{{QStringLiteral("reason"), QStringLiteral("standard")}});
+  }
+  QJsonObject usedBy;
+  for (const auto& [key, sql] :
+       {std::pair{"projects", "SELECT id FROM project WHERE calendar = ?1 AND deleted = 0 ORDER BY id"},
+        std::pair{"tasks", "SELECT id FROM task WHERE calendar = ?1 AND deleted = 0 ORDER BY id"},
+        std::pair{"calendars", "SELECT id FROM calendar WHERE base = ?1 AND deleted = 0 ORDER BY id"}}) {
+    auto st = db_.prepare(QString::fromLatin1(sql));
+    if (!st) return st.error();
+    st.value().bind(1, id);
+    QJsonArray ids;
+    Error err;
+    while (st.value().step(&err)) ids.append(st.value().text(0));
+    if (!err.code.isEmpty()) return err;
+    if (!ids.isEmpty()) usedBy.insert(QLatin1String(key), ids);
+  }
+  if (!usedBy.isEmpty()) {
+    return Error::conflict(QStringLiteral("calendar %1 is still in use").arg(cur->name),
+                           QJsonObject{{QStringLiteral("reason"), QStringLiteral("in_use")},
+                                       {QStringLiteral("usedBy"), usedBy}});
+  }
+  return Ok{};
+}
+
+Result<CalendarDef> SqliteStore::deleteCalendar(const QString& id, qint64 expectedRev, const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  auto cur = calendar(id);
+  if (!cur) return cur.error();
+  if (cur->rev != expectedRev) return Error::revMismatch(expectedRev, cur->rev);
+  if (auto s = checkCalendarDelete(id); !s) return s.error();
+  const QString ts = nextTimestamp();
+  auto excs = calendarExceptions(id);
+  if (!excs) return excs.error();
+  for (const CalendarException& e : excs.value()) {
+    CalendarException gone = e;
+    gone.deleted = true;
+    gone.rev = e.rev + 1;
+    gone.updatedAt = ts;
+    if (auto s = writeCalendarException(gone, false); !s) return s.error();
+    const FieldDiff d = diffFields(toJson(e), toJson(gone));
+    if (auto s = appendChange(kCalendarException, e.id, d.before, d.after, ctx, ts); !s) return s.error();
+  }
+  CalendarDef c = cur.value();
+  c.deleted = true;
+  c.rev = cur->rev + 1;
+  c.updatedAt = ts;
+  if (auto s = writeCalendar(c, false); !s) return s.error();
+  const FieldDiff d = diffFields(toJson(cur.value()), toJson(c));
+  if (auto s = appendChange(kCalendar, id, d.before, d.after, ctx, ts); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return calendar(id, true);
+}
+
+Result<QList<CalendarException>> SqliteStore::calendarExceptions(const QString& calendarId, bool includeDeleted) {
+  auto st = db_.prepare(QStringLiteral("SELECT %1 FROM calendar_exception WHERE calendar = ?1 %2 ORDER BY fromDate, id")
+                            .arg(kExceptionColumns, includeDeleted ? QString() : QStringLiteral("AND deleted = 0")));
+  if (!st) return st.error();
+  st.value().bind(1, calendarId);
+  QList<CalendarException> out;
+  Error err;
+  while (st.value().step(&err)) out.append(readException(st.value()));
+  if (!err.code.isEmpty()) return err;
+  return out;
+}
+
+Result<CalendarException> SqliteStore::calendarException(const QString& id, bool includeDeleted) {
+  auto st = db_.prepare(QStringLiteral("SELECT %1 FROM calendar_exception WHERE id = ?1").arg(kExceptionColumns));
+  if (!st) return st.error();
+  st.value().bind(1, id);
+  Error err;
+  if (!st.value().step(&err)) {
+    if (!err.code.isEmpty()) return err;
+    return Error::notFound(QStringLiteral("calendar exception %1 not found").arg(id));
+  }
+  CalendarException e = readException(st.value());
+  if (e.deleted && !includeDeleted) return Error::notFound(QStringLiteral("calendar exception %1 is deleted").arg(id));
+  return e;
+}
+
+Result<CalendarException> SqliteStore::addCalendarException(const CalendarException& in, const WriteContext& ctx) {
+  if (auto e = toValidationError(validateCalendarException(in))) return *e;
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  if (auto c = calendar(in.calendar); !c) return c.error();
+  CalendarException e = in;
+  e.id = newId();
+  e.createdAt = e.updatedAt = nextTimestamp();
+  e.deleted = false;
+  e.rev = 1;
+  if (auto s = writeCalendarException(e, true); !s) return s.error();
+  const FieldDiff d = diffFields({}, toJson(e));
+  if (auto s = appendChange(kCalendarException, e.id, d.before, d.after, ctx, e.updatedAt); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return e;
+}
+
+Result<CalendarException> SqliteStore::deleteCalendarException(const QString& id, qint64 expectedRev,
+                                                               const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  auto cur = calendarException(id);
+  if (!cur) return cur.error();
+  if (cur->rev != expectedRev) return Error::revMismatch(expectedRev, cur->rev);
+  CalendarException e = cur.value();
+  e.deleted = true;
+  e.rev = cur->rev + 1;
+  e.updatedAt = nextTimestamp();
+  if (auto s = writeCalendarException(e, false); !s) return s.error();
+  const FieldDiff d = diffFields(toJson(cur.value()), toJson(e));
+  if (auto s = appendChange(kCalendarException, id, d.before, d.after, ctx, e.updatedAt); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return calendarException(id, true);
+}
+
+Result<QList<CalendarException>> SqliteStore::planImportHolidays(const QString& calendarId, const QString& country,
+                                                                 int year) {
+  if (country != QLatin1String("US")) {
+    return calendarField("country", QStringLiteral("only US holidays can be imported so far"));
+  }
+  if (year < 1971 || year > 9998) return calendarField("year", QStringLiteral("year must be 1971 to 9998"));
+  if (auto c = calendar(calendarId); !c) return c.error();
+  auto have = calendarExceptions(calendarId);
+  if (!have) return have.error();
+  QSet<QDate> holidays;
+  for (const CalendarException& e : have.value()) {
+    if (e.kind != QLatin1String("holiday")) continue;
+    for (QDate d = e.from; d <= e.to; d = d.addDays(1)) holidays.insert(d);
+  }
+  QList<CalendarException> out;
+  for (CalendarException e : usFederalHolidays(year)) {
+    if (holidays.contains(e.from)) continue;
+    e.calendar = calendarId;
+    out.append(e);
+  }
+  return out;
+}
+
+Result<QList<CalendarException>> SqliteStore::importHolidays(const QString& calendarId, const QString& country,
+                                                             int year, const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  auto plan = planImportHolidays(calendarId, country, year);
+  if (!plan) return plan.error();
+  QList<CalendarException> out;
+  for (const CalendarException& e : plan.value()) {
+    auto r = addCalendarException(e, ctx);
+    if (!r) return r.error();
+    out.append(r.value());
+  }
+  if (auto s = tx.commit(); !s) return s.error();
+  return out;
+}
+
+Result<QHash<QString, WorkCalendar>> SqliteStore::workCalendars() {
+  auto all = calendars();
+  if (!all) return all.error();
+  QHash<QString, CalendarDef> defs;
+  for (CalendarDef c : all.value()) {
+    auto excs = calendarExceptions(c.id);
+    if (!excs) return excs.error();
+    c.exceptions = excs.value();
+    defs.insert(c.id, c);
+  }
+  QHash<QString, WorkCalendar> out;
+  for (auto it = defs.constBegin(); it != defs.constEnd(); ++it) {
+    auto r = WorkCalendar::resolve(it.key(), defs);
+    if (r) out.insert(it.key(), r.value());  // the writes keep chains valid
+  }
   return out;
 }
 

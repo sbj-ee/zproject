@@ -48,6 +48,24 @@ class SqliteStore final : public Store {
   Result<QList<Dependency>> planRestoreLinks(const QString& taskId) override;
   Status checkLinkCycles(const QList<Task>& tasks) override;
 
+  Status checkCalendar(const CalendarDef& c) override;
+  Result<CalendarDef> createCalendar(const CalendarDef& c, const WriteContext& ctx) override;
+  Result<CalendarDef> calendar(const QString& id, bool includeDeleted = false) override;
+  Result<QList<CalendarDef>> calendars(bool includeDeleted = false) override;
+  Result<CalendarDef> updateCalendar(const CalendarDef& c, qint64 expectedRev, const WriteContext& ctx) override;
+  Status checkCalendarDelete(const QString& id) override;
+  Result<CalendarDef> deleteCalendar(const QString& id, qint64 expectedRev, const WriteContext& ctx) override;
+  Result<QList<CalendarException>> calendarExceptions(const QString& calendarId, bool includeDeleted = false) override;
+  Result<CalendarException> calendarException(const QString& id, bool includeDeleted = false) override;
+  Result<CalendarException> addCalendarException(const CalendarException& e, const WriteContext& ctx) override;
+  Result<CalendarException> deleteCalendarException(const QString& id, qint64 expectedRev,
+                                                    const WriteContext& ctx) override;
+  Result<QList<CalendarException>> planImportHolidays(const QString& calendarId, const QString& country,
+                                                      int year) override;
+  Result<QList<CalendarException>> importHolidays(const QString& calendarId, const QString& country, int year,
+                                                  const WriteContext& ctx) override;
+  Result<QHash<QString, WorkCalendar>> workCalendars() override;
+
   Result<QList<ChangeRecord>> changesSince(qint64 since, int limit = 500) override;
   Result<QList<ChangeRecord>> changesFor(const QString& entityKind, const QString& entityId,
                                          qint64 since = 0, int limit = 500) override;
@@ -74,6 +92,10 @@ class SqliteStore final : public Store {
   // Tombstones the live links touching these tasks (one task delete).
   Status tombstoneLinks(const QString& projectId, const QSet<QString>& taskIds, const WriteContext& ctx,
                         const QString& ts);
+  Status writeCalendar(const CalendarDef& c, bool insert);
+  Status writeCalendarException(const CalendarException& e, bool insert);
+  // 400 unless `id` is empty or a live calendar (a project's or task's).
+  Status checkCalendarRef(const QString& id);
   // checkLinkCycles over explicit links (a candidate included).
   Status checkCycles(const QList<Task>& tasks, const QList<Dependency>& links);
   // Recomputes the project's summary tasks (core/Rollup.hpp) and writes the

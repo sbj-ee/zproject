@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.20.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.21.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -507,6 +507,31 @@ Resource Usage heat map, alert); nothing moves automatically. API:
 `/v1/calendars`, `/v1/calendars/{id}/exceptions`,
 `GET /v1/resources/{id}/usage`, `GET /v1/overallocations`. Phase 3: leveling,
 earned value (PV/EV/AC, SPI, CPI) as a report.
+
+As built (0.21.0, scheduling plan S4), calendars only. Resources come with 1c.
+- **Schema 4:** `calendar` and `calendar_exception` tables. **Standard**
+  (id `00000000000000000001`) is seeded: Monday–Friday, 8 hours, no base, and
+  it can't be deleted. A project or task with no calendar uses it, so
+  holidays added to Standard apply everywhere. Stale `calendar` values from
+  before are cleared.
+- **Endpoints:**
+  - `GET/POST /v1/calendars` (Standard first, then by name)
+  - `GET/PATCH/DELETE /v1/calendars/{id}`
+  - `GET/POST /v1/calendars/{id}/exceptions`
+  - `DELETE /v1/calendar-exceptions/{id}`
+  - `POST /v1/calendars/{id}/import-holidays?country=US&year=` (computed,
+    §6.1; skips holidays already there; each holiday is its own exception)
+- **Scopes:** reads use `resources:read`. Writes use `resources:write` *and*
+  a token for all projects, because a calendar is shared by every project
+  (403 `forbidden_project` otherwise).
+- **Calendar fields:** a work week is seven `{working, hours}`, Monday
+  first, or null (inherited). `base` must be live, with no loop and at most
+  8 deep.
+- **Deleting a calendar:** refused while a live project, task or calendar
+  uses it (409 `conflict`, reason `in_use`, `details.usedBy`). Deleting one
+  tombstones its exceptions.
+- **Projects and tasks** gain `calendar` (a live calendar's id, or null).
+- Nothing reschedules on these changes until S5.
 
 ### 7.5 RAID log [approved] — phase 1
 
@@ -1216,7 +1241,9 @@ colour alone.
   validation), built with `-DZPROJECT_FUZZ=ON` under clang (coverage, ASan,
   UBSan) from seed corpora in `fuzz/corpus/`. The CI job "Fuzz" runs each for
   60 s and uploads any reproducer; it isn't a required check yet. Nightly runs
-  come later.
+  come later. 0.21.0 adds `fuzz/fuzz_calendar_json` (calendar and exception
+  bodies: whatever validates must resolve, find working days and
+  round-trip).
 - **CI (`ci.yml`, on every PR and push to main; actions pinned by SHA;
   `-Werror`):** Version consistency; Linux (ubuntu-24.04) build + test +
   `cpack` both `.deb`s (built on ubuntu-24.04, matching the server host's Pop!_OS 24.04

@@ -384,6 +384,59 @@ class TestCli : public QObject {
     QCOMPARE(cliAs(owner_, {QStringLiteral("audit"), QStringLiteral("--limit"), QStringLiteral("5")}).code, 0);
   }
 
+  // calendars (scheduling plan S4).
+  void calendars() {
+    auto cal = [&](const QStringList& args) { return cliAs(owner_, QStringList{QStringLiteral("calendars")} + args); };
+    // Standard is there.
+    Run r = cal({QStringLiteral("list")});
+    QCOMPARE(r.code, 0);
+    QVERIFY(r.out.contains(QStringLiteral("Standard")));
+    // A four-day site calendar.
+    r = cal({QStringLiteral("--json"), QStringLiteral("create"), QStringLiteral("Site"), QStringLiteral("--week"),
+             QStringLiteral("Mon-Thu:10"), QStringLiteral("--hours-per-day"), QStringLiteral("10")});
+    QCOMPARE(r.code, 0);
+    const QJsonObject site = r.json().toObject();
+    const QString id = site.value(QStringLiteral("id")).toString();
+    QCOMPARE(site.value(QStringLiteral("workWeek")).toArray().at(3).toObject().value(QStringLiteral("hours")).toDouble(), 10.0);
+    QVERIFY(!site.value(QStringLiteral("workWeek")).toArray().at(4).toObject().value(QStringLiteral("working")).toBool());
+    QCOMPARE(cal({QStringLiteral("create"), QStringLiteral("X"), QStringLiteral("--week"), QStringLiteral("Fri-Mon")}).code,
+             int(kExitUsage));
+    QCOMPARE(cal({QStringLiteral("create"), QStringLiteral("X"), QStringLiteral("--week"), QStringLiteral("Mon:30")}).code,
+             int(kExitUsage));
+    // Holidays: a dry run, then the import, then again (nothing new).
+    r = cal({QStringLiteral("import-holidays"), id, QStringLiteral("2027"), QStringLiteral("--dry-run")});
+    QVERIFY2(r.code == 0, qPrintable(r.err));
+    QVERIFY(r.out.startsWith(QStringLiteral("Dry run: 12 changes")));
+    r = cal({QStringLiteral("import-holidays"), id, QStringLiteral("2027")});
+    QCOMPARE(r.code, 0);
+    QVERIFY2(r.out.contains(QStringLiteral("Imported 12 holidays for 2027")), qPrintable(r.out));
+    QVERIFY(r.out.contains(QStringLiteral("2027-12-31  New Year's Day (observed)")));
+    QVERIFY(cal({QStringLiteral("import-holidays"), id, QStringLiteral("2027")}).out.contains(QStringLiteral("all were there")));
+    // An exception of its own, shown with the calendar.
+    r = cal({QStringLiteral("exception"), QStringLiteral("add"), id, QStringLiteral("2027-08-02"), QStringLiteral("2027-08-06"),
+             QStringLiteral("--kind"), QStringLiteral("non_working"), QStringLiteral("--label"), QStringLiteral("Shutdown")});
+    QCOMPARE(r.code, 0);
+    r = cal({QStringLiteral("show"), id});
+    QCOMPARE(r.code, 0);
+    QVERIFY(r.out.contains(QStringLiteral("2027-08-02..2027-08-06")));
+    QVERIFY(r.out.contains(QStringLiteral("Mon 10h, Tue 10h, Wed 10h, Thu 10h")));
+    QCOMPARE(cal({QStringLiteral("exception"), QStringLiteral("add"), id, QStringLiteral("2/8/2027")}).code, int(kExitUsage));
+    // A project on it; then the calendar can't go.
+    const QString p = createProject(QStringLiteral("Night works"));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("projects"), QStringLiteral("update"), p, QStringLiteral("--calendar"), id}).code, 0);
+    r = cal({QStringLiteral("delete"), id});
+    QCOMPARE(r.code, int(kExitConflict));
+    QVERIFY(r.err.contains(QStringLiteral("still in use")));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("projects"), QStringLiteral("update"), p, QStringLiteral("--calendar"),
+                            QStringLiteral("none")}).code, 0);
+    QCOMPARE(cal({QStringLiteral("update"), id, QStringLiteral("--week"), QStringLiteral("inherit")}).code, 0);
+    QCOMPARE(cal({QStringLiteral("delete"), id}).code, 0);
+    // A task's calendar must be a real one.
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("add"), p, QStringLiteral("t"), QStringLiteral("--calendar"),
+                            QStringLiteral("0123456789abcdef0123")}).code,
+             int(kExitConflict));
+  }
+
   // deps (scheduling plan S3): links by WBS code and the "3FS+2d" notation.
   void deps() {
     const QString p = createProject(QStringLiteral("Kitchen"));

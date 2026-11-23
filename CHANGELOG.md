@@ -7,6 +7,47 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.21.0 — 2026-11-23
+
+Scheduling plan, PR S4: calendars on the server (plan §2.1, §3; SPEC §5.1,
+§6.1, §7.4, §9.4). Calendars are stored and served; dates start following
+them when scheduling goes live in S5.
+
+- **Schema 4**:
+  - `calendar` and `calendar_exception` tables.
+  - **Standard** is seeded with a fixed id: Monday–Friday, 8 hours, no
+    base, and it can't be deleted. Projects and tasks with no calendar use
+    it, so holidays added to Standard apply everywhere.
+- **API**:
+  - `GET/POST /v1/calendars`
+  - `GET/PATCH/DELETE /v1/calendars/{id}`
+  - `GET/POST /v1/calendars/{id}/exceptions`
+  - `DELETE /v1/calendar-exceptions/{id}`
+  - `POST /v1/calendars/{id}/import-holidays?country=US&year=`: US federal
+    holidays computed by S1's generator, skipping any already there.
+
+  Reads use `resources:read`; writes need `resources:write` and a token for
+  all projects (a calendar is shared by every project). Dry runs, If-Match
+  and confirm work as elsewhere.
+- **Rules**:
+  - A work week is seven `{working, hours}` days with at least one working
+    day.
+  - A `base` must be live, with no loop and at most 8 deep.
+  - A calendar still used by a project, task or calendar can't be deleted
+    (409 `in_use` with `usedBy`); deleting one takes its exceptions with it.
+- **Projects and tasks** gain `calendar` (a live calendar's id, or null),
+  checked on every write.
+- **CLI**:
+  - `zproject-cli calendars list|show|create|update|delete`
+  - `calendars exception add|remove` and `calendars import-holidays ID YEAR`
+  - `--week Mon-Thu:10` for work weeks
+  - `--calendar ID|none` on `projects create|update` and `tasks add|update`
+- **Fuzzing**: a third harness, `fuzz_calendar_json` (about 13 million
+  inputs in 60 s locally, no findings).
+- **Tests**: `tst_calendars` (10: store rules, Standard, bases, in-use,
+  exceptions, holiday import, the resolved calendars, the API with scopes
+  and all-projects writes, JSON) and `calendars` in `tst_cli`.
+
 ## 0.20.0 — 2026-11-23
 
 Project colours in the all-projects Milestones view (scheduling plan, side

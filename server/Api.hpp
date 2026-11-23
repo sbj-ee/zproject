@@ -121,6 +121,15 @@ class Api {
   http::Response moveTask(Call& c);
   http::Response restoreTask(Call& c);
   http::Response getTaskHistory(Call& c);
+  http::Response listCalendars(Call& c);
+  http::Response createCalendar(Call& c);
+  http::Response getCalendar(Call& c);
+  http::Response updateCalendar(Call& c);
+  http::Response deleteCalendar(Call& c);
+  http::Response listCalendarExceptions(Call& c);
+  http::Response addCalendarException(Call& c);
+  http::Response deleteCalendarException(Call& c);
+  http::Response importHolidays(Call& c);
   http::Response listDependencies(Call& c);
   http::Response createDependency(Call& c);
   http::Response getDependency(Call& c);

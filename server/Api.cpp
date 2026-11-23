@@ -53,6 +53,8 @@ namespace {
 const QString kProject = QStringLiteral("project");
 const QString kTask = QStringLiteral("task");
 const QString kDependency = QStringLiteral("dependency");
+const QString kCalendar = QStringLiteral("calendar");
+const QString kCalendarException = QStringLiteral("calendar_exception");
 const QString kToken = QStringLiteral("token");
 
 QString compact(const QJsonObject& o) {
@@ -324,6 +326,31 @@ const QList<Api::Route>& Api::routeTable() {
       {{"GET", QStringLiteral("/v1/tasks/{id}/history"), QStringLiteral("getTaskHistory"),
         QStringLiteral("tasks:read")},
        &Api::getTaskHistory, false},
+      {{"GET", QStringLiteral("/v1/calendars"), QStringLiteral("listCalendars"), QStringLiteral("resources:read")},
+       &Api::listCalendars, false},
+      {{"POST", QStringLiteral("/v1/calendars"), QStringLiteral("createCalendar"), QStringLiteral("resources:write"),
+        false, true},
+       &Api::createCalendar, true},
+      {{"GET", QStringLiteral("/v1/calendars/{id}"), QStringLiteral("getCalendar"), QStringLiteral("resources:read")},
+       &Api::getCalendar, false},
+      {{"PATCH", QStringLiteral("/v1/calendars/{id}"), QStringLiteral("updateCalendar"),
+        QStringLiteral("resources:write"), false, true},
+       &Api::updateCalendar, true},
+      {{"DELETE", QStringLiteral("/v1/calendars/{id}"), QStringLiteral("deleteCalendar"),
+        QStringLiteral("resources:write"), true, true},
+       &Api::deleteCalendar, true},
+      {{"GET", QStringLiteral("/v1/calendars/{id}/exceptions"), QStringLiteral("listCalendarExceptions"),
+        QStringLiteral("resources:read")},
+       &Api::listCalendarExceptions, false},
+      {{"POST", QStringLiteral("/v1/calendars/{id}/exceptions"), QStringLiteral("addCalendarException"),
+        QStringLiteral("resources:write"), false, true},
+       &Api::addCalendarException, true},
+      {{"DELETE", QStringLiteral("/v1/calendar-exceptions/{id}"), QStringLiteral("deleteCalendarException"),
+        QStringLiteral("resources:write"), true, true},
+       &Api::deleteCalendarException, true},
+      {{"POST", QStringLiteral("/v1/calendars/{id}/import-holidays"), QStringLiteral("importHolidays"),
+        QStringLiteral("resources:write"), false, true},
+       &Api::importHolidays, true},
       {{"GET", QStringLiteral("/v1/projects/{id}/dependencies"), QStringLiteral("listDependencies"),
         QStringLiteral("tasks:read")},
        &Api::listDependencies, false},
@@ -1184,6 +1211,236 @@ Response Api::getTaskHistory(Call& c) {
   if (!rows) return storeError(rows.error());
   QJsonArray items;
   for (const auto& ch : rows.value()) items.append(changeJson(ch));
+  return Response::json(200, QJsonObject{{QStringLiteral("items"), items}});
+}
+
+// ---------------------------------------------------------------- calendars
+
+namespace {
+
+// Calendars are shared by every project: changing one can move any of them,
+// so only a token for all projects may write them.
+std::optional<Response> requireAllProjects(const store::TokenRecord& t) {
+  if (allProjects(t)) return std::nullopt;
+  return Response::error(403, QStringLiteral("forbidden_project"),
+                         QStringLiteral("calendars are shared by every project; this token is limited to some"));
+}
+
+// A calendar body: the usual field checks, except workWeek (an array of
+// seven {working, hours}, or null), which the template can't describe.
+std::optional<Response> checkCalendarFields(const QJsonObject& body) {
+  QJsonObject rest = body;
+  rest.remove(QStringLiteral("workWeek"));
+  if (auto e = checkFields(rest, toJson(CalendarDef{}), baseReadOnly(), {})) return e;
+  if (!body.contains(QStringLiteral("workWeek"))) return std::nullopt;
+  const QJsonValue w = body.value(QStringLiteral("workWeek"));
+  if (w.isNull()) return std::nullopt;
+  bool ok = w.isArray() && w.toArray().size() == 7;
+  for (const auto& d : w.toArray()) {
+    const QJsonObject o = d.toObject();
+    ok = ok && d.isObject() && o.size() == 2 && o.value(QStringLiteral("working")).isBool() &&
+         o.value(QStringLiteral("hours")).isDouble();
+  }
+  if (ok) return std::nullopt;
+  return validation(QStringLiteral("workWeek must be seven {\"working\": bool, \"hours\": number} days, Monday "
+                                   "first, or null"),
+                    QJsonObject{{QStringLiteral("field"), QStringLiteral("workWeek")}});
+}
+
+}  // namespace
+
+Response Api::listCalendars(Call& c) {
+  int limit = 0;
+  qsizetype offset = 0;
+  if (auto e = pageParams(c.query, &limit, &offset)) return *e;
+  auto all = store_.calendars(truthy(c.query.queryItemValue(QStringLiteral("includeDeleted"))));
+  if (!all) return storeError(all.error());
+  QJsonArray items;
+  for (const CalendarDef& cal : all.value()) items.append(toJson(cal));
+  return Response::json(200, page(items, limit, offset));
+}
+
+Response Api::createCalendar(Call& c) {
+  if (auto r = requireAllProjects(c.token)) return *r;
+  if (auto e = checkCalendarFields(c.body)) return *e;
+  const CalendarDef cal = calendarFromJson(c.body);
+  if (c.dryRun) {
+    if (auto s = store_.checkCalendar(cal); !s) return storeError(s.error());
+    QJsonObject after = toJson(cal);
+    for (const QString& k : baseReadOnly()) after.remove(k);
+    return dryRunResponse(c, QJsonArray{change(QStringLiteral("create"), kCalendar, {}, {}, after)});
+  }
+  auto r = store_.createCalendar(cal, {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  c.entityKind = kCalendar;
+  c.entityId = r->id;
+  c.after = toJson(r.value());
+  c.hasDiff = true;
+  return Response::json(201, toJson(r.value()));
+}
+
+Response Api::getCalendar(Call& c) {
+  auto cal = store_.calendar(c.params.value(0));
+  if (!cal) return storeError(cal.error());
+  return Response::json(200, toJson(cal.value()));
+}
+
+Response Api::updateCalendar(Call& c) {
+  if (auto r = requireAllProjects(c.token)) return *r;
+  const QString id = c.params.value(0);
+  auto cur = store_.calendar(id);
+  if (!cur) return storeError(cur.error());
+  if (auto e = checkCalendarFields(c.body)) return *e;
+  Response err = Response::empty(0);
+  const auto expected = ifMatch(c, &err);
+  if (err.status) return err;
+  if (expected && *expected != cur->rev) return storeError(Error::revMismatch(*expected, cur->rev));
+  QJsonObject merged = toJson(cur.value());
+  for (auto it = c.body.constBegin(); it != c.body.constEnd(); ++it) merged.insert(it.key(), it.value());
+  CalendarDef cal = calendarFromJson(merged);
+  cal.id = id;
+  if (c.dryRun) {
+    if (auto s = store_.checkCalendar(cal); !s) return storeError(s.error());
+    const FieldDiff d = diffFields(toJson(cur.value()), toJson(cal));
+    QJsonArray changes;
+    if (!d.empty()) changes.append(change(QStringLiteral("update"), kCalendar, id, d.before, d.after));
+    return dryRunResponse(c, changes);
+  }
+  auto r = store_.updateCalendar(cal, expected.value_or(cur->rev), {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  const FieldDiff d = diffFields(toJson(cur.value()), toJson(r.value()));
+  c.entityKind = kCalendar;
+  c.entityId = id;
+  c.before = d.before;
+  c.after = d.after;
+  c.hasDiff = true;
+  return Response::json(200, toJson(r.value()));
+}
+
+Response Api::deleteCalendar(Call& c) {
+  if (auto r = requireAllProjects(c.token)) return *r;
+  const QString id = c.params.value(0);
+  auto cur = store_.calendar(id);
+  if (!cur) return storeError(cur.error());
+  Response err = Response::empty(0);
+  const auto expected = ifMatch(c, &err);
+  if (err.status) return err;
+  if (expected && *expected != cur->rev) return storeError(Error::revMismatch(*expected, cur->rev));
+  c.entityKind = kCalendar;
+  c.entityId = id;
+  if (c.dryRun) {
+    if (auto s = store_.checkCalendarDelete(id); !s) return storeError(s.error());
+    QJsonArray changes{change(QStringLiteral("delete"), kCalendar, id, kDeletedBefore, kDeletedAfter)};
+    auto excs = store_.calendarExceptions(id);
+    if (!excs) return storeError(excs.error());
+    for (const CalendarException& e : excs.value()) {
+      changes.append(change(QStringLiteral("delete"), kCalendarException, e.id, kDeletedBefore, kDeletedAfter));
+    }
+    return dryRunResponse(c, changes);
+  }
+  if (auto refuse = requireConfirm(c)) return *refuse;
+  auto r = store_.deleteCalendar(id, expected.value_or(cur->rev), {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  c.before = kDeletedBefore;
+  c.after = kDeletedAfter;
+  c.hasDiff = true;
+  return Response::json(200, toJson(r.value()));
+}
+
+Response Api::listCalendarExceptions(Call& c) {
+  const QString id = c.params.value(0);
+  if (auto cal = store_.calendar(id); !cal) return storeError(cal.error());
+  int limit = 0;
+  qsizetype offset = 0;
+  if (auto e = pageParams(c.query, &limit, &offset)) return *e;
+  auto all = store_.calendarExceptions(id, truthy(c.query.queryItemValue(QStringLiteral("includeDeleted"))));
+  if (!all) return storeError(all.error());
+  QJsonArray items;
+  for (const CalendarException& e : all.value()) items.append(toJson(e));
+  return Response::json(200, page(items, limit, offset));
+}
+
+Response Api::addCalendarException(Call& c) {
+  if (auto r = requireAllProjects(c.token)) return *r;
+  const QString id = c.params.value(0);
+  if (auto cal = store_.calendar(id); !cal) return storeError(cal.error());
+  QSet<QString> readOnly = baseReadOnly();
+  readOnly.insert(QStringLiteral("calendar"));
+  QJsonObject templ = toJson(CalendarException{});
+  if (auto e = checkFields(c.body, templ, readOnly, {})) return *e;
+  CalendarException e = calendarExceptionFromJson(c.body);
+  e.calendar = id;
+  if (auto v = toValidationError(validateCalendarException(e))) return storeError(*v);
+  if (c.dryRun) {
+    QJsonObject after = toJson(e);
+    for (const QString& k : baseReadOnly()) after.remove(k);
+    return dryRunResponse(c, QJsonArray{change(QStringLiteral("create"), kCalendarException, {}, {}, after)});
+  }
+  auto r = store_.addCalendarException(e, {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  c.entityKind = kCalendarException;
+  c.entityId = r->id;
+  c.after = toJson(r.value());
+  c.hasDiff = true;
+  return Response::json(201, toJson(r.value()));
+}
+
+Response Api::deleteCalendarException(Call& c) {
+  if (auto r = requireAllProjects(c.token)) return *r;
+  const QString id = c.params.value(0);
+  auto cur = store_.calendarException(id);
+  if (!cur) return storeError(cur.error());
+  Response err = Response::empty(0);
+  const auto expected = ifMatch(c, &err);
+  if (err.status) return err;
+  if (expected && *expected != cur->rev) return storeError(Error::revMismatch(*expected, cur->rev));
+  c.entityKind = kCalendarException;
+  c.entityId = id;
+  if (c.dryRun) {
+    return dryRunResponse(c, QJsonArray{change(QStringLiteral("delete"), kCalendarException, id, kDeletedBefore,
+                                               kDeletedAfter)});
+  }
+  if (auto refuse = requireConfirm(c)) return *refuse;
+  auto r = store_.deleteCalendarException(id, expected.value_or(cur->rev), {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  c.before = kDeletedBefore;
+  c.after = kDeletedAfter;
+  c.hasDiff = true;
+  return Response::json(200, toJson(r.value()));
+}
+
+Response Api::importHolidays(Call& c) {
+  if (auto r = requireAllProjects(c.token)) return *r;
+  const QString id = c.params.value(0);
+  if (!c.body.isEmpty()) {
+    const QString key = c.body.constBegin().key();
+    return validation(QStringLiteral("unknown field '%1'").arg(key), QJsonObject{{QStringLiteral("field"), key}});
+  }
+  const QString country = c.query.queryItemValue(QStringLiteral("country"));
+  bool ok = false;
+  const int year = c.query.queryItemValue(QStringLiteral("year")).toInt(&ok);
+  if (!ok) return validation(QStringLiteral("year is required"), QJsonObject{{QStringLiteral("field"), QStringLiteral("year")}});
+  c.entityKind = kCalendar;
+  c.entityId = id;
+  if (c.dryRun) {
+    auto plan = store_.planImportHolidays(id, country, year);
+    if (!plan) return storeError(plan.error());
+    QJsonArray changes;
+    for (const CalendarException& e : plan.value()) {
+      QJsonObject after = toJson(e);
+      for (const QString& k : baseReadOnly()) after.remove(k);
+      changes.append(change(QStringLiteral("create"), kCalendarException, {}, {}, after));
+    }
+    return dryRunResponse(c, changes);
+  }
+  auto r = store_.importHolidays(id, country, year, {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  QJsonArray items;
+  for (const CalendarException& e : r.value()) items.append(toJson(e));
+  c.after = QJsonObject{{QStringLiteral("imported"), static_cast<qint64>(items.size())},
+                        {QStringLiteral("country"), country},
+                        {QStringLiteral("year"), year}};
+  c.hasDiff = true;
   return Response::json(200, QJsonObject{{QStringLiteral("items"), items}});
 }
 
