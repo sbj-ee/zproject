@@ -76,6 +76,7 @@ if(ZPROJECT_BUILD_GUI)
   zproject_add_test(tst_outline zproject_app_lib zproject_server_lib)
   zproject_add_test(tst_taskeditor zproject_app_lib zproject_server_lib)
   zproject_add_test(tst_gantt zproject_app_lib zproject_server_lib)
+  zproject_add_test(tst_milestones zproject_app_lib zproject_server_lib)
   # The title-bar test checks the build version against CMake's.
   target_compile_definitions(tst_gantt PRIVATE ZPROJECT_TEST_VERSION="${PROJECT_VERSION}")
   # The signed in-app updater (SPEC.md §21) against a mock release feed.

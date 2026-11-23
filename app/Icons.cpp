@@ -190,6 +190,19 @@ QIcon glyph(Glyph g, const ThemeColors& c) {
         p.setBrush(fg);
         p.drawRoundedRect(QRectF(3.5, 10.5, 6, 3), 1, 1);
         break;
+      case Glyph::Milestones: {
+        // Two diamonds on a line: the Gantt's milestone mark.
+        p.setPen(pen(fg, 1.2));
+        p.drawLine(QPointF(1, 8), QPointF(15, 8));
+        p.setPen(Qt::NoPen);
+        auto diamond = [&p](qreal cx, const QColor& colour) {
+          p.setBrush(colour);
+          p.drawPolygon(QPolygonF({QPointF(cx, 3.5), QPointF(cx + 4.5, 8), QPointF(cx, 12.5), QPointF(cx - 4.5, 8)}));
+        };
+        diamond(5, fg);
+        diamond(11.5, accent);
+        break;
+      }
       case Glyph::Find:
         p.setPen(pen(fg, 1.6));
         p.setBrush(Qt::NoBrush);

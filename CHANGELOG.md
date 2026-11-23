@@ -7,6 +7,33 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.14.0 — 2026-11-23
+
+Desktop client plan, PR 9: the milestones view (plan §3.5; SPEC §7.1, §8.3,
+§18).
+
+- **View → Milestones** (Ctrl + Shift + M, and a Milestones button on the
+  toolbar after Gantt): the selected project's milestones by date, with WBS
+  code, date, deadline, status, the summary each sits under, and how far
+  away it is ("In 4 days", "Today", "6 days late", "Done"). Milestones with
+  no date come last; the note under the list counts the late and undated
+  ones.
+- **All projects**: one list of every project's milestones, with a Project
+  column. Done and cancelled projects are included only when the sidebar
+  shows them.
+- **Jump to it**: Enter (or a double-click) opens the milestone in the
+  outline, switching project if needed; Show in Gantt opens it on the
+  timeline. An outline status filter that would hide it is cleared.
+- Late milestones and dates after the deadline are marked ⚠ and in bold,
+  and say so in words; each row has an accessible description ("Milestone
+  3 Handover, Kitchen remodel, 20 Nov 2026, in 50 days, after its deadline
+  of 18 Nov 2026"). A new Milestones icon (two diamonds on a line).
+- The list is read-only and follows refreshes; it is built from the cache,
+  so it also works offline.
+- The project details page no longer says the Gantt "arrives in a later
+  release".
+- Help has a Milestones section and the new shortcut.
+
 ## 0.13.2 — 2026-11-23
 
 - SPEC.md §22: `scripts/check-version.sh` also checks `api/openapi.yaml`
