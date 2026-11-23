@@ -620,6 +620,7 @@ void MainWindow::applyAppearance() {
   for (QAction* a : themeGroup_->actions()) a->setChecked(a->data().toString() == settings_.theme);
   applyIcons(c);
   if (gantt_) gantt_->setColors(c);
+  if (milestones_) milestones_->setOutlineColor(c.fg);
   if (action(QStringLiteral("actionZoomIn")))
     action(QStringLiteral("actionZoomIn"))->setEnabled(settings_.zoomPercent < ViewZoom::kMaxPercent);
   if (action(QStringLiteral("actionZoomOut")))
@@ -1128,10 +1129,10 @@ void MainWindow::showProject(const QString& id) {
         const QString oid = other.value(QStringLiteral("id")).toString();
         if (isClosed(other.value(QStringLiteral("status")).toString()) && !showClosed_->isChecked() && oid != id) continue;
         sources.append({oid, other.value(QStringLiteral("name")).toString(), session_->cache()->tasks(oid),
-                        session_->cache()->wbs(oid)});
+                        session_->cache()->wbs(oid), other.value(QStringLiteral("color")).toString()});
       }
     } else {
-      sources.append({id, name, tasks, session_->cache()->wbs(id)});
+      sources.append({id, name, tasks, session_->cache()->wbs(id), get("color")});
     }
     milestones_->reload(sources);
     stack_->setCurrentWidget(milestones_);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QColor>
 #include <QDate>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -20,12 +21,14 @@ struct MilestoneSource {
   QString projectName;
   QList<QJsonObject> tasks;
   QJsonArray wbs;
+  QString projectColor;  // the project's #rrggbb, or empty
 };
 
 // One milestone (a task of type "milestone") with what the view shows.
 struct MilestoneRow {
   QString projectId;
   QString projectName;
+  QColor projectColor;  // invalid: the project has none
   QString taskId;
   QString title;
   QString wbs;          // "1.4", numbered as the outline numbers it
@@ -51,7 +54,10 @@ QString milestoneDueText(const MilestoneRow& row);
 QString milestoneAccessibleText(const MilestoneRow& row, bool withProject);
 
 // View → Milestones (Ctrl + Shift + M): the selected project's milestones,
-// or every project's with "All projects" ticked. Read-only; Enter (or a
+// or every project's with "All projects" ticked. Showing them all, a
+// milestone's diamond and its Project cell take the project's colour (a
+// swatch outlined in the theme's text colour; the name is still there in
+// words, so colour is never the only cue). Read-only; Enter (or a
 // double-click) opens the milestone in the outline, Show in Gantt opens it
 // on the timeline.
 class MilestonesView : public QWidget {
@@ -62,6 +68,8 @@ class MilestonesView : public QWidget {
   explicit MilestonesView(QWidget* parent = nullptr);
 
   void setToday(const QDate& today);
+  // The theme's text colour, for the outline round project colours.
+  void setOutlineColor(const QColor& c);
   QDate today() const { return today_; }
   // The selected project, named in the heading when not showing them all.
   void setProject(const QString& id, const QString& name);
@@ -96,8 +104,10 @@ class MilestonesView : public QWidget {
   void updateHeading();
   void updateButtons();
   void open(bool gantt);
+  void decorate();  // project colours on the rows (all projects only)
 
   QDate today_;
+  QColor outline_ = Qt::black;
   QString projectId_;
   QString projectName_;
   QList<MilestoneRow> rows_;

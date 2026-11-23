@@ -8,6 +8,8 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLocale>
+#include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QTableWidget>
 #include <QVBoxLayout>
@@ -26,6 +28,30 @@ constexpr int kProjectIdRole = Qt::UserRole + 2;
 QString str(const QJsonObject& o, const char* key) { return o.value(QLatin1String(key)).toString(); }
 
 QString dateText(const QDate& d) { return d.isValid() ? QLocale().toString(d, QStringLiteral("d MMM yyyy")) : QString(); }
+
+// A milestone diamond (or, `square`, a swatch) in a project's colour,
+// outlined in the theme's text colour so a pale colour still shows on any
+// background; hollow once done.
+QIcon swatch(const QColor& fill, const QColor& outline, bool hollow, bool square) {
+  QIcon icon;
+  for (int size : {16, 32}) {
+    QPixmap px(size, size);
+    px.fill(Qt::transparent);
+    QPainter p(&px);
+    p.setRenderHint(QPainter::Antialiasing);
+    const qreal k = size / 16.0;
+    p.setPen(QPen(hollow ? fill : outline, (hollow ? 2.0 : 1.0) * k));
+    p.setBrush(hollow ? QBrush(Qt::NoBrush) : QBrush(fill));
+    if (square) {
+      p.drawRoundedRect(QRectF(3 * k, 3 * k, 10 * k, 10 * k), 2 * k, 2 * k);
+    } else {
+      p.drawPolygon(QPolygonF({QPointF(8 * k, 2 * k), QPointF(14 * k, 8 * k), QPointF(8 * k, 14 * k), QPointF(2 * k, 8 * k)}));
+    }
+    p.end();
+    icon.addPixmap(px);
+  }
+  return icon;
+}
 
 // "1.10" after "1.9": WBS codes compare part by part.
 bool wbsLess(const QString& a, const QString& b) {
@@ -53,6 +79,11 @@ QList<MilestoneRow> milestoneRows(const QList<MilestoneSource>& sources, const Q
       MilestoneRow r;
       r.projectId = s.projectId;
       r.projectName = s.projectName;
+      // #rrggbb only (the project's validated colour); QColor(QString) is in Qt 6.4.
+      if (s.projectColor.size() == 7 && s.projectColor.startsWith(QLatin1Char('#'))) {
+        const QColor c(s.projectColor);
+        if (c.isValid()) r.projectColor = c;
+      }
       r.taskId = id;
       r.title = str(t, "title");
       r.wbs = model.wbsCode(id);
@@ -165,6 +196,27 @@ MilestonesView::MilestonesView(QWidget* parent) : QWidget(parent), today_(QDate:
 
 void MilestonesView::setToday(const QDate& today) { today_ = today; }
 
+void MilestonesView::setOutlineColor(const QColor& c) {
+  outline_ = c;
+  decorate();
+}
+
+void MilestonesView::decorate() {
+  const bool all = allProjects();
+  for (int i = 0; i < rows_.size() && i < table_->rowCount(); ++i) {
+    const MilestoneRow& r = rows_.at(i);
+    QTableWidgetItem* title = table_->item(i, Title);
+    QTableWidgetItem* project = table_->item(i, Project);
+    if (title == nullptr || project == nullptr) continue;
+    const bool coloured = all && r.projectColor.isValid();
+    // With a colour the drawn diamond replaces the text one.
+    title->setText(coloured ? r.title : (r.done ? QStringLiteral("◇ ") : QStringLiteral("◆ ")) + r.title);
+    title->setIcon(coloured ? swatch(r.projectColor, outline_, r.done, false) : QIcon());
+    project->setIcon(coloured ? swatch(r.projectColor, outline_, false, true) : QIcon());
+    project->setToolTip(coloured ? tr("%1 (colour %2)").arg(r.projectName, r.projectColor.name()) : r.projectName);
+  }
+}
+
 void MilestonesView::setProject(const QString& id, const QString& name) {
   projectId_ = id;
   projectName_ = name;
@@ -223,6 +275,7 @@ void MilestonesView::reload(const QList<MilestoneSource>& sources) {
     put(Parent, r.parentTitle);
     if (r.taskId == keep) table_->setCurrentCell(i, Title);
   }
+  decorate();
   table_->resizeColumnsToContents();
   if (table_->currentRow() < 0 && !rows_.isEmpty()) table_->setCurrentCell(0, Title);
 
