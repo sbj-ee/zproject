@@ -1,8 +1,8 @@
 # zproject
 
-**0.12.0**
+**0.13.0**
 
-Current release: **0.11.0**
+Current release: **0.12.0**
 
 Project management for the z-suite: projects with a WBS, milestones,
 dependencies, a critical-path schedule, baselines, resources and cost, a RAID
@@ -38,6 +38,10 @@ keyboard, filter by status and find. The inspector edits the selected task
 (Details, Schedule and History tabs; Alt + Enter, Ctrl + S): fields are
 checked before anything is sent, changes that ripple into summaries are
 previewed, and a save that crosses someone else's edit asks field by field.
+View → Gantt (Ctrl + G) shows the project read-only as a timeline beside
+the task table: day to quarter timescales, a today line, bars from the
+stored dates, summary brackets, milestone diamonds, progress and deadline
+flags, all readable by screen readers. The title bar shows the version.
 The project sidebar, the menus and the toolbar (View → Show Toolbar) use
 zproject's own icons (a folder per project with its RAG colour), drawn the
 same on every platform; on Linux the menu bar always stays in the window.
@@ -57,6 +61,10 @@ their minisign signature and SHA-256 (SPEC.md §21); it never touches
 |---|---|---|
 | ![Task outline](docs/screenshots/outline-light.png) | ![Outline filtered, with find](docs/screenshots/outline-filter-find.png) | ![Indent preview](docs/screenshots/outline-indent-preview.png) |
 
+| Gantt, Light | Gantt, Dark |
+|---|---|
+| ![Gantt, Light](docs/screenshots/gantt-light.png) | ![Gantt, Dark](docs/screenshots/gantt-dark.png) |
+
 | Task editor | Checks before saving | Task history |
 |---|---|---|
 | ![Task editor, Details tab](docs/screenshots/taskeditor-details-light.png) | ![Schedule tab with field errors](docs/screenshots/taskeditor-schedule-errors.png) | ![History tab](docs/screenshots/taskeditor-history.png) |
@@ -65,7 +73,7 @@ More in [docs/screenshots](docs/screenshots/): High contrast, first run,
 Preferences, Help, About, the update dialog, the project editor, the delete
 previews, the outline and the task editor in Dark and High contrast, the
 ripple preview and the sidebar's icons, rendered offscreen from example data
-(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R 'tst_appshell|tst_update|tst_projects|tst_outline|tst_taskeditor'`).
+(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R 'tst_appshell|tst_update|tst_projects|tst_outline|tst_taskeditor|tst_gantt'`).
 
 ## Running the server
 

@@ -412,7 +412,7 @@ class TestAppShell : public QObject {
       }
       QCOMPARE(names, (QStringList{QStringLiteral("actionNewProject"), QStringLiteral("actionEditProject"),
                                    QStringLiteral("actionRefresh"), QStringLiteral("actionOutline"),
-                                   QStringLiteral("actionInsertTask"), QStringLiteral("actionEditTask"),
+                                   QStringLiteral("actionGantt"), QStringLiteral("actionInsertTask"), QStringLiteral("actionEditTask"),
                                    QStringLiteral("actionSaveTask"), QStringLiteral("actionFind"),
                                    QStringLiteral("actionCheckUpdates")}));
       QCOMPARE(w.action(QStringLiteral("actionEditProject"))->toolTip(),

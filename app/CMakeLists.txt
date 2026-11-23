@@ -6,6 +6,7 @@ add_library(zproject_app_lib STATIC
   AppSession.cpp AppSession.hpp
   Dialogs.cpp Dialogs.hpp
   EditDialogs.cpp EditDialogs.hpp
+  GanttView.cpp GanttView.hpp
   HelpDialog.cpp HelpDialog.hpp
   Icons.cpp Icons.hpp
   MainWindow.cpp MainWindow.hpp

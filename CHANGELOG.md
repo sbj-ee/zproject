@@ -7,6 +7,43 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.13.0 — 2026-11-23
+
+Desktop client plan, PR 8: the read-only Gantt (plan §3.4; SPEC §8.2 v1
+subset, §17, §18).
+
+- **View → Gantt** (Ctrl + G, and a Gantt button on the toolbar after
+  Outline): a task table (WBS, title, duration, start, finish, % complete)
+  and a custom-painted timeline that share one read-only row model and scroll
+  together; collapsing a summary hides its rows in both.
+- **Timescales** Day, Week, Month and Quarter (the Timescale box,
+  Ctrl + Shift + = / − or Ctrl + wheel while the Gantt has focus;
+  Shift + wheel scrolls sideways), weekends shaded at day and week scale, a dashed **today line**
+  and Today / **T** to scroll to it.
+- **Bars from the stored dates**: auto tasks solid, manual tasks outlined,
+  summary brackets, milestone diamonds, % complete as a band inside the bar,
+  and deadline flags (filled red when the finish is past the deadline).
+  Tasks with no dates say "unscheduled" in the table and have no bar.
+- **Keyboard**: arrows move the selection and the inspector follows; Enter
+  (or a double-click on a bar) opens the task editor. The Gantt edits
+  nothing itself.
+- **Accessible bars**: the timeline is an accessible list whose items are
+  the bars, named and described in words ("Task 1.2 Drawings" — "3 days,
+  9–11 Sep, 40% complete, manual dates"), the same text as the tooltips.
+- Drawn with the app's own palette, so it follows Light, Dark and High
+  contrast; only visible rows are painted. A 2,000-row benchmark test
+  (≤ 16 ms a frame) runs in CI.
+- **Title bar**: "zproject <version> — <project name>", or "zproject
+  <version>" with no project, on Linux and macOS, from the build's version
+  (the one --version and About show); unsaved task edits mark it with *.
+- Help has a Gantt section and the new shortcuts.
+- Works around Qt 6.4 keeping a hidden header section's width after a model
+  reset (the Gantt's table re-hides its columns on reload).
+
+Not yet (later PRs, per the plan): dragging, linking, dependency arrows,
+critical path, baselines, over-allocation and RAID badges, the calendar
+lane, project calendars, and print/export.
+
 ## 0.12.0 — 2026-11-22
 
 Desktop client plan, PR 7: the task editor (plan §3.3, §3.6, §4.4, §4.5).

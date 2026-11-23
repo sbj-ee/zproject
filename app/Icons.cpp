@@ -181,6 +181,15 @@ QIcon glyph(Glyph g, const ThemeColors& c) {
         p.drawLine(QPointF(11.2, 7), QPointF(8, 10.2));
         break;
       }
+      case Glyph::Gantt:
+        p.setPen(Qt::NoPen);
+        p.setBrush(fg);
+        p.drawRoundedRect(QRectF(1.5, 2.5, 7, 3), 1, 1);
+        p.setBrush(accent);
+        p.drawRoundedRect(QRectF(5.5, 6.5, 8, 3), 1, 1);
+        p.setBrush(fg);
+        p.drawRoundedRect(QRectF(3.5, 10.5, 6, 3), 1, 1);
+        break;
       case Glyph::Find:
         p.setPen(pen(fg, 1.6));
         p.setBrush(Qt::NoBrush);

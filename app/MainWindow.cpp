@@ -34,6 +34,7 @@
 #include <QVBoxLayout>
 
 #include "app/EditDialogs.hpp"
+#include "app/GanttView.hpp"
 #include "app/HelpDialog.hpp"
 #include "app/Icons.hpp"
 #include "app/OutlineModel.hpp"
@@ -153,9 +154,22 @@ MainWindow::MainWindow(Options options, QWidget* parent) : QMainWindow(parent), 
     showTaskInspector(id);
     updateEditActions();
   });
+  connect(gantt_, &GanttView::currentTaskChanged, this, [this](const QString& id) {
+    showTaskInspector(id);
+    updateEditActions();
+  });
+  // Enter (or a double-click) on a Gantt row: the task in the inspector.
+  connect(gantt_, &GanttView::openTask, this, [this](const QString&) {
+    if (QAction* a = action(QStringLiteral("actionEditTask"))) a->trigger();
+  });
   buildDocks();
   connect(taskInspector_, &TaskInspector::saveRequested, taskActions_, &TaskActions::saveTask);
-  connect(taskInspector_, &TaskInspector::dirtyChanged, this, [this] { updateEditActions(); });
+  connect(taskInspector_, &TaskInspector::dirtyChanged, this, [this] {
+    // Unsaved task edits: "*" in the title (the dot in the close button on
+    // macOS).
+    setWindowModified(taskInspector_->isDirty());
+    updateEditActions();
+  });
   connect(taskActions_, &TaskActions::taskWritten, this, [this](const QString& id) {
     if (id == taskInspector_->taskId()) taskInspector_->reloadFromServer();
   });
@@ -172,6 +186,7 @@ MainWindow::MainWindow(Options options, QWidget* parent) : QMainWindow(parent), 
     taskInspector_->setBusy(busy);
     updateEditActions();
   });
+  updateWindowTitle({});
   buildMenus();
   buildToolBar();
   buildStatusBar();
@@ -292,6 +307,9 @@ void MainWindow::buildCentral() {
   stack_->addWidget(projectTable_);
   outline_ = new OutlineView(stack_);
   stack_->addWidget(outline_);
+  gantt_ = new GanttView(stack_);
+  if (options_.today.isValid()) gantt_->setToday(options_.today);
+  stack_->addWidget(gantt_);
   v->addWidget(stack_, 1);
   setCentralWidget(central);
 }
@@ -435,6 +453,7 @@ void MainWindow::buildMenus() {
   add(view, QStringLiteral("actionAllProjects"), tr("All &Projects"), [this] { showProjectTable(); });
   add(view, QStringLiteral("actionProjectDetails"), tr("Project &Details"), [this] { showProjectDetails(); });
   add(view, QStringLiteral("actionOutline"), tr("&Outline"), [this] { showOutline(); });
+  add(view, QStringLiteral("actionGantt"), tr("&Gantt"), [this] { showGantt(); });
   view->addSeparator();
   QMenu* themes = view->addMenu(tr("&Theme"));
   themeGroup_ = new QActionGroup(this);
@@ -505,7 +524,7 @@ void MainWindow::buildToolBar() {
   toolBar_->toggleViewAction()->setVisible(false);
   const QList<QList<const char*>> groups = {
       {"actionNewProject", "actionEditProject", "actionRefresh"},
-      {"actionOutline", "actionInsertTask", "actionEditTask", "actionSaveTask"},
+      {"actionOutline", "actionGantt", "actionInsertTask", "actionEditTask", "actionSaveTask"},
       {"actionFind"},
       {"actionCheckUpdates"},
   };
@@ -564,6 +583,7 @@ void MainWindow::applyAppearance() {
   qApp->setStyleSheet(Theme::styleSheet(c, ViewZoom::pointSize(settings_.zoomPercent)));
   for (QAction* a : themeGroup_->actions()) a->setChecked(a->data().toString() == settings_.theme);
   applyIcons(c);
+  if (gantt_) gantt_->setColors(c);
   if (action(QStringLiteral("actionZoomIn")))
     action(QStringLiteral("actionZoomIn"))->setEnabled(settings_.zoomPercent < ViewZoom::kMaxPercent);
   if (action(QStringLiteral("actionZoomOut")))
@@ -580,7 +600,7 @@ void MainWindow::applyIcons(const ThemeColors& c) {
       {"actionOutline", G::Outline},           {"actionInsertTask", G::InsertTask},
       {"actionEditTask", G::TaskDetails},      {"actionSaveTask", G::SaveTask},
       {"actionDeleteTask", G::DeleteTask},     {"actionFind", G::Find},
-      {"actionCheckUpdates", G::CheckUpdates},
+      {"actionCheckUpdates", G::CheckUpdates}, {"actionGantt", G::Gantt},
   };
   for (const auto& [name, g] : glyphs) {
     if (QAction* a = action(QString::fromLatin1(name))) a->setIcon(Icons::glyph(g, c));
@@ -807,6 +827,31 @@ void MainWindow::showProjectDetails() {
   showProject(currentProjectId());
 }
 
+// "zproject 0.13.0 — Kitchen remodel", or "zproject 0.13.0" with no
+// project; the version is the build's (CMake project VERSION, as --version
+// and About show it). [*] is where Qt puts the unsaved-edits marker.
+QString MainWindow::titleFor(const QString& projectName) {
+  const QString app = QStringLiteral("zproject %1").arg(appVersion());
+  return projectName.isEmpty() ? app + QStringLiteral("[*]") : QStringLiteral("%1 — %2[*]").arg(app, projectName);
+}
+
+void MainWindow::updateWindowTitle(const QString& projectName) { setWindowTitle(titleFor(projectName)); }
+
+void MainWindow::showGantt() {
+  if (currentProjectId().isEmpty()) return;
+  const bool was = stack_->currentWidget() == gantt_;
+  page_ = ProjectPage::Gantt;
+  showProject(currentProjectId());
+  if (!was) gantt_->table()->setFocus(Qt::OtherFocusReason);
+}
+
+// The task selected in the outline or the Gantt, whichever is showing.
+QString MainWindow::viewTaskId() const {
+  if (stack_->currentWidget() == outline_) return outline_->currentTaskId();
+  if (stack_->currentWidget() == gantt_) return gantt_->currentTaskId();
+  return {};
+}
+
 void MainWindow::showOutline() {
   if (currentProjectId().isEmpty()) return;
   const bool was = stack_->currentWidget() == outline_;
@@ -912,6 +957,7 @@ void MainWindow::updateEditActions() {
   enable("actionDeleteProject", editing && haveProject);
   enable("actionProjectDetails", haveProject);
   enable("actionOutline", haveProject);
+  enable("actionGantt", haveProject);
   if (outlineButton_) outlineButton_->setEnabled(haveProject);
   const bool inOutline = stack_ && stack_->currentWidget() == outline_ && haveProject;
   const QString task = inOutline ? outline_->currentTaskId() : QString();
@@ -924,7 +970,8 @@ void MainWindow::updateEditActions() {
   enable("actionMoveTaskUp", canEdit && haveTask && taskActions_->canMoveUp(task));
   enable("actionMoveTaskDown", canEdit && haveTask && taskActions_->canMoveDown(task));
   enable("actionRenameTask", canEdit && haveTask);
-  enable("actionEditTask", inOutline && haveTask);
+  const bool inGantt = stack_ && stack_->currentWidget() == gantt_ && haveProject;
+  enable("actionEditTask", (inOutline && haveTask) || (inGantt && !gantt_->currentTaskId().isEmpty()));
   enable("actionSaveTask", taskInspector_ != nullptr && taskInspector_->canSave());
   if (taskInspector_) taskInspector_->setEditable(editing);
   enable("actionToggleMilestone", canEdit && haveTask && taskActions_->canToggleMilestone(task));
@@ -964,6 +1011,7 @@ void MainWindow::showProject(const QString& id) {
     }
     stack_->setCurrentIndex(0);
     showInspectorText(tr("Nothing selected."));
+    updateWindowTitle({});
     updateEditActions();
     return;
   }
@@ -975,6 +1023,7 @@ void MainWindow::showProject(const QString& id) {
     if (t.value(QStringLiteral("type")).toString() == QLatin1String("milestone")) ++milestones;
   }
   const QString name = p->value(QStringLiteral("name")).toString();
+  updateWindowTitle(name);
   projectTitle_->setText(name);
   projectTitle_->setAccessibleName(name);
   const int n = static_cast<int>(tasks.size());
@@ -1010,6 +1059,10 @@ void MainWindow::showProject(const QString& id) {
     outline_->setProject(id, name);
     outline_->reload(tasks, session_->cache()->wbs(id));
     stack_->setCurrentWidget(outline_);
+  } else if (page_ == ProjectPage::Gantt) {
+    gantt_->setProject(id, name);
+    gantt_->reload(tasks, session_->cache()->wbs(id));
+    stack_->setCurrentWidget(gantt_);
   } else {
     stack_->setCurrentWidget(detailsPage_);
   }
@@ -1024,9 +1077,9 @@ void MainWindow::showProject(const QString& id) {
   // Only a snapshot carries the rev; rows built from the change feed don't.
   if (const qint64 rev = p->value(QStringLiteral("rev")).toInteger(); rev > 0) line(tr("Revision"), QString::number(rev));
   line(tr("Id"), id);
-  if (page_ == ProjectPage::Outline && !outline_->currentTaskId().isEmpty()) {
+  if (!viewTaskId().isEmpty()) {
     inspector_->setText(side);
-    showTaskInspector(outline_->currentTaskId());
+    showTaskInspector(viewTaskId());
   } else {
     showInspectorText(side);
   }
@@ -1034,12 +1087,13 @@ void MainWindow::showProject(const QString& id) {
 }
 
 void MainWindow::showTaskInspector(const QString& taskId) {
-  if (stack_->currentWidget() != outline_ || taskId.isEmpty()) return;
+  const bool inGantt = stack_->currentWidget() == gantt_;
+  if ((stack_->currentWidget() != outline_ && !inGantt) || taskId.isEmpty()) return;
   if (taskInspector_->isDirty() && taskId != taskInspector_->taskId()) {
-    askUnsaved([this] { showTaskInspector(outline_->currentTaskId()); });
+    askUnsaved([this] { showTaskInspector(viewTaskId()); });
     return;
   }
-  const OutlineModel* m = outline_->model();
+  const OutlineModel* m = inGantt ? gantt_->model() : outline_->model();
   const QJsonObject t = m->task(taskId);
   if (t.isEmpty()) return;
   taskInspector_->setEditable(editingAllowed());
@@ -1076,7 +1130,11 @@ void MainWindow::askUnsaved(std::function<void()> then) {
     afterUnsaved_ = nullptr;
     if (save && !taskInspector_->save()) {
       // Its checks failed (or it can't be saved now): stay on the task.
-      outline_->selectTask(taskInspector_->taskId());
+      if (stack_->currentWidget() == gantt_) {
+        gantt_->selectTask(taskInspector_->taskId());
+      } else {
+        outline_->selectTask(taskInspector_->taskId());
+      }
       inspectorStack_->setCurrentWidget(taskInspector_);
       return;
     }

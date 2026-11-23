@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.12.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.13.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -591,6 +591,14 @@ Carlo, multi-user permissions.
   Details, Refresh | Outline, Insert Task, Task Details, Save Task | Find |
   Check for Updates, each enabled like its menu item. View → Show Toolbar
   toggles it and the choice is saved in zproject.ini (`[view] toolbar`).
+  As built (0.13.0): View → Gantt (Ctrl-G) shows the selected project's
+  Gantt (§8.2), and the toolbar's second group is Outline, Gantt, Insert
+  Task, Task Details, Save Task. The window title is "zproject <version> —
+  <project name>", or "zproject <version>" with no project selected, on
+  Linux and macOS; the version is the build's (CMake project VERSION, the
+  one --version and About show), and unsaved task edits mark the title
+  (Qt's [*] / setWindowModified: "*" on Linux, the close-button dot on
+  macOS).
 - Main area: the selected view. Inspector panel on the right for the selected
   task, milestone, resource or RAID item (Details, Schedule, Assignments,
   Notes journal, Links, History tabs). As built (0.12.0): Details, Schedule
@@ -637,6 +645,27 @@ badges, and an optional read-only Google Calendar lane (and, phase 3, a ztodo
 lane). Drag a bar to move (sets SNET on auto tasks, or dates on manual tasks,
 after a ripple preview), drag the end to change duration, drag between bars to
 link. Print and export to PDF/PNG.
+
+As built (0.13.0, the v1 read-only subset): a task table (WBS, title,
+duration, start, finish, % complete; resources and float arrive with their
+features) and a custom-painted timeline share one read-only row model and
+scroll together; collapsing a summary in the table hides its rows in the
+timeline. Timescales day / week / month / quarter (a Timescale box,
+Ctrl-Shift-= / Ctrl-Shift-− or Ctrl-wheel while the Gantt has focus;
+Shift-wheel scrolls sideways); weekends are shaded at day and week scale
+(project calendars arrive with calendars); a dashed today line with a "Today" label, and
+Today / T scrolls to it. Bars come from the stored dates (no client-side
+scheduling): auto tasks solid, manual tasks outlined, summaries as
+brackets, milestones as diamonds, % complete as a band inside the bar, and
+deadline flags (outlined, or filled red with "missed" when the finish is
+after the deadline). Tasks with no dates say "unscheduled" in the Start
+column and have no bar; the note above the chart counts them. The chart
+paints only visible rows. Arrows move the selection, Enter (or a
+double-click on a bar) opens the task editor in the inspector, which also
+follows the Gantt's selection; the Gantt itself edits nothing. Dependency
+arrows, critical-path shading, baseline bars, over-allocation and RAID
+badges, the calendar lane, dragging, and print/export arrive in later
+versions.
 
 ### 8.3 Other views
 
@@ -688,6 +717,9 @@ Alt-↑ / Alt-↓, rename F2, delete Del or Backspace (always previewed; Edit �
 Restore brings it back), find Ctrl-F, find next / previous F3 / Shift-F3
 (Enter / Shift-Enter in the find bar, Esc closes); Ctrl-Tab / Ctrl-Shift-Tab
 (Control on macOS) leave the tree, since Tab indents there. As built
+(0.13.0): View → Gantt Ctrl-G; in the Gantt, while it has focus, timeline
+zoom Ctrl-Shift-= (or Ctrl-Shift-+) / Ctrl-Shift-− and Ctrl-wheel, scroll
+to today T, arrows move the selection and Enter opens the task. As built
 (0.12.0): Task Details Alt-Enter (outline focus) and Save Task Ctrl-S;
 View → Show Toolbar has no shortcut, and the toolbar's buttons use their
 menu items' shortcuts. Ctrl-1…6 stay unassigned
@@ -1051,6 +1083,11 @@ the Mac-local fallback first (Q3), moving to the server later is
 | Desktop cold start to Gantt (warm cache) | ≤ 1.5 s |
 | Gantt scroll/zoom, 2,000 rows | 60 fps on an Apple Silicon Mac |
 | Server memory, idle | ≤ 60 MB RSS |
+
+As built (0.13.0): tst_gantt's benchmark loads 2,000 tasks into the Gantt and
+times a full repaint at week scale, which must stay under 16 ms a frame
+(100 ms under the sanitizers); it paints only the visible rows (about 3 ms a
+frame on the CI's Linux runner).
 | Report PDF (status, 200 tasks) | ≤ 2 s |
 | Nightly backup, 50 MB database | ≤ 10 s |
 
@@ -1064,6 +1101,15 @@ respect for the system's contrast and reduced-motion settings; font size
 setting honoured across views; screen-reader smoke test (VoiceOver on macOS,
 Orca on Linux) before each minor release; minimum 4.5:1 text contrast in both
 light and dark themes.
+
+As built (0.13.0): the Gantt timeline is an accessible list ("Gantt
+timeline") whose items are its bars, each named and described in words,
+e.g. "Task 1.2 Drawings" / "3 days, 9–11 Sep, 40% complete, manual dates"
+or "Milestone 4 Handover" / "18 Dec, 0% complete, deadline 11 Dec,
+missed"; the same text is each bar's tooltip, and a task with no dates
+reads "unscheduled". Manual vs auto bars differ by outline as well as
+fill, and a missed deadline says "missed", so no meaning is carried by
+colour alone.
 
 ## 19. Testing, fuzzing and CI
 
