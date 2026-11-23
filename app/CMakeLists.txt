@@ -5,8 +5,10 @@ set(CMAKE_AUTORCC ON)
 add_library(zproject_app_lib STATIC
   AppSession.cpp AppSession.hpp
   Dialogs.cpp Dialogs.hpp
+  EditDialogs.cpp EditDialogs.hpp
   HelpDialog.cpp HelpDialog.hpp
   MainWindow.cpp MainWindow.hpp
+  ProjectActions.cpp ProjectActions.hpp
   Shortcuts.cpp Shortcuts.hpp
   SignInDialog.cpp SignInDialog.hpp
   SingleInstance.cpp SingleInstance.hpp

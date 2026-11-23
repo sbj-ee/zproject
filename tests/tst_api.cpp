@@ -621,6 +621,40 @@ class TestApi : public QObject {
     QCOMPARE(Fixture::json(r).value(QStringLiteral("order")).toInt(), 3);
   }
 
+  // `order` is in the task JSON but read-only: only /move changes it.
+  void taskOrderIsReadOnly() {
+    Fixture f;
+    const QString p = f.createProject(QStringLiteral("House"));
+    const QString a = f.createTask(p, QStringLiteral("A"));
+    const QString b = f.createTask(p, QStringLiteral("B"));
+    const QByteArray bPath = "/v1/tasks/" + b.toLatin1();
+    QJsonObject t = Fixture::json(f.call("GET", bPath, f.owner));
+    QCOMPARE(t.value(QStringLiteral("order")).toInt(), 2);
+    const qsizetype changesBefore = f.store->changesSince(0)->size();
+    for (const QByteArray& q : {QByteArray(), QByteArray("?dryRun=true")}) {
+      Response r = f.call("PATCH", bPath + q, f.owner, {{QStringLiteral("order"), 1}});
+      QCOMPARE(r.status, 400);
+      QCOMPARE(code(r), QStringLiteral("validation"));
+      QCOMPARE(Fixture::json(r).value(QStringLiteral("details")).toObject().value(QStringLiteral("field")).toString(),
+               QStringLiteral("order"));
+      QVERIFY(Fixture::json(r).value(QStringLiteral("error")).toString().contains(QStringLiteral("cannot be set")));
+    }
+    // With other fields too: the whole PATCH is refused.
+    QCOMPARE(f.call("PATCH", bPath, f.owner, {{QStringLiteral("title"), QStringLiteral("B2")}, {QStringLiteral("order"), 2}}).status,
+             400);
+    // And on create.
+    QCOMPARE(code(f.call("POST", "/v1/projects/" + p.toLatin1() + "/tasks", f.owner,
+                         {{QStringLiteral("title"), QStringLiteral("C")}, {QStringLiteral("order"), 1}})),
+             QStringLiteral("validation"));
+    QCOMPARE(f.store->changesSince(0)->size(), changesBefore);
+    QCOMPARE(Fixture::json(f.call("GET", bPath, f.owner)).value(QStringLiteral("title")).toString(), QStringLiteral("B"));
+    // The move endpoint does it.
+    Response r = f.call("POST", bPath + "/move", f.owner, {{QStringLiteral("position"), 0}});
+    QCOMPARE(r.status, 200);
+    QCOMPARE(Fixture::json(r).value(QStringLiteral("order")).toInt(), 1);
+    QCOMPARE(Fixture::json(f.call("GET", "/v1/tasks/" + a.toLatin1(), f.owner)).value(QStringLiteral("order")).toInt(), 2);
+  }
+
   void restoreTask() {
     Fixture f;
     const QString p = f.createProject(QStringLiteral("House"));

@@ -115,6 +115,14 @@ const QSet<QString>& baseReadOnly() {
   return s;
 }
 
+// A task's sibling order is the server's: it changes only through
+// POST /v1/tasks/{id}/move (SPEC.md §7.1), never in a create or PATCH body.
+QSet<QString> taskReadOnly() {
+  QSet<QString> s = baseReadOnly();
+  s.insert(QStringLiteral("order"));
+  return s;
+}
+
 QJsonObject tokenJson(const store::TokenRecord& t, const QString& nowIso) {
   const bool expired = !t.expiresAt.isEmpty() && t.expiresAt <= nowIso;
   auto orNull = [](const QString& s) { return s.isEmpty() ? QJsonValue() : QJsonValue(s); };
@@ -903,7 +911,7 @@ Response Api::createTask(Call& c) {
     }
     body.remove(QStringLiteral("project"));
   }
-  if (auto e = checkFields(body, toJson(Task{}), baseReadOnly(), {})) return *e;
+  if (auto e = checkFields(body, toJson(Task{}), taskReadOnly(), {})) return *e;
   Task t = taskFromJson(body);
   t.project = projectId;
   if (auto e = toValidationError(validateTask(t))) return storeError(*e);
@@ -950,7 +958,7 @@ Response Api::updateTask(Call& c) {
   auto cur = store_.task(id);
   if (!cur) return storeError(cur.error());
   if (auto a = checkProjectAccess(c, cur->project); a.status) return a;
-  QSet<QString> readOnly = baseReadOnly();
+  QSet<QString> readOnly = taskReadOnly();
   readOnly.insert(QStringLiteral("project"));
   if (auto e = checkFields(c.body, toJson(Task{}), readOnly, {})) return *e;
   Response err = Response::empty(0);

@@ -24,10 +24,13 @@ class QListWidget;
 class QMessageBox;
 class QPushButton;
 class QStackedWidget;
+class QTableWidget;
+class QToolButton;
 
 namespace zproject::app {
 
 class HelpDialog;
+class ProjectActions;
 class UpdateDialog;
 class UpdateManager;
 class SignInDialog;
@@ -103,6 +106,17 @@ class MainWindow : public QMainWindow {
   QLabel* connectionStatus() const { return status_; }
   QLabel* refreshStatus() const { return refreshed_; }
   QListWidget* projectList() const { return projects_; }
+  // Projects (SPEC.md §7.10, §8.1): the all-projects table (View → All
+  // Projects, Ctrl+1), the details page (Ctrl+2) and the editing actions.
+  QTableWidget* projectTable() const { return projectTable_; }
+  QToolButton* showClosedButton() const { return showClosed_; }
+  QStackedWidget* mainStack() const { return stack_; }
+  QLabel* projectDetails() const { return projectDetails_; }
+  ProjectActions* projectActions() const { return projectActions_; }
+  QString currentProjectId() const;
+  void selectProject(const QString& id);
+  void showProjectTable();
+  void showProjectDetails();
   QAction* action(const QString& objectName) const;
 
  signals:
@@ -123,6 +137,8 @@ class MainWindow : public QMainWindow {
   void updateConnectionUi();
   void reloadProjects();
   void showProject(const QString& id);
+  void fillProjectTable(const QList<QJsonObject>& projects);
+  void updateEditActions();
   void openUrl(const QUrl& url);
   client::ClientConfig cliConfig() const;
   client::TokenStore tokenStore(const client::ClientConfig& cli) const;
@@ -147,6 +163,13 @@ class MainWindow : public QMainWindow {
   QLabel* projectTitle_ = nullptr;
   QLabel* projectSummary_ = nullptr;
   QListWidget* projects_ = nullptr;
+  QToolButton* showClosed_ = nullptr;
+  QTableWidget* projectTable_ = nullptr;
+  QLabel* projectDetails_ = nullptr;
+  QPushButton* editButton_ = nullptr;
+  QPushButton* deleteButton_ = nullptr;
+  ProjectActions* projectActions_ = nullptr;
+  QString pendingSelect_;  // a project just created: select it once the feed has it
   QDockWidget* sidebarDock_ = nullptr;
   QDockWidget* inspectorDock_ = nullptr;
   QLabel* inspector_ = nullptr;

@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.9.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.10.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -258,7 +258,7 @@ optimistic concurrency via `If-Match`).
 | Table | Fields (beyond the common ones) |
 |---|---|
 | `project` | `name`, `description` (Markdown), `objectives`, `scope`, `outOfScope`, `successCriteria`, `owner`, `sponsor` (resource id or text), `status` (`active`, `on_hold`, `done`, `cancelled`), `rag` (`green`, `amber`, `red`), `priority` (1–4), `start`, `finish` (optional target), `calendar`, `budget`, `color`, `order`, `templateId` (if created from one) |
-| `task` | `project`, `parent` (null = top level), `order`, `title` (required), `notes` (Markdown), `type` (`task`, `milestone`; `summary` is derived), `mode` (`auto`, `manual`), `duration` (working days, ≥ 0; 0 for milestones), `start`, `finish` (stored for manual tasks; computed for auto), `constraint` (`ASAP`, `SNET`, `FNLT`), `constraintDate`, `deadline`, `calendar` (null = project's), `percentComplete` (0–100), `actualStart`, `actualFinish`, `status` (`todo`, `in_progress`, `done`; derived from % unless overridden), `priority` (1–4), `fixedCost` |
+| `task` | `project`, `parent` (null = top level), `order` (read-only in the API; changed only by `POST /v1/tasks/{id}/move`), `title` (required), `notes` (Markdown), `type` (`task`, `milestone`; `summary` is derived), `mode` (`auto`, `manual`), `duration` (working days, ≥ 0; 0 for milestones), `start`, `finish` (stored for manual tasks; computed for auto), `constraint` (`ASAP`, `SNET`, `FNLT`), `constraintDate`, `deadline`, `calendar` (null = project's), `percentComplete` (0–100), `actualStart`, `actualFinish`, `status` (`todo`, `in_progress`, `done`; derived from % unless overridden), `priority` (1–4), `fixedCost` |
 | `dependency` | `project`, `predecessor`, `successor`, `type` (`FS`, `SS`, `FF`; `SF` phase 2), `lag` (working days, may be negative) |
 | `resource` | `name`, `kind` (`person`), `email` (optional display, e.g. `someone@example.com`), `maxUnits` (default 100), `rate` (per hour), `calendar` |
 | `assignment` | `task`, `resource`, `units` (1–1000 %) |
@@ -403,7 +403,8 @@ are renumbered (`order` 1..n); each row that changes gets its own revision and
 change row, and the old and new parents roll up in the same transaction
 (§5.3). A move under the task itself or a descendant is 409 `cycle`; a
 milestone, deleted or other-project parent is 400. Not destructive; honours
-`If-Match` and `dryRun`.
+`If-Match` and `dryRun`. A task's `order` is read-only everywhere else: a
+create or `PATCH` body with `order` is 400 `validation` (0.10.0).
 
 ### 7.2 Critical path [approved] — phase 1
 
@@ -502,6 +503,19 @@ an append-only note journal (`task_note`) so people and agents add notes
 without overwriting each other. API: `PATCH /v1/projects/{id}`,
 `GET|POST /v1/tasks/{id}/notes`.
 
+Desktop (0.10.0): the Details page shows the project's fields read-only with
+Edit Details… and Delete Project…. The project editor (File → New Project…,
+Project → Edit Project Details…) has name, status, RAG, priority, start, target
+finish, owner, sponsor, budget, colour and the Markdown description,
+objectives, scope, out of scope and success criteria. It starts from the
+server's copy of the project (`GET /v1/projects/{id}`; its `rev` is the
+`If-Match`), checks fields locally first (⚠ next to each, nothing sent), and
+sends only the changed fields. Every write is a dry run first; a preview is
+shown only when the dry run changes more than the project itself (§4.5).
+Delete always shows the preview (the project and each of its tasks), then
+sends the `confirmId`; the project and its tasks become tombstones. Tags and
+links come later.
+
 ### 7.11 Multi-project — phase 1
 
 Portfolio view (status, RAG, % complete, next milestone, finish vs baseline,
@@ -525,7 +539,12 @@ Carlo, multi-user permissions.
 
 - Left sidebar: Portfolio, then projects (active first, then on hold, done
   collapsed), with a project's sub-views: Details, Gantt, List, Resources,
-  RAID, Baselines, Reports. Alerts badge at the top.
+  RAID, Baselines, Reports. Alerts badge at the top. As built (0.10.0): the
+  project list sorts active, on hold (italic, "(on hold)"), then done and
+  cancelled, which are hidden behind a "Show done and cancelled (N)" toggle;
+  View → All Projects shows a table (Name, Status, RAG as a letter and a
+  coloured dot, Priority, Start, Target finish, Owner) whose rows open the
+  project's Details. Portfolio and the sub-views arrive with their views.
 - Main area: the selected view. Inspector panel on the right for the selected
   task, milestone, resource or RAID item (Details, Schedule, Assignments,
   Notes journal, Links, History tabs).
@@ -539,8 +558,9 @@ Carlo, multi-user permissions.
   (and Sign in… after a 401).
 - Menus: File (New project, New from template, Import, Export, Print/PDF,
   Refresh F5, Preferences), Edit (Undo/Redo, Cut/Copy/Paste rows, Find),
-  View (Gantt, List, Resources, RAID, Portfolio; zoom; critical only; baseline
-  bars; calendar overlay), Project (Set baseline, Save as template, Reschedule,
+  View (All Projects, Project Details, Gantt, List, Resources, RAID, Portfolio;
+  zoom; critical only; baseline bars; calendar overlay), Project (Edit Project
+  Details…, Delete Project…, Set baseline, Save as template, Reschedule,
   Project calendar), Help (zproject Help F1, Keyboard Shortcuts, API
   Reference, Report an Issue, Check for Updates… (§21), About).
   View also has Theme (System, Light, Dark, High contrast) and UI text zoom
@@ -590,7 +610,8 @@ RAID R / A / I / D in the RAID view, Gantt zoom Ctrl-Shift-+/− and
 Ctrl-wheel, scroll to today T, switch views Ctrl-1…6, refresh F5 (or Ctrl-R).
 Window-wide: UI text zoom Ctrl-+ / Ctrl-− / Ctrl-0 (as zterminal and zwriter),
 Preferences Ctrl-, , sidebar Ctrl-B, inspector Ctrl-I, go to the project list
-Ctrl-Shift-P, help F1, keyboard shortcuts Ctrl-/, quit Ctrl-Q. Cmd instead of
+Ctrl-Shift-P, new project Ctrl-N, edit project details Ctrl-E, help F1,
+keyboard shortcuts Ctrl-/, quit Ctrl-Q. Cmd instead of
 Ctrl on macOS.
 
 ## 9. HTTP API
@@ -666,6 +687,15 @@ expires in 90 days, `requireConfirm = true`; agents never get `admin`
   413/422 explain; 429 no new request until `Retry-After`; 5xx, network and
   timeout offline read-only with backoff; TLS failure hard stop; a 2xx whose
   body isn't the JSON expected is refused. Nothing is retried blindly.
+- Desktop conflict dialog (412, plan §4.4; 0.10.0 for projects): the client
+  refetches the entity and finds who changed it (the newest change-feed record
+  for it, else the cached activity, else just `updatedAt`), then shows a table
+  of field · your value · server value · result. Fields only you changed are
+  kept, fields only the server changed are taken, and fields both changed
+  (bold, ⚠) need Keep Mine, Take Theirs or Cancel (the default). Keep Mine and
+  Take Theirs re-run the dry run on the server's `rev` and send the merged
+  fields with that `If-Match`; Cancel sends nothing and leaves the editor
+  open. A delete's 412 re-runs its preview on the current `rev`.
 - OpenAPI 3.1: `api/openapi.yaml` is the source of truth, served at
   `GET /v1/openapi.json` (any valid token). Each operation declares
   `x-zproject-scope`, `x-zproject-destructive`, `x-zproject-dry-run`.
@@ -900,6 +930,9 @@ schema 1 to head on fixture databases.
   record's `ts`), the server's version and `schemaVersion`, and the last
   refresh time. Never a token. A record's `after` is merged into the stored
   entity; one whose `rev` isn't newer is skipped, so replays change nothing.
+  Change records carry field diffs without `rev` or `updatedAt`, so a cached
+  entity built from the feed has no `rev`; an edit or delete therefore first
+  reads the entity from the server to get the `rev` it sends as `If-Match`.
   A cache-format change empties it. Preferences → Clear cache deletes it; with
   the cache turned off it is kept in memory only.
 - Cache refresh (`client/ChangeFeedSyncer`): `GET /v1/changes?since=<seq>&limit=500`,

@@ -6,6 +6,9 @@ namespace zproject::app {
 
 QList<ShortcutInfo> shellShortcuts() {
   return {
+      {QStringLiteral("actionNewProject"), QObject::tr("New project"), {QKeySequence(Qt::CTRL | Qt::Key_N)}},
+      {QStringLiteral("actionEditProject"), QObject::tr("Edit the project's details"),
+       {QKeySequence(Qt::CTRL | Qt::Key_E)}},
       {QStringLiteral("actionRefresh"), QObject::tr("Refresh from the server"),
        {QKeySequence(Qt::Key_F5), QKeySequence(Qt::CTRL | Qt::Key_R)}},
       {QStringLiteral("actionPreferences"), QObject::tr("Preferences"),

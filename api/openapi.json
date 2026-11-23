@@ -1627,9 +1627,6 @@
       ],
       "pattern": "^[0-9a-f]{20}$"
      },
-     "order": {
-      "type": "integer"
-     },
      "notes": {
       "type": "string"
      },
@@ -1717,6 +1714,12 @@
       "properties": {
        "project": {
         "$ref": "#/components/schemas/Id"
+       },
+       "order": {
+        "type": "integer",
+        "minimum": 1,
+        "readOnly": true,
+        "description": "Position among the parent's children (1 = first; gaps are allowed). Read-only: a create or PATCH body with `order` is a 400 validation error; reorder with POST /v1/tasks/{id}/move."
        }
       }
      }

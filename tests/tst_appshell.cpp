@@ -380,7 +380,8 @@ class TestAppShell : public QObject {
     MainWindow w(options(false));
     QStringList menus;
     for (QAction* a : w.menuBar()->actions()) menus << a->text();
-    QCOMPARE(menus, (QStringList{QStringLiteral("&File"), QStringLiteral("&View"), QStringLiteral("&Help")}));
+    QCOMPARE(menus, (QStringList{QStringLiteral("&File"), QStringLiteral("&Project"), QStringLiteral("&View"),
+                                 QStringLiteral("&Help")}));
     // Every listed shortcut is wired to an action, and no two actions share a key.
     QSet<QString> keys;
     for (const ShortcutInfo& s : shellShortcuts()) {
