@@ -6,6 +6,7 @@ add_library(zproject_core STATIC
   Id.cpp Id.hpp
   Model.cpp Model.hpp
   Rollup.cpp Rollup.hpp
+  Schedule.cpp Schedule.hpp
   UpdateSigningKey.cpp UpdateSigningKey.hpp
   Version.cpp Version.hpp
   WorkCalendar.cpp WorkCalendar.hpp)

@@ -54,6 +54,7 @@ struct Task : EntityBase {
   QString constraintType = QStringLiteral("ASAP");  // ASAP, SNET, FNLT
   QString constraintDate;
   QString deadline;
+  QString calendar;  // calendar id; empty = the project's (stored and served from S4)
   int percentComplete = 0;                      // 0..100
   QString actualStart;
   QString actualFinish;
@@ -61,6 +62,20 @@ struct Task : EntityBase {
   int priority = 2;                             // 1..4
   double fixedCost = 0;
 };
+
+// A link between two tasks of one project (SPEC.md §5.1): the successor
+// is driven by the predecessor's finish (FS) or start (SS), or must finish
+// with it (FF), offset by `lag` whole working days of the successor's
+// calendar (negative: a lead). SF is phase 2.
+struct Dependency : EntityBase {
+  QString project;
+  QString predecessor;
+  QString successor;
+  QString type = QStringLiteral("FS");  // FS, SS, FF
+  int lag = 0;                          // working days, may be negative
+};
+
+inline constexpr int kMaxLagDays = 3650;  // ten years either way
 
 // One problem with one field: {"field": "...", "message": "..."}.
 struct FieldError {
@@ -72,6 +87,9 @@ struct FieldError {
 // need other rows (parent exists, no cycles) are checked by the store.
 QList<FieldError> validateProject(const Project& p);
 QList<FieldError> validateTask(const Task& t);
+// A link's own fields; the store checks the tasks exist, share the project,
+// and that the link is not a duplicate and makes no cycle.
+QList<FieldError> validateDependency(const Dependency& d);
 
 // Turns field errors into a validation Error (empty list -> no error).
 std::optional<Error> toValidationError(const QList<FieldError>& errors);
