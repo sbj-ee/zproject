@@ -372,16 +372,46 @@ class TestCli : public QObject {
              0);
     r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("history"), b});
     QCOMPARE(r.code, 0);
-    QCOMPARE(r.out.split(QLatin1Char('\n'), Qt::SkipEmptyParts).size(), 3);  // header, create, update
+    // header, create, update, and the dates its actual start gives it (S5)
+    QCOMPARE(r.out.split(QLatin1Char('\n'), Qt::SkipEmptyParts).size(), 4);
     // Foundation's history shows the roll-up as its own change.
     r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("history"), a});
     QCOMPARE(r.code, 0);
-    QCOMPARE(r.out.split(QLatin1Char('\n'), Qt::SkipEmptyParts).size(), 3);  // header, create, roll-up
+    // header, create, roll-up, and the dates its subtask gives it (S5)
+    QCOMPARE(r.out.split(QLatin1Char('\n'), Qt::SkipEmptyParts).size(), 4);
 
     // Owner deletes need no confirmation; the subtree goes too.
     QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("delete"), a}).code, 0);
     QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("show"), a1}).code, int(kExitError));  // 404
     QCOMPARE(cliAs(owner_, {QStringLiteral("audit"), QStringLiteral("--limit"), QStringLiteral("5")}).code, 0);
+  }
+
+  // schedule (scheduling plan S5).
+  void schedule() {
+    const QString p = createProject(QStringLiteral("Bathroom"));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("projects"), QStringLiteral("update"), p, QStringLiteral("--start"),
+                            QStringLiteral("2026-11-02")}).code, 0);
+    addTask(p, QStringLiteral("Strip out"), {QStringLiteral("--duration"), QStringLiteral("3")});  // 1
+    addTask(p, QStringLiteral("Plumbing"), {QStringLiteral("--duration"), QStringLiteral("2")});   // 2
+    addTask(p, QStringLiteral("Tiling"));                                                          // 3
+    QCOMPARE(cliAs(owner_, {QStringLiteral("deps"), QStringLiteral("add"), p, QStringLiteral("2"), QStringLiteral("1")}).code, 0);
+    QCOMPARE(cliAs(owner_, {QStringLiteral("deps"), QStringLiteral("add"), p, QStringLiteral("3"), QStringLiteral("2")}).code, 0);
+    Run r = cliAs(owner_, {QStringLiteral("schedule"), QStringLiteral("show"), p});
+    QCOMPARE(r.code, 0);
+    QVERIFY2(r.out.contains(QStringLiteral("2026-11-05")), qPrintable(r.out));  // Plumbing starts Thursday
+    QVERIFY(r.out.contains(QStringLiteral("Finish: 2026-11-09")));
+    QVERIFY(r.out.contains(QStringLiteral("critical")));
+    r = cliAs(owner_, {QStringLiteral("schedule"), QStringLiteral("critical"), p});
+    QCOMPARE(r.code, 0);
+    QVERIFY(r.out.contains(QStringLiteral("Strip out")) && r.out.contains(QStringLiteral("Tiling")));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("schedule"), QStringLiteral("recompute"), p}).out,
+             QStringLiteral("Already up to date.\n"));
+    // An auto task's dates can't be set by hand.
+    r = cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("add"), p, QStringLiteral("x"), QStringLiteral("--start"),
+                       QStringLiteral("2026-11-20")});
+    QCOMPARE(r.code, int(kExitConflict));
+    QVERIFY(r.err.contains(QStringLiteral("manual")));
+    QCOMPARE(cliAs(owner_, {QStringLiteral("schedule"), QStringLiteral("frob"), p}).code, int(kExitUsage));
   }
 
   // calendars (scheduling plan S4).

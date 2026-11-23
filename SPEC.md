@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.21.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.22.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -428,6 +428,28 @@ conventions.
 the change in project finish, and whether the critical set changed. 2,200
 tasks and 4,000 links schedule in about 1 ms (the budget is 50 ms).
 
+As built (0.22.0, scheduling plan S5), the schedule is live on the server.
+- **When it runs:** every write that can move dates reschedules the projects
+  it touches in the same transaction. That covers task writes, moves,
+  deletes and restores; link writes; a project's start, target finish or
+  calendar; and calendar or exception writes, which reschedule every project.
+- **What it stores:** auto tasks' and summaries' `start`/`finish` are the
+  schedule's early dates. Each task whose dates change gets its own revision
+  and change row, under the writer's actor and request id, just as roll-ups
+  do. Manual tasks keep their dates.
+- **Read-only dates:** an auto task's or summary's dates can't be set by hand
+  (400, field `start` or `finish`: "set a start-no-earlier-than constraint,
+  or make the task manual"), not even when creating it.
+- **Reconcile on open:** opening the database corrects stale dates (actor
+  `system`), and does nothing once they're in step.
+- **Endpoints:** `GET /v1/projects/{id}/schedule` (`schedule:read`: early and
+  late dates, total and free float, critical, violations, finish), `GET
+  /v1/projects/{id}/critical-path` and `POST /v1/projects/{id}/reschedule`
+  (`tasks:write`, dry run). MCP adds `get_schedule` and `get_critical_path`,
+  and the CLI adds `schedule show|critical|recompute`.
+- **Speed:** a PATCH that reschedules 2,000 tasks and 4,000 links takes about
+  10 ms (budget 200 ms).
+
 ### 6.3 Phase 2+
 
 SF links, SNLT/FNET/MSO/MFO constraints, effort-driven scheduling, resource
@@ -841,6 +863,13 @@ expires in 90 days, `requireConfirm = true`; agents never get `admin`
   returns 412 on mismatch. Desktop clients always send it.
 - Dry run: every write accepts `?dryRun=true` and returns
   `{changes:[...], ripple:{moved:[...], finishDelta, criticalChanged}, confirmId?}`.
+  As built (0.22.0): for writes that can move dates, the ripple is computed by
+  doing the write inside a savepoint that is always rolled back. `moved` lists
+  `{project, task, startBefore, startAfter, finishBefore, finishAfter,
+  startDelta, finishDelta}` (calendar days), `finishDelta` is the largest
+  change in a project's finish, and `violations` are those afterwards. A dry
+  run therefore moves exactly what the write would, and refuses exactly what
+  it would.
   Desktop clients (0.11.0) show a preview when a write is destructive or a
   change touches another entity; an `update` whose `after` holds only `order`
   (a sibling renumbered by a move) is not counted.

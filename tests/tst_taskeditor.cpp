@@ -570,7 +570,14 @@ class TestTaskEditor : public QObject {
     TaskInspector* i = insp(*w);
     fieldOf<QSpinBox>(*w, "percentComplete")->setValue(30);
     // Another computer gives Permits a subtask before the save arrives.
-    add(QStringLiteral("Zoning"), QStringLiteral("Permits"));
+    // Within Permits' own dates: only its progress becomes derived (new dates
+    // would move its rev, and the save would meet a 412 first).
+    add(QStringLiteral("Zoning"), QStringLiteral("Permits"), [](Task& t) {
+      t.mode = QStringLiteral("manual");
+      t.start = QStringLiteral("2026-09-14");
+      t.finish = QStringLiteral("2026-09-18");
+      t.duration = 5;
+    });
     QVERIFY(i->save());
     QVERIFY(waitFor([&] { return i->message()->text().contains(QStringLiteral("now has subtasks")); }));
     QCOMPARE(task(QStringLiteral("Permits")).percentComplete, 0);

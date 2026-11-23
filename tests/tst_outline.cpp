@@ -784,7 +784,14 @@ class TestOutline : public QObject {
     before_ = [&](const server::http::Request& r) {
       if (once && r.method == "PATCH") {
         once = false;
-        add(QStringLiteral("Zoning check"), QStringLiteral("Permits"));
+        // Within Permits' own dates, so only its progress becomes derived
+        // (new dates would move its rev, and the client would see a 412 first).
+        add(QStringLiteral("Zoning check"), QStringLiteral("Permits"), [](Task& t) {
+          t.mode = QStringLiteral("manual");
+          t.start = QStringLiteral("2026-09-14");
+          t.finish = QStringLiteral("2026-09-18");
+          t.duration = 5;
+        });
       }
     };
     QTreeView* tree = w->outline()->tree();

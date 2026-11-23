@@ -24,6 +24,7 @@ zproject_add_test(tst_auth zproject_server_lib)
 zproject_add_test(tst_api zproject_server_lib)
 zproject_add_test(tst_dependencies zproject_server_lib)
 zproject_add_test(tst_calendars zproject_server_lib)
+zproject_add_test(tst_scheduling zproject_server_lib)
 zproject_add_test(tst_cli zproject_client zproject_server_lib)
 
 # Desktop client core (SPEC.md §16.5): the fault-injecting mock server is a

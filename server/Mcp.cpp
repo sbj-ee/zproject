@@ -116,6 +116,17 @@ const QList<Mcp::Tool>& Mcp::tools() {
         {QStringLiteral("get_task"), QStringLiteral("Get a task"), QStringLiteral("One task's details. Read-only."),
          QStringLiteral("tasks:read"), false,
          schema({{QStringLiteral("id"), idProp(QStringLiteral("Task id"))}}, {QStringLiteral("id")})},
+        {QStringLiteral("get_schedule"), QStringLiteral("Get a project's schedule"),
+         QStringLiteral("Every task's early and late dates, total and free float (working days) and whether it is "
+                        "critical, the critical tasks, the forecast finish, and schedule violations (a manual task "
+                        "breaking a link, a missed deadline or finish-no-later-than date). Read-only."),
+         QStringLiteral("schedule:read"), false,
+         schema({{QStringLiteral("project"), idProp(QStringLiteral("Project id"))}}, {QStringLiteral("project")})},
+        {QStringLiteral("get_critical_path"), QStringLiteral("Get the critical path"),
+         QStringLiteral("The tasks with no float, in order of start, with titles and dates: what delays the project "
+                        "if it slips. Read-only."),
+         QStringLiteral("schedule:read"), false,
+         schema({{QStringLiteral("project"), idProp(QStringLiteral("Project id"))}}, {QStringLiteral("project")})},
         {QStringLiteral("create_task"), QStringLiteral("Create a task"),
          QStringLiteral("Add a task to a project. Writes; not destructive; no confirmation needed."),
          QStringLiteral("tasks:write"), false, schema(create, {QStringLiteral("project"), QStringLiteral("title")})},
@@ -333,6 +344,12 @@ QJsonObject Mcp::callTool(const http::Request& req, const store::TokenRecord& to
     if (args.contains(QStringLiteral("rev"))) {
       call.ifMatch = QByteArray::number(args.value(QStringLiteral("rev")).toInteger());
     }
+  } else if (name == QLatin1String("get_schedule")) {
+    call.method = "GET";
+    call.path = QStringLiteral("/v1/projects/%1/schedule").arg(idArg("project"));
+  } else if (name == QLatin1String("get_critical_path")) {
+    call.method = "GET";
+    call.path = QStringLiteral("/v1/projects/%1/critical-path").arg(idArg("project"));
   } else if (name == QLatin1String("add_dependency")) {
     call.method = "POST";
     call.path = QStringLiteral("/v1/dependencies");
