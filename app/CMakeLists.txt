@@ -20,6 +20,7 @@ add_library(zproject_app_lib STATIC
   Shortcuts.cpp Shortcuts.hpp
   SignInDialog.cpp SignInDialog.hpp
   SingleInstance.cpp SingleInstance.hpp
+  SmokeTest.cpp SmokeTest.hpp
   TaskActions.cpp TaskActions.hpp
   Theme.cpp Theme.hpp
   Minisign.cpp Minisign.hpp

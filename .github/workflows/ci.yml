@@ -119,6 +119,7 @@ jobs:
           dpkg-deb -f zproject_*_amd64.deb Depends > desktop.depends
           grep -q 'libssl3' desktop.depends
           grep -q 'libqt6network6' desktop.depends
+          grep -q 'qt6-qpa-plugins' desktop.depends
           # The updater's minisign check (libsodium) is the desktop app's alone.
           grep -q 'libsodium23' desktop.depends
           if grep -q 'libsodium' server.depends; then echo "::error::zprojectd depends on libsodium"; exit 1; fi
@@ -190,6 +191,9 @@ jobs:
             apt-get install -y -qq /pkgs/zproject_*_amd64.deb >/dev/null
             zproject-cli --version
             zproject-cli doctor
+            # The desktop app starts from the package alone (platform
+            # plugin, style, help, icon), in a throwaway home.
+            QT_QPA_PLATFORM=offscreen zproject --smoke-test
             export ZPROJECT_URL=http://127.0.0.1:8788
             printf "%s\n" "$token" | zproject-cli login --stdin
             test "$(stat -c "%a" "$HOME/.config/zproject/token")" = 600
@@ -312,6 +316,9 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$mnt/zproject.app"
           cli="$mnt/zproject.app/Contents/MacOS/zproject-cli"
           "$mnt/zproject.app/Contents/MacOS/zproject" --version
+          # The bundled app opens its window with the bundle's own cocoa
+          # plugin and style, in a throwaway home (never the user's config).
+          "$mnt/zproject.app/Contents/MacOS/zproject" --smoke-test
           "$cli" --version
           "$cli" doctor
           file "$cli" | grep -q arm64

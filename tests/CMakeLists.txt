@@ -65,6 +65,11 @@ if(ZPROJECT_BUILD_GUI)
   add_test(NAME zproject_version COMMAND zproject --version)
   set_tests_properties(zproject_version PROPERTIES
     PASS_REGULAR_EXPRESSION "^zproject ${PROJECT_VERSION}\n$")
+  # The packaging smoke test CI also runs from the .dmg and the installed .deb.
+  add_test(NAME zproject_smoke_test COMMAND zproject --smoke-test)
+  set_tests_properties(zproject_smoke_test PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    PASS_REGULAR_EXPRESSION "zproject ${PROJECT_VERSION} smoke test: ok")
 endif()
 
 # The desktop app shell (SPEC.md §8), offscreen.
@@ -78,6 +83,7 @@ if(ZPROJECT_BUILD_GUI)
   zproject_add_test(tst_gantt zproject_app_lib zproject_server_lib)
   zproject_add_test(tst_milestones zproject_app_lib zproject_server_lib)
   zproject_add_test(tst_activity zproject_app_lib zproject_server_lib)
+  zproject_add_test(tst_accessibility zproject_app_lib zproject_server_lib)
   # The title-bar test checks the build version against CMake's.
   target_compile_definitions(tst_gantt PRIVATE ZPROJECT_TEST_VERSION="${PROJECT_VERSION}")
   # The signed in-app updater (SPEC.md §21) against a mock release feed.

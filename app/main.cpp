@@ -12,16 +12,19 @@
 #include "app/MainWindow.hpp"
 #include "app/SignInDialog.hpp"
 #include "app/SingleInstance.hpp"
+#include "app/SmokeTest.hpp"
 #include "app/UpdateManager.hpp"
 #include "core/Version.hpp"
 
 int main(int argc, char* argv[]) {
   // --version works without a display (CI, packaging smoke tests).
+  bool smoke = false;
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--version") == 0) {
       QTextStream(stdout) << zproject::versionLine(QStringLiteral("zproject")) << '\n';
       return 0;
     }
+    if (std::strcmp(argv[i], "--smoke-test") == 0) smoke = true;
   }
 
   Q_INIT_RESOURCE(zproject_app);
@@ -42,6 +45,15 @@ int main(int argc, char* argv[]) {
   // and our palette replace it.
   zproject::app::MainWindow::Options options = zproject::app::MainWindow::defaultOptions();
   QApplication::setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
+
+  // --smoke-test: the window in a throwaway home, then exit (packaging CI).
+  // No single-instance lock: it touches nothing a running app uses.
+  if (smoke) {
+    QString report;
+    const int rc = zproject::app::runSmokeTest(&report);
+    QTextStream(rc == 0 ? stdout : stderr) << report << '\n';
+    return rc;
+  }
 
   zproject::app::SingleInstance instance(options.paths.cacheDir + QStringLiteral("/zproject.lock"));
   qint64 pid = 0;

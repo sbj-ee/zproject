@@ -1,6 +1,6 @@
 # zproject
 
-**0.15.0**
+**0.16.0**
 
 Current release: **0.13.0**
 
@@ -155,6 +155,13 @@ and [docs/RELEASING.md](docs/RELEASING.md).
   ad-hoc signed, not notarized, so the first launch needs right-click → Open.
   To put the CLI on your `PATH`, run
   `ln -s /Applications/zproject.app/Contents/MacOS/zproject-cli /usr/local/bin/zproject-cli`.
+
+Log the CLI in first (below): the desktop app's first run then offers to use
+the same device token. [docs/DEPLOY.md §5.1](docs/DEPLOY.md#51-the-desktop-app-linux-and-macos)
+covers the first run, updates, the offline cache and where the app keeps its
+files. `zproject --smoke-test` opens the window briefly in a throwaway home
+and prints `... smoke test: ok`, which is a quick check that an install
+works.
 
 ### Connecting the CLI
 

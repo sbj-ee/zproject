@@ -12,7 +12,7 @@ endif()
 # Single source of truth for the version (SPEC.md §22): bump ONLY the VERSION
 # here. It reaches all three binaries through generated/zproject/version.hpp,
 # and CPack names the packages from PROJECT_VERSION.
-project(zproject VERSION 0.15.0 LANGUAGES C CXX)
+project(zproject VERSION 0.16.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

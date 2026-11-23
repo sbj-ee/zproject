@@ -64,8 +64,10 @@ if(UNIX AND NOT APPLE)
   set(CPACK_DEBIAN_DESKTOP_PACKAGE_NAME "zproject")
   set(CPACK_DEBIAN_DESKTOP_FILE_NAME "zproject_${PROJECT_VERSION}_amd64.deb")
   set(CPACK_DEBIAN_DESKTOP_PACKAGE_SECTION "x11")
-  # Qt loads OpenSSL at run time for https:// (shlibdeps cannot see it).
-  set(CPACK_DEBIAN_DESKTOP_PACKAGE_DEPENDS "libssl3t64 | libssl3")
+  # Qt loads OpenSSL at run time for https://, and its platform plugins (xcb,
+  # offscreen) from qt6-qpa-plugins: shlibdeps sees neither, and without a
+  # platform plugin the app cannot open a window.
+  set(CPACK_DEBIAN_DESKTOP_PACKAGE_DEPENDS "libssl3t64 | libssl3, qt6-qpa-plugins")
   set(CPACK_DEBIAN_DESKTOP_PACKAGE_SUGGESTS "libsecret-tools")
   set(CPACK_COMPONENT_DESKTOP_DESCRIPTION
       "zproject desktop app and zproject-cli.\nGantt, WBS, critical path and baselines; a client of zprojectd.")
