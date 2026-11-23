@@ -8,6 +8,7 @@
 #include <QApplication>
 #include <QComboBox>
 #include <QDir>
+#include <QDockWidget>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
@@ -259,6 +260,44 @@ class TestProjects : public QObject {
     w->action(QStringLiteral("actionAllProjects"))->trigger();
     refresh(*w);
     QCOMPARE(w->mainStack()->currentWidget(), t);
+  }
+
+  void sidebarIcons() {
+    login(owner_);
+    auto w = open(5);
+    w->setTheme(QStringLiteral("light"));
+    w->showClosedButton()->click();
+    QListWidget* list = w->projectList();
+    QCOMPARE(list->count(), 5);
+    // The RAG badge sits at the bottom right of each project's folder icon.
+    auto badge = [](const QListWidgetItem* item) { return item->icon().pixmap(16, 16).toImage().pixelColor(12, 12); };
+    auto find = [list](const QString& prefix) -> QListWidgetItem* {
+      for (int i = 0; i < list->count(); ++i) {
+        if (list->item(i)->text().startsWith(prefix)) return list->item(i);
+      }
+      return nullptr;
+    };
+    for (int i = 0; i < list->count(); ++i) QVERIFY2(!list->item(i)->icon().isNull(), qPrintable(list->item(i)->text()));
+    const QColor green = badge(find(QStringLiteral("Kitchen")));
+    const QColor red = badge(find(QStringLiteral("Q1")));
+    const QColor amber = badge(find(QStringLiteral("Website")));
+    QVERIFY2(green.green() > green.red() && green.green() > green.blue(), qPrintable(green.name()));
+    QVERIFY2(red.red() > red.green() && red.red() > red.blue(), qPrintable(red.name()));
+    QVERIFY2(amber.red() > amber.blue() && amber.green() > amber.blue(), qPrintable(amber.name()));
+    // Not active: the folder is drawn in the muted colour.
+    auto folderPixel = [](const QListWidgetItem* item) { return item->icon().pixmap(16, 16).toImage().pixelColor(2, 8); };
+    QVERIFY(folderPixel(find(QStringLiteral("Kitchen"))) != folderPixel(find(QStringLiteral("Website"))));
+    // A theme change redraws them in its colours.
+    const QColor lightFolder = folderPixel(find(QStringLiteral("Kitchen")));
+    w->setTheme(QStringLiteral("dark"));
+    QVERIFY(folderPixel(find(QStringLiteral("Kitchen"))) != lightFolder);
+    // The menu actions use the same icon set.
+    for (const char* name : {"actionNewProject", "actionRefresh", "actionEditProject", "actionDeleteProject",
+                             "actionAllProjects", "actionProjectDetails", "actionOutline", "actionInsertTask",
+                             "actionEditTask", "actionSaveTask", "actionDeleteTask", "actionFind"}) {
+      QVERIFY2(!w->action(QString::fromLatin1(name))->icon().isNull(), name);
+    }
+    w->setTheme(QStringLiteral("system"));
   }
 
   // ---- create ----
@@ -558,6 +597,12 @@ class TestProjects : public QObject {
     save(w.get(), QStringLiteral("projects-details-dark.png"));
     w->setTheme(QStringLiteral("light"));
     w->showClosedButton()->setChecked(true);
+    auto* sidebar = w->findChild<QDockWidget*>(QStringLiteral("sidebarDock"));
+    QVERIFY(sidebar);
+    save(sidebar, QStringLiteral("sidebar-icons-light.png"));
+    w->setTheme(QStringLiteral("dark"));
+    save(sidebar, QStringLiteral("sidebar-icons-dark.png"));
+    w->setTheme(QStringLiteral("light"));
     w->action(QStringLiteral("actionAllProjects"))->trigger();
     save(w.get(), QStringLiteral("projects-table-light.png"));
     w->setTheme(QStringLiteral("high-contrast"));

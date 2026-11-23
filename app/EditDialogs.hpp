@@ -23,6 +23,9 @@ namespace zproject::app {
 // The user-facing name of a project or task field ("outOfScope" → "Out of
 // scope"); unknown names come back as they are.
 QString fieldLabel(const QString& field);
+// The same for a task field: "finish" is "Finish" (a project's is "Target
+// finish"), plus mode, constraint, notes and the other task-only fields.
+QString taskFieldLabel(const QString& field);
 
 // The dry-run preview sheet (plan §4.5): every change the server will make,
 // shown before a destructive write or one that ripples to other entities.

@@ -1,8 +1,8 @@
 # zproject
 
-**0.11.0**
+**0.12.0**
 
-Current release: **0.10.0**
+Current release: **0.11.0**
 
 Project management for the z-suite: projects with a WBS, milestones,
 dependencies, a critical-path schedule, baselines, resources and cost, a RAID
@@ -34,7 +34,13 @@ run first, deletes show what goes with them, and a save that crosses someone
 else's change opens a conflict dialog instead of overwriting it. A project's
 tasks open as an outline (View → Outline): WBS codes, roll-ups locked on
 summary rows, insert, indent, outdent, move, delete and restore from the
-keyboard, filter by status and find.
+keyboard, filter by status and find. The inspector edits the selected task
+(Details, Schedule and History tabs; Alt + Enter, Ctrl + S): fields are
+checked before anything is sent, changes that ripple into summaries are
+previewed, and a save that crosses someone else's edit asks field by field.
+The project sidebar, the menus and the toolbar (View → Show Toolbar) use
+zproject's own icons (a folder per project with its RAG colour), drawn the
+same on every platform; on Linux the menu bar always stays in the window.
 **Help → Check for Updates…** installs new desktop releases after checking
 their minisign signature and SHA-256 (SPEC.md §21); it never touches
 `zprojectd`.
@@ -51,11 +57,15 @@ their minisign signature and SHA-256 (SPEC.md §21); it never touches
 |---|---|---|
 | ![Task outline](docs/screenshots/outline-light.png) | ![Outline filtered, with find](docs/screenshots/outline-filter-find.png) | ![Indent preview](docs/screenshots/outline-indent-preview.png) |
 
+| Task editor | Checks before saving | Task history |
+|---|---|---|
+| ![Task editor, Details tab](docs/screenshots/taskeditor-details-light.png) | ![Schedule tab with field errors](docs/screenshots/taskeditor-schedule-errors.png) | ![History tab](docs/screenshots/taskeditor-history.png) |
+
 More in [docs/screenshots](docs/screenshots/): High contrast, first run,
 Preferences, Help, About, the update dialog, the project editor, the delete
-previews and the outline in Dark and High contrast, rendered offscreen from
-example data
-(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R 'tst_appshell|tst_update|tst_projects|tst_outline'`).
+previews, the outline and the task editor in Dark and High contrast, the
+ripple preview and the sidebar's icons, rendered offscreen from example data
+(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R 'tst_appshell|tst_update|tst_projects|tst_outline|tst_taskeditor'`).
 
 ## Running the server
 

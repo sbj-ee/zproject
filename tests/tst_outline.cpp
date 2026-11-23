@@ -33,6 +33,7 @@
 #include "app/OutlineModel.hpp"
 #include "app/OutlineView.hpp"
 #include "app/TaskActions.hpp"
+#include "app/TaskInspector.hpp"
 #include "client/ApiClient.hpp"
 #include "client/TokenStore.hpp"
 #include "server/Api.hpp"
@@ -461,8 +462,9 @@ class TestOutline : public QObject {
     QCOMPARE(m->data(m->indexOf(ids_.value(QStringLiteral("Permits")), M::Priority)).toString(), QStringLiteral("P1"));
     // Selecting a task fills the inspector.
     QVERIFY(select(*w, QStringLiteral("Design")));
-    QLabel* insp = w->findChild<QLabel*>(QStringLiteral("inspector"));
-    QVERIFY(insp->text().contains(QStringLiteral("Rolled up from: 2 child tasks")));
+    QVERIFY(w->taskInspector()->isVisible());
+    QCOMPARE(w->taskInspector()->taskId(), design);
+    QVERIFY(w->taskInspector()->rollupNote()->text().contains(QStringLiteral("rolled up from 2 child tasks")));
     // Collapsing survives a refresh.
     QTreeView* tree = w->outline()->tree();
     const QModelIndex di = tree->currentIndex().siblingAtColumn(0);

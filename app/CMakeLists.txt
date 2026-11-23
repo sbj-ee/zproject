@@ -7,9 +7,11 @@ add_library(zproject_app_lib STATIC
   Dialogs.cpp Dialogs.hpp
   EditDialogs.cpp EditDialogs.hpp
   HelpDialog.cpp HelpDialog.hpp
+  Icons.cpp Icons.hpp
   MainWindow.cpp MainWindow.hpp
   OutlineModel.cpp OutlineModel.hpp
   OutlineView.cpp OutlineView.hpp
+  TaskInspector.cpp TaskInspector.hpp
   ProjectActions.cpp ProjectActions.hpp
   Shortcuts.cpp Shortcuts.hpp
   SignInDialog.cpp SignInDialog.hpp

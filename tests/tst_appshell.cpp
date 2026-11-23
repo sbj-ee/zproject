@@ -30,6 +30,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTextBrowser>
+#include <QToolBar>
 
 #include <sys/stat.h>
 
@@ -374,6 +375,71 @@ class TestAppShell : public QObject {
     QTest::keyClick(&w, Qt::Key_B, Qt::ControlModifier);
     QVERIFY(w.action(QStringLiteral("actionToggleSidebar"))->isChecked());
     w.close();
+  }
+
+  void menuBarAndToolbar() {
+    {
+      MainWindow w(options(false));
+      w.resize(1100, 640);
+      w.show();
+      QVERIFY(QTest::qWaitForWindowExposed(&w));
+#ifndef Q_OS_MACOS
+      // In the window on Linux, whatever global-menu service the session has.
+      QVERIFY(!w.menuBar()->isNativeMenuBar());
+      QVERIFY(w.menuBar()->isVisible());
+      QVERIFY(w.menuBar()->height() > 0);
+#endif
+      // Help → Check for Updates and View → Outline are in the menus.
+      auto inMenu = [&w](const QString& menu, const QString& name) {
+        for (QAction* m : w.menuBar()->actions()) {
+          if (m->text() == menu && m->menu() != nullptr) return m->menu()->actions().contains(w.action(name));
+        }
+        return false;
+      };
+      QVERIFY(inMenu(QStringLiteral("&Help"), QStringLiteral("actionCheckUpdates")));
+      QVERIFY(inMenu(QStringLiteral("&View"), QStringLiteral("actionOutline")));
+      QVERIFY(inMenu(QStringLiteral("&View"), QStringLiteral("actionToggleToolbar")));
+      // The toolbar: the common actions, each with an icon and a tooltip.
+      QToolBar* bar = w.toolBar();
+      QVERIFY(bar);
+      QVERIFY(bar->isVisible());
+      QStringList names;
+      for (QAction* a : bar->actions()) {
+        if (a->isSeparator()) continue;
+        names << a->objectName();
+        QVERIFY2(!a->icon().isNull(), qPrintable(a->objectName()));
+        QVERIFY2(!a->toolTip().contains(QLatin1Char('&')), qPrintable(a->toolTip()));
+      }
+      QCOMPARE(names, (QStringList{QStringLiteral("actionNewProject"), QStringLiteral("actionEditProject"),
+                                   QStringLiteral("actionRefresh"), QStringLiteral("actionOutline"),
+                                   QStringLiteral("actionInsertTask"), QStringLiteral("actionEditTask"),
+                                   QStringLiteral("actionSaveTask"), QStringLiteral("actionFind"),
+                                   QStringLiteral("actionCheckUpdates")}));
+      QCOMPARE(w.action(QStringLiteral("actionEditProject"))->toolTip(),
+               QStringLiteral("Edit Project Details (%1)")
+                   .arg(QKeySequence(QStringLiteral("Ctrl+E")).toString(QKeySequence::NativeText)));
+      QVERIFY(bar->contextMenuPolicy() == Qt::PreventContextMenu);
+      // View → Show Toolbar hides it and remembers.
+      QAction* toggle = w.action(QStringLiteral("actionToggleToolbar"));
+      QVERIFY(toggle->isCheckable());
+      QVERIFY(toggle->isChecked());
+      toggle->trigger();
+      QVERIFY(!bar->isVisible());
+      QVERIFY(!toggle->isChecked());
+      QVERIFY(!client::loadDesktopSettings(options(false).paths).showToolbar);
+      w.close();
+    }
+    {
+      MainWindow w(options(false));
+      w.show();
+      QVERIFY(QTest::qWaitForWindowExposed(&w));
+      QVERIFY(!w.toolBar()->isVisible());
+      QVERIFY(!w.action(QStringLiteral("actionToggleToolbar"))->isChecked());
+      w.action(QStringLiteral("actionToggleToolbar"))->trigger();
+      QVERIFY(w.toolBar()->isVisible());
+      QVERIFY(client::loadDesktopSettings(options(false).paths).showToolbar);
+      w.close();
+    }
   }
 
   void menusAndShortcutTable() {

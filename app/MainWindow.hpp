@@ -2,6 +2,7 @@
 
 #include <QHash>
 #include <QMainWindow>
+#include <QMessageBox>
 #include <QPalette>
 #include <QPointer>
 #include <QString>
@@ -25,6 +26,7 @@ class QMessageBox;
 class QPushButton;
 class QStackedWidget;
 class QTableWidget;
+class QToolBar;
 class QToolButton;
 
 namespace zproject::app {
@@ -33,6 +35,8 @@ class HelpDialog;
 class OutlineView;
 class ProjectActions;
 class TaskActions;
+class TaskInspector;
+struct ThemeColors;
 class UpdateDialog;
 class UpdateManager;
 class SignInDialog;
@@ -112,6 +116,8 @@ class MainWindow : public QMainWindow {
   // Projects), the details page and the editing actions.
   QTableWidget* projectTable() const { return projectTable_; }
   QToolButton* showClosedButton() const { return showClosed_; }
+  QToolBar* toolBar() const { return toolBar_; }
+  void setToolbarShown(bool on);
   QStackedWidget* mainStack() const { return stack_; }
   QLabel* projectDetails() const { return projectDetails_; }
   ProjectActions* projectActions() const { return projectActions_; }
@@ -122,6 +128,9 @@ class MainWindow : public QMainWindow {
   // The WBS outline of the selected project (View → Outline; SPEC.md §7.1).
   OutlineView* outline() const { return outline_; }
   TaskActions* taskActions() const { return taskActions_; }
+  TaskInspector* taskInspector() const { return taskInspector_; }
+  // The "Save your changes?" question while one is open (tests).
+  QMessageBox* unsavedBox() const { return unsavedBox_.data(); }
   void showOutline();
   QAction* action(const QString& objectName) const;
 
@@ -134,10 +143,12 @@ class MainWindow : public QMainWindow {
 
  private:
   void buildMenus();
+  void buildToolBar();
   void buildCentral();
   void buildDocks();
   void buildStatusBar();
   void applyAppearance();
+  void applyIcons(const ThemeColors& c);
   void saveSettings();
   void startSession(client::Connection connection);
   void updateConnectionUi();
@@ -146,6 +157,12 @@ class MainWindow : public QMainWindow {
   void fillProjectTable(const QList<QJsonObject>& projects);
   void updateEditActions();
   void showTaskInspector(const QString& taskId);
+  // The inspector shows the project (or nothing) instead of a task; asks
+  // first when the task editor has unsaved changes.
+  void showInspectorText(const QString& html);
+  // "Save your changes to X?" Save or Discard, then `then` (not after a
+  // Save that fails its checks: the task stays selected).
+  void askUnsaved(std::function<void()> then);
   void openUrl(const QUrl& url);
   client::ClientConfig cliConfig() const;
   client::TokenStore tokenStore(const client::ClientConfig& cli) const;
@@ -171,6 +188,7 @@ class MainWindow : public QMainWindow {
   QLabel* projectSummary_ = nullptr;
   QListWidget* projects_ = nullptr;
   QToolButton* showClosed_ = nullptr;
+  QToolBar* toolBar_ = nullptr;
   QTableWidget* projectTable_ = nullptr;
   QLabel* projectDetails_ = nullptr;
   QPushButton* editButton_ = nullptr;
@@ -187,6 +205,11 @@ class MainWindow : public QMainWindow {
   QDockWidget* sidebarDock_ = nullptr;
   QDockWidget* inspectorDock_ = nullptr;
   QLabel* inspector_ = nullptr;
+  QStackedWidget* inspectorStack_ = nullptr;
+  TaskInspector* taskInspector_ = nullptr;
+  QPointer<QMessageBox> unsavedBox_;
+  std::function<void()> afterUnsaved_;
+  bool closeAnyway_ = false;
   QLabel* status_ = nullptr;
   QLabel* refreshed_ = nullptr;
   QLabel* readOnly_ = nullptr;
