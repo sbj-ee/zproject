@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.18.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.19.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -893,6 +893,31 @@ parent first), `parent_milestone` or `project_deleted`. Restore is destructive
 (§9.3 confirm), honours `If-Match` and `dryRun`, and rolls summaries up. v1
 restores tasks only (Q13).
 
+As built (0.19.0, scheduling plan S3), dependencies:
+- **Endpoints:** `GET /v1/projects/{id}/dependencies` (`?task=` narrows,
+  `?includeDeleted=true`), `POST /v1/dependencies`, and `GET/PATCH/DELETE
+  /v1/dependencies/{id}`. They use the `tasks:read` and `tasks:write` scopes,
+  and access follows the tasks' project.
+- **Creating a link:**
+  - Both tasks must be live and in one project (400).
+  - A second live link between the same two tasks in the same direction is a
+    409 `conflict` with reason `duplicate`.
+  - A loop through links or through the task tree (a task and its own
+    summary) is a 409 `cycle` with `details.path`. The store checks with the
+    engine's own graph (§6.2), so it refuses exactly what can't be scheduled.
+- **Changing a link:** PATCH changes only `type` and `lag`. A link's tasks
+  can't change (400). DELETE is destructive and tombstones the link.
+- **Moves and restores:** a move or PATCH of `parent` that would close a loop
+  is a 409 `cycle`.
+- **Task deletes:** deleting a task (or a project) tombstones its live links
+  with the same timestamp. The dry run lists them.
+- **Task restores:** restoring a task brings back the links deleted with it,
+  once both their tasks are live. Links deleted on their own stay deleted,
+  and a restore that would close a loop with links made since is a 409
+  `cycle`. The dry run lists the links too.
+- Change rows use `entityKind` `dependency`. Links don't move any dates until
+  scheduling is live on the server (plan S5).
+
 ## 10. CLI
 
 `zproject-cli` is a thin client of `/v1`. Server URL from
@@ -1185,6 +1210,13 @@ colour alone.
   the `3FS+2d` predecessor notation, HTTP request parser and router, JSON body
   decoding, the minisign verifier, and change-record decoding. 60 s per harness
   in PR CI; nightly 20-minute runs with a cached, minimised corpus.
+  As built (0.19.0): `fuzz/fuzz_link_notation` (the `3FS+2d` parser; anything
+  accepted must round-trip through its canonical form) and
+  `fuzz/fuzz_dependency_json` (a dependency body through decoding and
+  validation), built with `-DZPROJECT_FUZZ=ON` under clang (coverage, ASan,
+  UBSan) from seed corpora in `fuzz/corpus/`. The CI job "Fuzz" runs each for
+  60 s and uploads any reproducer; it isn't a required check yet. Nightly runs
+  come later.
 - **CI (`ci.yml`, on every PR and push to main; actions pinned by SHA;
   `-Werror`):** Version consistency; Linux (ubuntu-24.04) build + test +
   `cpack` both `.deb`s (built on ubuntu-24.04, matching the server host's Pop!_OS 24.04

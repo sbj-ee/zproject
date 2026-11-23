@@ -9,9 +9,11 @@
 
 #include <algorithm>
 #include <functional>
+#include <tuple>
 
 #include "core/Id.hpp"
 #include "core/Rollup.hpp"
+#include "core/Schedule.hpp"
 #include "store/Migrations.hpp"
 
 namespace zproject::store {
@@ -19,6 +21,10 @@ namespace {
 
 const QString kProject = QStringLiteral("project");
 const QString kTask = QStringLiteral("task");
+const QString kDependency = QStringLiteral("dependency");
+
+const QString kDependencyColumns =
+    QStringLiteral("id, createdAt, updatedAt, deleted, rev, project, predecessor, successor, type, lag");
 
 const QString kProjectColumns = QStringLiteral(
     "id, createdAt, updatedAt, deleted, rev, name, description, objectives, scope, outOfScope, "
@@ -82,6 +88,21 @@ Task readTask(const Statement& s) {
   t.priority = static_cast<int>(s.int64(22));
   t.fixedCost = s.real(23);
   return t;
+}
+
+Dependency readDependency(const Statement& s) {
+  Dependency d;
+  d.id = s.text(0);
+  d.createdAt = s.text(1);
+  d.updatedAt = s.text(2);
+  d.deleted = s.int64(3) != 0;
+  d.rev = s.int64(4);
+  d.project = s.text(5);
+  d.predecessor = s.text(6);
+  d.successor = s.text(7);
+  d.type = s.text(8);
+  d.lag = static_cast<int>(s.int64(9));
+  return d;
 }
 
 QString compactJson(const QJsonObject& o) {
@@ -286,9 +307,12 @@ Result<Project> SqliteStore::deleteProject(const QString& id, qint64 expectedRev
   const QString ts = nextTimestamp();
   auto all = tasks(id);
   if (!all) return all.error();
+  QSet<QString> ids;
   for (const Task& t : all.value()) {
     if (auto s = tombstoneTask(t, ctx, ts); !s) return s.error();
+    ids.insert(t.id);
   }
+  if (auto s = tombstoneLinks(id, ids, ctx, ts); !s) return s.error();
   Project p = *cur;
   p.deleted = true;
   p.rev = cur->rev + 1;
@@ -433,6 +457,13 @@ Result<Task> SqliteStore::updateTask(const Task& in, qint64 expectedRev, const W
   if (auto e = toValidationError(validateTask(t))) return *e;
   if (t.parent != cur->parent) {
     if (auto s = checkParent(t); !s) return s.error();
+    auto all = tasks(t.project);
+    if (!all) return all.error();
+    QList<Task> next = all.value();
+    for (Task& row : next) {
+      if (row.id == t.id) row.parent = t.parent;
+    }
+    if (auto s = checkLinkCycles(next); !s) return s.error();
   }
   auto n = db_.prepare(QStringLiteral("SELECT COUNT(*) FROM task WHERE parent = ?1 AND deleted = 0"));
   if (!n) return n.error();
@@ -491,6 +522,7 @@ Result<Task> SqliteStore::deleteTask(const QString& id, qint64 expectedRev, cons
   for (auto it = subtree.crbegin(); it != subtree.crend(); ++it) {
     if (auto s = tombstoneTask(*it, ctx, ts); !s) return s.error();
   }
+  if (auto s = tombstoneLinks(cur->project, inSubtree, ctx, ts); !s) return s.error();
   if (auto s = rollUp(cur->project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return task(id, true);
@@ -539,6 +571,14 @@ Result<QList<Task>> SqliteStore::planMove(const QString& id, const QString& pare
   // Same parent, same place: nothing to write (no revisions, no renumbering).
   if (moved.parent == cur->parent && currentIndex == at) return QList<Task>{};
 
+  // A new parent can close a loop through links into or out of a summary.
+  if (moved.parent != cur->parent) {
+    QList<Task> next = all.value();
+    for (Task& row : next) {
+      if (row.id == id) row.parent = moved.parent;
+    }
+    if (auto s = checkLinkCycles(next); !s) return s.error();
+  }
   siblings.insert(at, moved);
   QList<Task> writes;
   for (qsizetype i = 0; i < siblings.size(); ++i) {
@@ -576,11 +616,11 @@ Result<Task> SqliteStore::moveTask(const QString& id, const QString& parent, std
   return task(id);
 }
 
-Result<QString> SqliteStore::tombstoneTs(const QString& id) {
+Result<QString> SqliteStore::tombstoneTs(const QString& id, const QString& kind) {
   auto st = db_.prepare(QStringLiteral(
       "SELECT ts, after FROM changes WHERE entityKind = ?1 AND entityId = ?2 ORDER BY seq DESC LIMIT 1"));
   if (!st) return st.error();
-  st.value().bind(1, kTask).bind(2, id);
+  st.value().bind(1, kind).bind(2, id);
   Error err;
   if (!st.value().step(&err)) {
     if (!err.code.isEmpty()) return err;
@@ -650,15 +690,263 @@ Result<Task> SqliteStore::restoreTask(const QString& id, qint64 expectedRev, con
   if (cur->rev != expectedRev) return Error::revMismatch(expectedRev, cur->rev);
   auto plan = planRestore(id);
   if (!plan) return plan.error();
+  auto links = planRestoreLinks(id);  // also refuses a restore that closes a cycle
+  if (!links) return links.error();
   const QString ts = nextTimestamp();
   for (const Task& t : plan.value()) {
     Task live = t;
     live.deleted = false;
     if (auto s = writeRevision(t, live, ctx, ts); !s) return s.error();
   }
+  for (const Dependency& d : links.value()) {
+    Dependency live = d;
+    live.deleted = false;
+    if (auto s = writeDependencyRevision(d, live, ctx, ts); !s) return s.error();
+  }
   if (auto s = rollUp(cur->project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return task(id);
+}
+
+// ---- dependencies -----------------------------------------------------------
+
+Status SqliteStore::writeDependency(const Dependency& d, bool insert) {
+  const QString sql =
+      insert ? QStringLiteral("INSERT INTO dependency (%1) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)")
+                   .arg(kDependencyColumns)
+             : QStringLiteral(
+                   "UPDATE dependency SET createdAt = ?2, updatedAt = ?3, deleted = ?4, rev = ?5, project = ?6, "
+                   "predecessor = ?7, successor = ?8, type = ?9, lag = ?10 WHERE id = ?1");
+  auto st = db_.prepare(sql);
+  if (!st) return st.error();
+  Statement& s = st.value();
+  s.bind(1, d.id).bind(2, d.createdAt).bind(3, d.updatedAt).bind(4, d.deleted).bind(5, d.rev);
+  s.bind(6, d.project).bind(7, d.predecessor).bind(8, d.successor).bind(9, d.type).bind(10, static_cast<qint64>(d.lag));
+  return s.run();
+}
+
+Status SqliteStore::writeDependencyRevision(const Dependency& cur, Dependency d, const WriteContext& ctx,
+                                            const QString& ts) {
+  d.rev = cur.rev + 1;
+  d.updatedAt = ts;
+  if (auto s = writeDependency(d, false); !s) return s;
+  const FieldDiff diff = diffFields(toJson(cur), toJson(d));
+  return appendChange(kDependency, d.id, diff.before, diff.after, ctx, ts);
+}
+
+Result<Dependency> SqliteStore::dependency(const QString& id, bool includeDeleted) {
+  auto st = db_.prepare(QStringLiteral("SELECT %1 FROM dependency WHERE id = ?1").arg(kDependencyColumns));
+  if (!st) return st.error();
+  st.value().bind(1, id);
+  Error err;
+  if (!st.value().step(&err)) {
+    if (!err.code.isEmpty()) return err;
+    return Error::notFound(QStringLiteral("dependency %1 not found").arg(id));
+  }
+  Dependency d = readDependency(st.value());
+  if (d.deleted && !includeDeleted) return Error::notFound(QStringLiteral("dependency %1 is deleted").arg(id));
+  return d;
+}
+
+Result<QList<Dependency>> SqliteStore::dependencies(const QString& projectId, bool includeDeleted) {
+  auto st = db_.prepare(QStringLiteral("SELECT %1 FROM dependency WHERE project = ?1 %2 ORDER BY createdAt, id")
+                            .arg(kDependencyColumns, includeDeleted ? QString() : QStringLiteral("AND deleted = 0")));
+  if (!st) return st.error();
+  st.value().bind(1, projectId);
+  QList<Dependency> out;
+  Error err;
+  while (st.value().step(&err)) out.append(readDependency(st.value()));
+  if (!err.code.isEmpty()) return err;
+  return out;
+}
+
+Status SqliteStore::checkCycles(const QList<Task>& tasks, const QList<Dependency>& links) {
+  ScheduleInput in;
+  for (const Task& t : tasks) {
+    if (!t.deleted) in.tasks.append(t);
+  }
+  for (const Dependency& d : links) {
+    if (!d.deleted) in.links.append(d);
+  }
+  // The engine's own graph, so the store refuses exactly what it can't schedule.
+  auto r = computeSchedule(in);
+  if (!r && r.error().code == QLatin1String("cycle")) return r.error();
+  return Ok{};
+}
+
+Status SqliteStore::checkLinkCycles(const QList<Task>& tasks) {
+  if (tasks.isEmpty()) return Ok{};
+  auto links = dependencies(tasks.first().project);
+  if (!links) return links.error();
+  if (links->isEmpty()) return Ok{};
+  return checkCycles(tasks, links.value());
+}
+
+Result<Dependency> SqliteStore::checkDependency(const Dependency& in) {
+  if (auto e = toValidationError(validateDependency(in))) return *e;
+  auto field = [](const char* f, const QString& message) {
+    return Error::validation(message, QJsonObject{{QStringLiteral("field"), QLatin1String(f)}});
+  };
+  auto pred = task(in.predecessor);
+  if (!pred) return field("predecessor", QStringLiteral("task %1 not found").arg(in.predecessor));
+  auto succ = task(in.successor);
+  if (!succ) return field("successor", QStringLiteral("task %1 not found").arg(in.successor));
+  if (pred->project != succ->project) {
+    return field("successor", QStringLiteral("the two tasks are in different projects"));
+  }
+  if (!in.project.isEmpty() && in.project != pred->project) {
+    return field("project", QStringLiteral("the tasks are not in project %1").arg(in.project));
+  }
+  Dependency d = in;
+  d.project = pred->project;
+  auto dup = db_.prepare(QStringLiteral(
+      "SELECT id FROM dependency WHERE predecessor = ?1 AND successor = ?2 AND deleted = 0 AND id <> ?3"));
+  if (!dup) return dup.error();
+  dup.value().bind(1, d.predecessor).bind(2, d.successor).bind(3, d.id);
+  Error err;
+  if (dup.value().step(&err)) {
+    return Error::conflict(QStringLiteral("these tasks are already linked"),
+                           QJsonObject{{QStringLiteral("reason"), QStringLiteral("duplicate")},
+                                       {QStringLiteral("existing"), dup.value().text(0)}});
+  }
+  if (!err.code.isEmpty()) return err;
+  auto ts = tasks(d.project);
+  if (!ts) return ts.error();
+  auto links = dependencies(d.project);
+  if (!links) return links.error();
+  QList<Dependency> next = links.value();
+  Dependency candidate = d;
+  if (candidate.id.isEmpty()) candidate.id = QStringLiteral("(new)");
+  next.append(candidate);
+  if (auto s = checkCycles(ts.value(), next); !s) return s.error();
+  return d;
+}
+
+Result<Dependency> SqliteStore::createDependency(const Dependency& in, const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  Dependency probe = in;
+  probe.id.clear();
+  auto checked = checkDependency(probe);
+  if (!checked) return checked.error();
+  Dependency d = checked.value();
+  d.id = newId();
+  d.createdAt = d.updatedAt = nextTimestamp();
+  d.deleted = false;
+  d.rev = 1;
+  if (auto s = writeDependency(d, true); !s) return s.error();
+  const FieldDiff diff = diffFields({}, toJson(d));
+  if (auto s = appendChange(kDependency, d.id, diff.before, diff.after, ctx, d.updatedAt); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return d;
+}
+
+Result<Dependency> SqliteStore::updateDependency(const Dependency& in, qint64 expectedRev, const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  auto cur = dependency(in.id);
+  if (!cur) return cur.error();
+  if (cur->rev != expectedRev) return Error::revMismatch(expectedRev, cur->rev);
+  for (const auto& [f, given, now] : {std::tuple{"predecessor", in.predecessor, cur->predecessor},
+                                      std::tuple{"successor", in.successor, cur->successor},
+                                      std::tuple{"project", in.project, cur->project}}) {
+    if (!given.isEmpty() && given != now) {
+      return Error::validation(QStringLiteral("a link's tasks can't change: delete it and add another"),
+                               QJsonObject{{QStringLiteral("field"), QLatin1String(f)}});
+    }
+  }
+  Dependency d = cur.value();
+  d.type = in.type;
+  d.lag = in.lag;
+  if (auto e = toValidationError(validateDependency(d))) return *e;
+  if (diffFields(toJson(cur.value()), toJson(d)).empty()) return cur.value();
+  if (auto s = writeDependencyRevision(cur.value(), d, ctx, nextTimestamp()); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return dependency(d.id);
+}
+
+Result<Dependency> SqliteStore::deleteDependency(const QString& id, qint64 expectedRev, const WriteContext& ctx) {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  auto cur = dependency(id);
+  if (!cur) return cur.error();
+  if (cur->rev != expectedRev) return Error::revMismatch(expectedRev, cur->rev);
+  Dependency d = cur.value();
+  d.deleted = true;
+  if (auto s = writeDependencyRevision(cur.value(), d, ctx, nextTimestamp()); !s) return s.error();
+  if (auto s = tx.commit(); !s) return s.error();
+  return dependency(id, true);
+}
+
+Result<QList<Dependency>> SqliteStore::linksTouching(const QString& projectId, const QSet<QString>& taskIds) {
+  auto links = dependencies(projectId);
+  if (!links) return links.error();
+  QList<Dependency> out;
+  for (const Dependency& d : links.value()) {
+    if (taskIds.contains(d.predecessor) || taskIds.contains(d.successor)) out.append(d);
+  }
+  return out;
+}
+
+Status SqliteStore::tombstoneLinks(const QString& projectId, const QSet<QString>& taskIds, const WriteContext& ctx,
+                                   const QString& ts) {
+  auto links = linksTouching(projectId, taskIds);
+  if (!links) return links.error();
+  for (const Dependency& cur : links.value()) {
+    Dependency d = cur;
+    d.deleted = true;
+    if (auto s = writeDependencyRevision(cur, d, ctx, ts); !s) return s;
+  }
+  return Ok{};
+}
+
+Result<QList<Dependency>> SqliteStore::planRestoreLinks(const QString& taskId) {
+  auto plan = planRestore(taskId);
+  if (!plan) return plan.error();
+  auto rootTs = tombstoneTs(taskId);
+  if (!rootTs) return rootTs.error();
+  const QString projectId = plan->first().project;
+  // The tasks as they will be: live ones, and those this restore brings back.
+  auto all = tasks(projectId, true);
+  if (!all) return all.error();
+  QSet<QString> restored;
+  for (const Task& t : plan.value()) restored.insert(t.id);
+  QList<Task> after = all.value();
+  QSet<QString> live;
+  for (Task& t : after) {
+    if (restored.contains(t.id)) t.deleted = false;
+    if (!t.deleted) live.insert(t.id);
+  }
+  auto links = dependencies(projectId, true);
+  if (!links) return links.error();
+  QSet<QPair<QString, QString>> livePairs;
+  for (const Dependency& d : links.value()) {
+    if (!d.deleted) livePairs.insert({d.predecessor, d.successor});
+  }
+  QList<Dependency> out;
+  if (!rootTs->isEmpty()) {
+    for (const Dependency& d : links.value()) {
+      if (!d.deleted || !live.contains(d.predecessor) || !live.contains(d.successor)) continue;
+      if (!restored.contains(d.predecessor) && !restored.contains(d.successor)) continue;
+      if (livePairs.contains({d.predecessor, d.successor})) continue;  // linked again since
+      auto ts = tombstoneTs(d.id, kDependency);
+      if (!ts) return ts.error();
+      if (ts.value() != rootTs.value()) continue;  // deleted on its own, earlier
+      livePairs.insert({d.predecessor, d.successor});
+      out.append(d);
+    }
+  }
+  // Links made since the delete can loop with the restored ones.
+  QList<Dependency> next;
+  for (const Dependency& d : links.value()) {
+    if (!d.deleted) next.append(d);
+  }
+  for (Dependency d : out) {
+    d.deleted = false;
+    next.append(d);
+  }
+  if (auto s = checkCycles(after, next); !s) return s.error();
+  return out;
 }
 
 // ---- sync feed --------------------------------------------------------------

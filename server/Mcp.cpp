@@ -123,6 +123,21 @@ const QList<Mcp::Tool>& Mcp::tools() {
          QStringLiteral("Change fields of a task. Writes; not destructive; no confirmation needed. Pass rev to "
                         "refuse the change if the task moved on."),
          QStringLiteral("tasks:write"), false, schema(update, {QStringLiteral("id")})},
+        {QStringLiteral("add_dependency"), QStringLiteral("Link two tasks"),
+         QStringLiteral("Make one task depend on another in the same project: FS (default) starts the successor "
+                        "after the predecessor finishes, SS after it starts, FF finishes it no earlier; lag is "
+                        "whole working days (negative: a lead). Refused if the tasks are already linked or the "
+                        "link would make a loop. Writes; not destructive; no confirmation needed."),
+         QStringLiteral("tasks:write"), false,
+         schema({{QStringLiteral("predecessor"), idProp(QStringLiteral("The task that comes first"))},
+                 {QStringLiteral("successor"), idProp(QStringLiteral("The task that depends on it"))},
+                 {QStringLiteral("type"),
+                  QJsonObject{{QStringLiteral("type"), QStringLiteral("string")},
+                              {QStringLiteral("enum"),
+                               QJsonArray{QStringLiteral("FS"), QStringLiteral("SS"), QStringLiteral("FF")}}}},
+                 {QStringLiteral("lag"), prop(QStringLiteral("integer"),
+                                              QStringLiteral("Working days between them; negative is a lead"))}},
+                {QStringLiteral("predecessor"), QStringLiteral("successor")})},
         {QStringLiteral("delete_task"), QStringLiteral("Delete a task"),
          QStringLiteral("DESTRUCTIVE, needs confirmation. Without confirm_id: a dry run that lists the task and "
                         "its subtree and returns a confirmId (valid 5 minutes, single use). Call again with "
@@ -254,7 +269,7 @@ QJsonObject Mcp::callTool(const http::Request& req, const store::TokenRecord& to
     if (!args.contains(r.toString())) return bad(QStringLiteral("missing argument '%1'").arg(r.toString()));
   }
   auto idArg = [&](const char* key) { return args.value(QLatin1String(key)).toString(); };
-  for (const char* key : {"id", "project", "parent"}) {
+  for (const char* key : {"id", "project", "parent", "predecessor", "successor"}) {
     if (args.contains(QLatin1String(key)) && !isValidId(idArg(key))) {
       return bad(QStringLiteral("'%1' must be a 20-character hex id").arg(QLatin1String(key)));
     }
@@ -318,6 +333,11 @@ QJsonObject Mcp::callTool(const http::Request& req, const store::TokenRecord& to
     if (args.contains(QStringLiteral("rev"))) {
       call.ifMatch = QByteArray::number(args.value(QStringLiteral("rev")).toInteger());
     }
+  } else if (name == QLatin1String("add_dependency")) {
+    call.method = "POST";
+    call.path = QStringLiteral("/v1/dependencies");
+    call.body = args;
+    call.hasBody = true;
   } else if (name == QLatin1String("delete_task")) {
     call.method = "DELETE";
     call.path = QStringLiteral("/v1/tasks/") + idArg("id");

@@ -22,6 +22,8 @@
 
 #include "client/ApiClient.hpp"
 #include "client/ClientConfig.hpp"
+#include "core/LinkNotation.hpp"
+#include "core/Model.hpp"
 #include "core/Version.hpp"
 
 namespace zproject::client {
@@ -61,6 +63,15 @@ QString cliUsage() {
       "                       from 1 among the new parent's children (default: last)\n"
       "  tasks delete ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
       "  tasks history ID\n"
+      "\n"
+      "Dependencies (links; TASK is a WBS code like 1.2 or a task ID)\n"
+      "  deps list PROJECT [--task TASK] [--all]\n"
+      "  deps add PROJECT TASK LINKS [--dry-run]\n"
+      "                       LINKS are TASK's predecessors, as MS Project writes them:\n"
+      "                       \"3FS+2d\" (after 3 finishes, plus 2 working days),\n"
+      "                       \"1.2SS\", \"4FF-1d\", several separated by commas\n"
+      "  deps update ID [--type FS|SS|FF] [--lag DAYS] [--rev N] [--dry-run]\n"
+      "  deps remove ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
       "\n"
       "Administration (owner token)\n"
       "  token list\n"
@@ -102,7 +113,8 @@ const QSet<QString>& valueOptions() {
       QStringLiteral("actual-finish"), QStringLiteral("kind"),       QStringLiteral("scopes"),
       QStringLiteral("projects"),   QStringLiteral("expires"),       QStringLiteral("out-file"),
       QStringLiteral("since"),      QStringLiteral("limit"),         QStringLiteral("token"),
-      QStringLiteral("position")};
+      QStringLiteral("position"),   QStringLiteral("task"),          QStringLiteral("type"),
+      QStringLiteral("lag")};
   return s;
 }
 const QSet<QString>& flagOptions() {
@@ -284,6 +296,7 @@ class Runner {
     if (cmd == QLatin1String("doctor")) return doctor();
     if (cmd == QLatin1String("projects")) return projects();
     if (cmd == QLatin1String("tasks")) return tasks();
+    if (cmd == QLatin1String("deps")) return deps();
     if (cmd == QLatin1String("token")) return token();
     if (cmd == QLatin1String("audit")) return audit();
     if (cmd == QLatin1String("backup")) return backup();
@@ -1004,6 +1017,164 @@ class Runner {
       return kExitOk;
     }
     return usage(QStringLiteral("unknown tasks command '%1'").arg(sub));
+  }
+
+  // ------------------------------------------------------- dependencies
+  // A project's WBS codes and titles by task id, and ids by WBS code.
+  struct Wbs {
+    QHash<QString, QString> code;   // id -> "1.2"
+    QHash<QString, QString> title;  // id -> title
+    QHash<QString, QString> byCode;  // "1.2" -> id
+  };
+  std::optional<Wbs> loadWbs(const QString& project, int* code) {
+    const ApiResponse r = api_->get(QStringLiteral("/v1/projects/%1/wbs").arg(project));
+    if (!r.ok()) {
+      *code = apiError(r);
+      return std::nullopt;
+    }
+    Wbs w;
+    for (const auto& v : r.json.value(QStringLiteral("items")).toArray()) {
+      const QJsonObject o = v.toObject();
+      const QString id = o.value(QStringLiteral("id")).toString();
+      w.code.insert(id, o.value(QStringLiteral("wbs")).toString());
+      w.title.insert(id, o.value(QStringLiteral("title")).toString());
+      w.byCode.insert(o.value(QStringLiteral("wbs")).toString(), id);
+    }
+    return w;
+  }
+  // A WBS code or a task id to a task id of the project; empty if unknown.
+  static QString resolveTask(const Wbs& w, const QString& ref) {
+    if (idRe().match(ref).hasMatch()) return w.code.contains(ref) ? ref : QString();
+    return w.byCode.value(ref);
+  }
+
+  int deps() {
+    if (a_.pos.isEmpty()) return usage(QStringLiteral("deps: list, add, update or remove"));
+    const QString sub = a_.pos.takeFirst();
+    if (sub == QLatin1String("list")) {
+      if (!allow({QStringLiteral("task"), QStringLiteral("all")})) return badOption();
+      if (a_.pos.size() != 1) return usage(QStringLiteral("deps list PROJECT [--task TASK]"));
+      if (!checkId(a_.pos[0], "project ID")) return usage(badValue_);
+      if (int c = connect(); c != kExitOk) return c;
+      int code = kExitOk;
+      auto wbs = loadWbs(a_.pos[0], &code);
+      if (!wbs) return code;
+      QUrlQuery q;
+      if (a_.has(QStringLiteral("task"))) {
+        const QString t = resolveTask(*wbs, a_.opt(QStringLiteral("task")));
+        if (t.isEmpty()) return fail(kExitConflict, QStringLiteral("no task %1 in this project").arg(a_.opt(QStringLiteral("task"))));
+        q.addQueryItem(QStringLiteral("task"), t);
+      }
+      if (flag("all")) q.addQueryItem(QStringLiteral("includeDeleted"), QStringLiteral("true"));
+      auto items = listAll(QStringLiteral("/v1/projects/%1/dependencies").arg(a_.pos[0]), q, &code);
+      if (!items) return code;
+      if (json_) {
+        printJson(*items);
+        return kExitOk;
+      }
+      auto name = [&](const QString& id) {
+        const QString c = wbs->code.value(id, QStringLiteral("-"));
+        return QStringLiteral("%1 %2").arg(c, wbs->title.value(id, id));
+      };
+      QList<QStringList> rows;
+      for (const auto& v : *items) {
+        const QJsonObject d = v.toObject();
+        const QString pred = d.value(QStringLiteral("predecessor")).toString();
+        QString link = formatLink(wbs->code.value(pred, pred), d.value(QStringLiteral("type")).toString(),
+                                  d.value(QStringLiteral("lag")).toInt());
+        if (d.value(QStringLiteral("deleted")).toBool()) link += QStringLiteral(" (deleted)");
+        rows << QStringList{str(d.value(QStringLiteral("id"))), name(d.value(QStringLiteral("successor")).toString()),
+                            link, name(pred)};
+      }
+      printTable(out_, {QStringLiteral("ID"), QStringLiteral("TASK"), QStringLiteral("AFTER"), QStringLiteral("PREDECESSOR")},
+                 rows);
+      return kExitOk;
+    }
+    if (sub == QLatin1String("add")) {
+      if (!allow({QStringLiteral("dry-run")})) return badOption();
+      if (a_.pos.size() != 3) return usage(QStringLiteral("deps add PROJECT TASK LINKS, e.g. deps add P 4 \"3FS+2d\""));
+      if (!checkId(a_.pos[0], "project ID")) return usage(badValue_);
+      auto specs = parseLinkNotation(a_.pos[2]);
+      if (!specs) return usage(specs.error().message);
+      WriteOpts w;
+      if (!writeOpts(&w)) return usage(badValue_);
+      if (int c = connect(); c != kExitOk) return c;
+      int code = kExitOk;
+      auto wbs = loadWbs(a_.pos[0], &code);
+      if (!wbs) return code;
+      const QString succ = resolveTask(*wbs, a_.pos[1]);
+      if (succ.isEmpty()) return fail(kExitConflict, QStringLiteral("no task %1 in this project").arg(a_.pos[1]));
+      // One link per predecessor, in order; the first refusal stops the rest.
+      QJsonArray created;
+      for (const LinkSpec& s : specs.value()) {
+        const QString pred = resolveTask(*wbs, s.ref);
+        if (pred.isEmpty()) return fail(kExitConflict, QStringLiteral("no task %1 in this project").arg(s.ref));
+        QJsonObject b{{QStringLiteral("predecessor"), pred},
+                      {QStringLiteral("successor"), succ},
+                      {QStringLiteral("type"), s.type},
+                      {QStringLiteral("lag"), s.lag}};
+        const ApiResponse r = api_->send("POST", QStringLiteral("/v1/dependencies"), w.query, &b, w.headers);
+        if (!r.ok()) return apiError(r);
+        const QString text = QStringLiteral("%1 after %2").arg(a_.pos[1], formatLink(s.ref, s.type, s.lag));
+        if (w.dryRun) {
+          if (!json_) out_ << text << ": ";
+          dryRunResult(r, QStringLiteral("deps add"));
+          continue;
+        }
+        if (json_) {
+          created.append(r.json);
+        } else {
+          out_ << "Linked " << text << " (" << str(r.json.value(QStringLiteral("id"))) << ").\n";
+        }
+      }
+      if (json_ && !w.dryRun) printJson(created);
+      return kExitOk;
+    }
+    if (sub == QLatin1String("update")) {
+      if (!allow({QStringLiteral("type"), QStringLiteral("lag"), QStringLiteral("rev"), QStringLiteral("dry-run")})) {
+        return badOption();
+      }
+      if (a_.pos.size() != 1) return usage(QStringLiteral("deps update ID [--type FS|SS|FF] [--lag DAYS]"));
+      if (!checkId(a_.pos[0], "dependency ID")) return usage(badValue_);
+      QJsonObject b;
+      if (a_.has(QStringLiteral("type"))) {
+        const QString t = a_.opt(QStringLiteral("type")).toUpper();
+        if (t != QLatin1String("FS") && t != QLatin1String("SS") && t != QLatin1String("FF")) {
+          return usage(QStringLiteral("--type must be FS, SS or FF"));
+        }
+        b.insert(QStringLiteral("type"), t);
+      }
+      QString lag = a_.opt(QStringLiteral("lag"));
+      if (lag.endsWith(QLatin1Char('d'))) lag.chop(1);
+      if (a_.has(QStringLiteral("lag"))) {
+        bool ok = false;
+        const int v = lag.toInt(&ok);
+        if (!ok || v < -kMaxLagDays || v > kMaxLagDays) {
+          return usage(QStringLiteral("--lag must be whole working days from -%1 to %1").arg(kMaxLagDays));
+        }
+        b.insert(QStringLiteral("lag"), v);
+      }
+      if (b.isEmpty()) return usage(QStringLiteral("nothing to change: give --type and/or --lag"));
+      WriteOpts w;
+      if (!writeOpts(&w)) return usage(badValue_);
+      if (int c = connect(); c != kExitOk) return c;
+      const ApiResponse r =
+          api_->send("PATCH", QStringLiteral("/v1/dependencies/") + a_.pos[0], w.query, &b, w.headers);
+      if (!r.ok()) return apiError(r);
+      if (w.dryRun) return dryRunResult(r, QStringLiteral("deps update ") + a_.pos[0]);
+      if (json_) {
+        printJson(r.json);
+      } else {
+        out_ << "Updated link " << a_.pos[0] << " (rev " << str(r.json.value(QStringLiteral("rev"))) << "): "
+             << str(r.json.value(QStringLiteral("type"))) << ' ' << str(r.json.value(QStringLiteral("lag")))
+             << " days.\n";
+      }
+      return kExitOk;
+    }
+    if (sub == QLatin1String("remove") || sub == QLatin1String("delete")) {
+      return deleteCommand(QStringLiteral("deps"), QStringLiteral("/v1/dependencies/"), "dependency ID");
+    }
+    return usage(QStringLiteral("unknown deps command '%1'").arg(sub));
   }
 
   // -------------------------------------------------------------- token

@@ -7,6 +7,46 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.19.0 — 2026-11-23
+
+Scheduling plan, PR S3: dependencies on the server (plan §3; SPEC §5.1,
+§5.2, §9.4, §10, §11, §19). Links are stored and served; they move no dates
+until scheduling goes live on the server in S5.
+
+- **Schema 3**: a `dependency` table (project, predecessor, successor, type
+  FS/SS/FF, lag ±3650 working days, tombstones), with at most one live link
+  per ordered pair of tasks.
+- **API**:
+  - `GET /v1/projects/{id}/dependencies` (`?task=`, `?includeDeleted=true`)
+  - `POST /v1/dependencies`
+  - `GET/PATCH/DELETE /v1/dependencies/{id}`
+
+  All support dry runs and `If-Match`, DELETE is destructive with confirm, and
+  the scopes are `tasks:read` and `tasks:write`. Refusals: a duplicate is
+  409 `conflict` (reason `duplicate`); a loop through links or the task tree
+  (a task and its own summary) is 409 `cycle` with `details.path`, checked
+  with the engine's own graph.
+- **Tasks and links together**:
+  - Deleting a task or a project tombstones its links.
+  - Restoring a task brings back the links deleted with it.
+  - A move, a PATCH of `parent`, or a restore that would close a loop is
+    409 `cycle`.
+
+  The task delete and restore dry runs list the links too.
+- **CLI**: `zproject-cli deps list|add|update|remove`. `deps add PROJECT 4
+  "3FS+2d, 1.2SS"` takes tasks by WBS code or id in MS Project's predecessor
+  notation; `deps list` shows links the same way.
+- **MCP**: `add_dependency` (writes; filtered by scope as the other tools).
+- **`core/LinkNotation`**: the `3FS+2d` parser and canonical form, with
+  limits on length, items and lag and error positions.
+- **Fuzzing**: the first libFuzzer harnesses (`fuzz/`, `-DZPROJECT_FUZZ=ON`,
+  clang): the notation parser (accepted input must round-trip) and
+  dependency JSON decoding. A new CI job "Fuzz" runs each for 60 s; locally
+  60 s covered about 4.9 million and 26.8 million inputs, with no findings.
+- **Tests**: `tst_dependencies` (12: store rules and cascades, API with dry
+  runs, confirm, If-Match, access and cycles, MCP), `tst_linknotation` (34),
+  and `deps` in `tst_cli`.
+
 ## 0.18.0 — 2026-11-23
 
 Scheduling plan, PR S2: the CPM engine (plan §2.2; SPEC §6.2, §7.2, §17,

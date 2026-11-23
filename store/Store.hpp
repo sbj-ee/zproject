@@ -2,6 +2,7 @@
 
 #include <QJsonObject>
 #include <QList>
+#include <QSet>
 #include <QString>
 
 #include <optional>
@@ -73,6 +74,29 @@ class Store {
   // deleted, or its parent has become a milestone.
   virtual Result<QList<Task>> planRestore(const QString& id) = 0;
   virtual Result<Task> restoreTask(const QString& id, qint64 expectedRev, const WriteContext& ctx) = 0;
+
+  // Dependencies (SPEC.md §5.1, §5.2): links between two live tasks of one
+  // project; `project` comes from the tasks. checkDependency validates a new
+  // link without writing (dry runs): its fields, both tasks live and in one
+  // project (400), no live link between the same two tasks in the same
+  // direction (409 conflict, reason duplicate), and no cycle through the
+  // links and the task tree (409 cycle, details.path). A task's links are
+  // tombstoned with it and restored with it; a move or a restore that would
+  // close a cycle is refused (409 cycle).
+  virtual Result<Dependency> checkDependency(const Dependency& d) = 0;
+  virtual Result<Dependency> createDependency(const Dependency& d, const WriteContext& ctx) = 0;
+  virtual Result<Dependency> dependency(const QString& id, bool includeDeleted = false) = 0;
+  virtual Result<QList<Dependency>> dependencies(const QString& projectId, bool includeDeleted = false) = 0;
+  // Only type and lag change; the tasks a link joins are fixed (400).
+  virtual Result<Dependency> updateDependency(const Dependency& d, qint64 expectedRev, const WriteContext& ctx) = 0;
+  virtual Result<Dependency> deleteDependency(const QString& id, qint64 expectedRev, const WriteContext& ctx) = 0;
+  // For dry runs: the live links touching any of these tasks (what deleting
+  // them tombstones), and the links restoring a task would bring back.
+  virtual Result<QList<Dependency>> linksTouching(const QString& projectId, const QSet<QString>& taskIds) = 0;
+  virtual Result<QList<Dependency>> planRestoreLinks(const QString& taskId) = 0;
+  // 409 cycle if the project's live links would loop with its tasks as given
+  // (e.g. a task tree after a move); dry runs use it as the writes do.
+  virtual Status checkLinkCycles(const QList<Task>& tasks) = 0;
 
   // The sync feed: change rows with seq > since, oldest first (limit <= 500).
   virtual Result<QList<ChangeRecord>> changesSince(qint64 since, int limit = 500) = 0;

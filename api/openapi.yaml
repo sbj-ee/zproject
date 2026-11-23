@@ -7,7 +7,7 @@
 openapi: 3.1.0
 info:
   title: zproject API
-  version: 0.18.0
+  version: 0.19.0
   description: |
     Plans served by zprojectd on 127.0.0.1:8788, published on the tailnet by
     `tailscale serve`. Every request except `GET /v1/health` needs
@@ -31,6 +31,8 @@ tags:
     description: Projects
   - name: tasks
     description: Tasks and the WBS tree
+  - name: dependencies
+    description: Links between tasks (FS, SS, FF with lag)
   - name: sync
     description: The change feed for client caches
   - name: admin
@@ -337,7 +339,7 @@ paths:
     delete:
       operationId: deleteTask
       tags: [tasks]
-      summary: Tombstone a task and its subtree (destructive)
+      summary: Tombstone a task and its subtree, with their links (destructive)
       x-zproject-scope: tasks:write
       x-zproject-destructive: true
       x-zproject-dry-run: true
@@ -375,7 +377,8 @@ paths:
         (`order`), each sibling whose order changes getting its own revision
         and change record, and the old and new parents' summaries are rolled
         up again (SPEC.md §5.3). Moving a task under itself or one of its
-        descendants is a 409 cycle; a milestone, deleted or missing parent, a
+        descendants is a 409 cycle, as is a move that would loop through
+        links (a task linked to the summary it moves under); a milestone, deleted or missing parent, a
         parent in another project or a position out of range is a 400. Moving
         to the place it already has changes nothing. If-Match is the moved
         task's rev.
@@ -420,7 +423,10 @@ paths:
         descendants deleted earlier stay deleted. Summaries are rolled up
         again. 409 conflict if the task is not deleted, its project or parent
         is deleted (restore the parent first), or its parent has become a
-        milestone. Destructive (SPEC.md §9.3): tokens with requireConfirm
+        milestone. The links deleted with the tasks come back too, when both
+        their tasks are live again and the pair hasn't been linked since; a
+        restore that would close a loop with links made since is a 409
+        cycle. Destructive (SPEC.md §9.3): tokens with requireConfirm
         need the confirmId of a dry run. If-Match is the deleted task's rev.
         The body, if any, must be an empty object.
       x-zproject-scope: tasks:write
@@ -476,6 +482,152 @@ paths:
         '401': {$ref: '#/components/responses/Unauthenticated'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/projects/{id}/dependencies:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: listDependencies
+      tags: [dependencies]
+      summary: A project's links, oldest first
+      x-zproject-scope: tasks:read
+      x-zproject-destructive: false
+      x-zproject-dry-run: false
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/includeDeleted'
+        - name: task
+          in: query
+          description: Only the links into or out of this task
+          schema: {$ref: '#/components/schemas/Id'}
+      responses:
+        '200':
+          description: A page of links
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DependencyPage'}
+        '400': {$ref: '#/components/responses/Validation'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/dependencies:
+    post:
+      operationId: createDependency
+      tags: [dependencies]
+      summary: Link two tasks of one project
+      description: >-
+        Both tasks must be live and in the same project (400). A second live
+        link between the same two tasks in the same direction is 409
+        `conflict` with details.reason `duplicate` and details.existing. A
+        link that would close a loop, through other links or through the
+        task tree (a task and its own summary), is 409 `cycle` with
+        details.path, the task ids around the loop. Links don't move any
+        dates until the scheduling engine is live on the server (plan S5).
+      x-zproject-scope: tasks:write
+      x-zproject-destructive: false
+      x-zproject-dry-run: true
+      parameters:
+        - $ref: '#/components/parameters/dryRun'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DependencyInput'}
+      responses:
+        '200': {$ref: '#/components/responses/DryRun'}
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Dependency'}
+        '400': {$ref: '#/components/responses/Validation'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/dependencies/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: getDependency
+      tags: [dependencies]
+      summary: One link
+      x-zproject-scope: tasks:read
+      x-zproject-destructive: false
+      x-zproject-dry-run: false
+      responses:
+        '200':
+          description: The link
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Dependency'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+    patch:
+      operationId: updateDependency
+      tags: [dependencies]
+      summary: Change a link's type or lag (If-Match honoured)
+      description: >-
+        Only `type` and `lag` change. A link's tasks are fixed: sending
+        `predecessor`, `successor` or `project` is a 400; delete the link and
+        add another instead.
+      x-zproject-scope: tasks:write
+      x-zproject-destructive: false
+      x-zproject-dry-run: true
+      parameters:
+        - $ref: '#/components/parameters/dryRun'
+        - $ref: '#/components/parameters/ifMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DependencyUpdate'}
+      responses:
+        '200':
+          description: The updated link, or a dry-run result with ?dryRun=true
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Dependency'
+                  - $ref: '#/components/schemas/DryRunResult'
+        '400': {$ref: '#/components/responses/Validation'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '412': {$ref: '#/components/responses/RevMismatch'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+    delete:
+      operationId: deleteDependency
+      tags: [dependencies]
+      summary: Tombstone a link (destructive)
+      x-zproject-scope: tasks:write
+      x-zproject-destructive: true
+      x-zproject-dry-run: true
+      parameters:
+        - $ref: '#/components/parameters/dryRun'
+        - $ref: '#/components/parameters/ifMatch'
+        - $ref: '#/components/parameters/confirm'
+      responses:
+        '200':
+          description: The tombstoned link, or a dry-run result with a confirmId
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Dependency'
+                  - $ref: '#/components/schemas/DryRunResult'
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/RevMismatch'}
         '429': {$ref: '#/components/responses/RateLimited'}
   /v1/changes:
     get:
@@ -841,6 +993,55 @@ components:
           type: integer
           minimum: 0
           description: 0-based index among the new parent's live children, not counting the task; omitted = last
+    LinkType:
+      type: string
+      enum: [FS, SS, FF]
+      description: >-
+        FS: the successor starts after the predecessor finishes; SS: it starts
+        no earlier than the predecessor starts; FF: it finishes no earlier
+        than the predecessor finishes.
+    Lag:
+      type: integer
+      minimum: -3650
+      maximum: 3650
+      description: Whole working days of the successor's calendar; negative is a lead
+    DependencyInput:
+      type: object
+      additionalProperties: false
+      required: [predecessor, successor]
+      properties:
+        predecessor: {$ref: '#/components/schemas/Id'}
+        successor: {$ref: '#/components/schemas/Id'}
+        type: {$ref: '#/components/schemas/LinkType'}
+        lag: {$ref: '#/components/schemas/Lag'}
+        project:
+          allOf: [{$ref: '#/components/schemas/Id'}]
+          description: Optional; must be the tasks' project
+    DependencyUpdate:
+      type: object
+      additionalProperties: false
+      properties:
+        type: {$ref: '#/components/schemas/LinkType'}
+        lag: {$ref: '#/components/schemas/Lag'}
+    Dependency:
+      allOf:
+        - $ref: '#/components/schemas/EntityBase'
+        - type: object
+          required: [project, predecessor, successor, type, lag]
+          properties:
+            project: {$ref: '#/components/schemas/Id'}
+            predecessor: {$ref: '#/components/schemas/Id'}
+            successor: {$ref: '#/components/schemas/Id'}
+            type: {$ref: '#/components/schemas/LinkType'}
+            lag: {$ref: '#/components/schemas/Lag'}
+    DependencyPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Dependency'}
+        nextCursor: {type: [string, 'null']}
     ProjectPage:
       type: object
       required: [items, nextCursor]
