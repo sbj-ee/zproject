@@ -128,6 +128,25 @@ in one list (done and cancelled projects only when the sidebar shows them).
 - To make a milestone, select a task in the outline and use
   **Edit → Convert to Milestone**.
 
+## Activity
+
+**View → Activity** (Ctrl + Shift + A) lists what changed in the project,
+newest first: when, who, which task (or *Project details*), and what
+changed, worded as in a task's History tab. It is built from the change
+feed the app already keeps for the offline cache, so it needs no extra
+request and also works offline.
+
+- **Who** is *This computer* for changes made with this device's token,
+  *system* for the server's own (summary roll-ups), or the other token's
+  label. The **Who** and **What** boxes filter by person and by tasks or
+  project details.
+- **Enter** (or a double-click) on a task's row opens it in the outline. A
+  deleted task keeps its name, marked *(deleted)*.
+- The cache keeps the newest 5,000 changes across all projects; the view
+  shows a project's newest 1,000.
+- A token limited to some projects gets no change feed, so there is no
+  activity to show; a task's History tab still works.
+
 ## Editing a task
 
 Select a task in the outline: the **Inspector** shows it with three tabs.
@@ -233,6 +252,7 @@ the server machine.
 | Find / next / previous | Ctrl + F / F3 / Shift + F3 |
 | Show the Gantt | Ctrl + G |
 | Show the milestones | Ctrl + Shift + M |
+| Show the project's activity | Ctrl + Shift + A |
 | Gantt timescale in / out | Ctrl + Shift + = / Ctrl + Shift + − (or Ctrl + wheel) |
 | Scroll the Gantt to today | T |
 | Help | F1 |

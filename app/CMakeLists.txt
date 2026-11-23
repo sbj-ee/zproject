@@ -3,7 +3,9 @@
 # offscreen; the executable is main.cpp.
 set(CMAKE_AUTORCC ON)
 add_library(zproject_app_lib STATIC
+  ActivityView.cpp ActivityView.hpp
   AppSession.cpp AppSession.hpp
+  ChangeText.cpp ChangeText.hpp
   Dialogs.cpp Dialogs.hpp
   EditDialogs.cpp EditDialogs.hpp
   GanttView.cpp GanttView.hpp

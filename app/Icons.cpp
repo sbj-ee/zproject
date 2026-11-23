@@ -203,6 +203,15 @@ QIcon glyph(Glyph g, const ThemeColors& c) {
         diamond(11.5, accent);
         break;
       }
+      case Glyph::Activity:
+        // A clock face: what changed, and when.
+        p.setPen(pen(fg, 1.5));
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(QRectF(2, 2, 12, 12));
+        p.setPen(pen(accent, 1.6));
+        p.drawLine(QPointF(8, 8), QPointF(8, 4.5));
+        p.drawLine(QPointF(8, 8), QPointF(10.8, 9.6));
+        break;
       case Glyph::Find:
         p.setPen(pen(fg, 1.6));
         p.setBrush(Qt::NoBrush);

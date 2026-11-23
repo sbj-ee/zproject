@@ -24,6 +24,7 @@
 #include <QVBoxLayout>
 
 #include "app/AppSession.hpp"
+#include "app/ChangeText.hpp"
 #include "app/EditDialogs.hpp"
 #include "client/ApiError.hpp"
 #include "client/AsyncApiClient.hpp"
@@ -54,48 +55,6 @@ void setReadOnly(QWidget* w, bool ro) {
   } else if (w != nullptr) {
     w->setEnabled(!ro);
   }
-}
-
-QString localTime(const QString& iso) {
-  const QDateTime t = QDateTime::fromString(iso, Qt::ISODateWithMs);
-  return t.isValid() ? QLocale().toString(t.toLocalTime(), QLocale::ShortFormat) : iso;
-}
-
-// One history record as a line: "Created", "Deleted", or "Title: A → B; …".
-QString describe(const QJsonObject& before, const QJsonObject& after) {
-  if (after.value(QStringLiteral("deleted")).toBool() && !before.value(QStringLiteral("deleted")).toBool() &&
-      before.contains(QStringLiteral("deleted"))) {
-    return QObject::tr("Deleted");
-  }
-  if (before.value(QStringLiteral("deleted")).toBool() && after.contains(QStringLiteral("deleted")) &&
-      !after.value(QStringLiteral("deleted")).toBool()) {
-    return QObject::tr("Restored");
-  }
-  if (before.isEmpty() && after.contains(QStringLiteral("title"))) {
-    return QObject::tr("Created “%1”").arg(after.value(QStringLiteral("title")).toString());
-  }
-  QStringList parts;
-  QStringList keys = after.keys();
-  for (const QString& k : before.keys()) {
-    if (!keys.contains(k)) keys.append(k);
-  }
-  for (const QString& k : keys) {
-    if (k == QLatin1String("rev") || k == QLatin1String("updatedAt")) continue;
-    if (k == QLatin1String("notes")) {
-      parts.append(QObject::tr("Notes edited"));
-      continue;
-    }
-    if (k == QLatin1String("parent") || k == QLatin1String("order")) {
-      parts.append(QObject::tr("%1 changed").arg(taskFieldLabel(k)));
-      continue;
-    }
-    const QString b = client::displayValue(before.value(k));
-    const QString a = client::displayValue(after.value(k));
-    parts.append(QStringLiteral("%1: %2 → %3")
-                     .arg(taskFieldLabel(k), b.isEmpty() ? QStringLiteral("—") : b,
-                          a.isEmpty() ? QStringLiteral("—") : a));
-  }
-  return parts.join(QStringLiteral("; "));
 }
 
 }  // namespace
@@ -619,12 +578,8 @@ void TaskInspector::setMessage(const QString& text, bool error) {
 // ---- history ----
 
 QString TaskInspector::who(const QString& actor) const {
-  if (actor.isEmpty() || actor == QLatin1String("system")) return tr("system");
-  const QString label = QStringLiteral("zpt_") + actor;
   AppSession* s = session_();
-  if (s != nullptr && s->connection().tokenLabel == label) return tr("This computer");
-  // Long token ids are cut short; the tooltip has the whole label.
-  return label.size() > 16 ? label.left(12) + QChar(0x2026) : label;
+  return changeActorName(actor, s != nullptr ? s->connection().tokenLabel : QString());
 }
 
 void TaskInspector::loadHistory() {
@@ -678,13 +633,13 @@ void TaskInspector::fillHistory(const QList<QJsonObject>& rows) {
   int r = 0;
   for (auto it = rows.crbegin(); it != rows.crend(); ++it, ++r) {  // newest first
     const QJsonObject& c = *it;
-    const QString when = localTime(c.value(QStringLiteral("ts")).toString());
+    const QString when = changeLocalTime(c.value(QStringLiteral("ts")).toString());
     const QString by = who(c.value(QStringLiteral("actor")).toString());
-    const QString what = describe(c.value(QStringLiteral("before")).toObject(), c.value(QStringLiteral("after")).toObject());
+    const QString what = describeChange(QStringLiteral("task"), c.value(QStringLiteral("before")).toObject(), c.value(QStringLiteral("after")).toObject());
     auto* a = new QTableWidgetItem(when);
     auto* b = new QTableWidgetItem(by);
     const QString actor = c.value(QStringLiteral("actor")).toString();
-    b->setToolTip(actor.isEmpty() || actor == QLatin1String("system") ? by : QStringLiteral("zpt_") + actor);
+    b->setToolTip(changeActorLabel(actor));
     auto* d = new QTableWidgetItem(what);
     d->setToolTip(what);
     for (QTableWidgetItem* i : {a, b, d}) i->setData(Qt::AccessibleTextRole, i->text());

@@ -34,6 +34,7 @@
 #include <QVBoxLayout>
 
 #include "app/EditDialogs.hpp"
+#include "app/ActivityView.hpp"
 #include "app/GanttView.hpp"
 #include "app/MilestonesView.hpp"
 #include "app/HelpDialog.hpp"
@@ -334,6 +335,15 @@ void MainWindow::buildCentral() {
     if (page_ == ProjectPage::Milestones) showProject(currentProjectId());
   });
   stack_->addWidget(milestones_);
+  activity_ = new ActivityView(stack_);
+  connect(activity_, &ActivityView::openTask, this, [this](const QString& task) {
+    showOutline();
+    if (!outline_->selectTask(task)) {
+      outline_->setStatusFilter(QString());
+      outline_->selectTask(task);
+    }
+  });
+  stack_->addWidget(activity_);
   v->addWidget(stack_, 1);
   setCentralWidget(central);
 }
@@ -479,6 +489,7 @@ void MainWindow::buildMenus() {
   add(view, QStringLiteral("actionOutline"), tr("&Outline"), [this] { showOutline(); });
   add(view, QStringLiteral("actionGantt"), tr("&Gantt"), [this] { showGantt(); });
   add(view, QStringLiteral("actionMilestones"), tr("&Milestones"), [this] { showMilestones(); });
+  add(view, QStringLiteral("actionActivity"), tr("A&ctivity"), [this] { showActivity(); });
   view->addSeparator();
   QMenu* themes = view->addMenu(tr("&Theme"));
   themeGroup_ = new QActionGroup(this);
@@ -549,7 +560,7 @@ void MainWindow::buildToolBar() {
   toolBar_->toggleViewAction()->setVisible(false);
   const QList<QList<const char*>> groups = {
       {"actionNewProject", "actionEditProject", "actionRefresh"},
-      {"actionOutline", "actionGantt", "actionMilestones", "actionInsertTask", "actionEditTask", "actionSaveTask"},
+      {"actionOutline", "actionGantt", "actionMilestones", "actionActivity", "actionInsertTask", "actionEditTask", "actionSaveTask"},
       {"actionFind"},
       {"actionCheckUpdates"},
   };
@@ -626,7 +637,7 @@ void MainWindow::applyIcons(const ThemeColors& c) {
       {"actionEditTask", G::TaskDetails},      {"actionSaveTask", G::SaveTask},
       {"actionDeleteTask", G::DeleteTask},     {"actionFind", G::Find},
       {"actionCheckUpdates", G::CheckUpdates}, {"actionGantt", G::Gantt},
-      {"actionMilestones", G::Milestones},
+      {"actionMilestones", G::Milestones},    {"actionActivity", G::Activity},
   };
   for (const auto& [name, g] : glyphs) {
     if (QAction* a = action(QString::fromLatin1(name))) a->setIcon(Icons::glyph(g, c));
@@ -879,6 +890,14 @@ void MainWindow::showMilestones() {
   if (!was) milestones_->table()->setFocus(Qt::OtherFocusReason);
 }
 
+void MainWindow::showActivity() {
+  if (currentProjectId().isEmpty()) return;
+  const bool was = stack_->currentWidget() == activity_;
+  page_ = ProjectPage::Activity;
+  showProject(currentProjectId());
+  if (!was) activity_->table()->setFocus(Qt::OtherFocusReason);
+}
+
 // The task selected in the outline or the Gantt, whichever is showing.
 QString MainWindow::viewTaskId() const {
   if (stack_->currentWidget() == outline_) return outline_->currentTaskId();
@@ -993,6 +1012,7 @@ void MainWindow::updateEditActions() {
   enable("actionOutline", haveProject);
   enable("actionGantt", haveProject);
   enable("actionMilestones", haveProject);
+  enable("actionActivity", haveProject);
   if (outlineButton_) outlineButton_->setEnabled(haveProject);
   const bool inOutline = stack_ && stack_->currentWidget() == outline_ && haveProject;
   const QString task = inOutline ? outline_->currentTaskId() : QString();
@@ -1115,6 +1135,18 @@ void MainWindow::showProject(const QString& id) {
     }
     milestones_->reload(sources);
     stack_->setCurrentWidget(milestones_);
+  } else if (page_ == ProjectPage::Activity) {
+    activity_->setProject(id, name);
+    // A project-limited token has no change feed, so the cache has no
+    // change records to show (plan §4.7).
+    const bool listPoll =
+        session_->syncer() != nullptr && session_->syncer()->mode() == client::ChangeFeedSyncer::Mode::ListPoll;
+    activity_->setNotice(listPoll ? tr("This device's token is limited to some projects, so it gets no change feed "
+                                       "and there is no activity to show. A task's History tab still works.")
+                                  : QString());
+    activity_->reload(session_->cache()->activity(id, ActivityView::kLimit), tasks, session_->cache()->wbs(id),
+                      session_->connection().tokenLabel);
+    stack_->setCurrentWidget(activity_);
   } else {
     stack_->setCurrentWidget(detailsPage_);
   }

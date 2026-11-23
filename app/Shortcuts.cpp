@@ -31,6 +31,8 @@ QList<ShortcutInfo> shellShortcuts() {
       {QStringLiteral("actionGantt"), QObject::tr("Show the Gantt"), {QKeySequence(Qt::CTRL | Qt::Key_G)}},
       {QStringLiteral("actionMilestones"), QObject::tr("Show the milestones"),
        {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_M)}},
+      {QStringLiteral("actionActivity"), QObject::tr("Show the project's activity"),
+       {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A)}},
       {QStringLiteral("actionFindNext"), QObject::tr("Find next"), {QKeySequence(Qt::Key_F3)}},
       {QStringLiteral("actionFindPrevious"), QObject::tr("Find previous"), {QKeySequence(Qt::SHIFT | Qt::Key_F3)}},
       {QStringLiteral("actionRefresh"), QObject::tr("Refresh from the server"),
