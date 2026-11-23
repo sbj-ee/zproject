@@ -249,7 +249,8 @@ class TestApi : public QObject {
     QCOMPARE(f.call("PATCH", tp, f.owner, {{QStringLiteral("percentComplete"), 50}, {QStringLiteral("actualStart"), QStringLiteral("2026-11-20")}}).status, 200);
     QCOMPARE(f.call("PATCH", tp, f.owner, {{QStringLiteral("project"), p}}).status, 400);
     r = f.call("GET", tp + "/history", f.owner);
-    QCOMPARE(Fixture::json(r).value(QStringLiteral("items")).toArray().size(), 2);
+    // create, the update, and the dates the schedule gives it from its actual start (S5)
+    QCOMPARE(Fixture::json(r).value(QStringLiteral("items")).toArray().size(), 3);
 
     // Delete the parent: its subtree goes too (owner: no confirm needed).
     r = f.call("DELETE", "/v1/tasks/" + a.toLatin1() + "?dryRun=true", f.owner);
@@ -769,7 +770,8 @@ class TestApi : public QObject {
       }
       return out;
     };
-    QCOMPARE(names(reader), (QStringList{QStringLiteral("list_projects"), QStringLiteral("get_project"), QStringLiteral("search_tasks"), QStringLiteral("get_task")}));
+    QCOMPARE(names(reader), (QStringList{QStringLiteral("list_projects"), QStringLiteral("get_project"), QStringLiteral("search_tasks"), QStringLiteral("get_task"),
+                                         QStringLiteral("get_schedule"), QStringLiteral("get_critical_path")}));
     QVERIFY(names(writer).contains(QStringLiteral("delete_task")));
     // A read-only agent cannot call a write tool it was not shown.
     // Unknown arguments are a protocol error.

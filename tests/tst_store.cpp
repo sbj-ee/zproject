@@ -557,17 +557,27 @@ class TstStore : public QObject {
 
     // Each roll-up is its own change row, from the same actor and request.
     const auto history = s->changesFor(QStringLiteral("task"), six.id).value();
-    QCOMPARE(history.size(), 5);  // create + four roll-ups
+    // create + four roll-ups + its dates, once its first subtask's actuals
+    // scheduled it (plan S5: summaries' dates come from their subtasks)
+    QCOMPARE(history.size(), 6);
     const ChangeRecord& last = history.last();
     QCOMPARE(last.actor, kCtx.actor);
     QCOMPARE(last.requestId, kCtx.requestId);
     QCOMPARE(last.before.value(QStringLiteral("status")).toString(), QStringLiteral("in_progress"));
     QCOMPARE(last.after.value(QStringLiteral("status")).toString(), QStringLiteral("done"));
     QCOMPARE(last.after.value(QStringLiteral("percentComplete")).toInt(), 100);
-    // The child's own change comes first in the feed.
+    // The child's own change comes first in the feed, then the roll-up (then
+    // the child's dates from the schedule, S5).
     const auto feed = s->changesSince(0).value();
-    QCOMPARE(feed.last().entityId, six.id);
-    QCOMPARE(feed[feed.size() - 2].entityId, kids[3]);
+    qsizetype own = -1;
+    qsizetype rolled = -1;
+    for (qsizetype k = 0; k < feed.size(); ++k) {
+      if (feed[k].entityId == kids[3] && own < 0 && feed[k].after.contains(QStringLiteral("status"))) own = k;
+      if (feed[k].entityId == six.id && feed[k].after.value(QStringLiteral("status")).toString() == QLatin1String("done")) {
+        rolled = k;
+      }
+    }
+    QVERIFY(own >= 0 && rolled > own);
   }
 
   void nestedSummariesRollUp() {

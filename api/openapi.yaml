@@ -7,7 +7,7 @@
 openapi: 3.1.0
 info:
   title: zproject API
-  version: 0.21.0
+  version: 0.22.0
   description: |
     Plans served by zprojectd on 127.0.0.1:8788, published on the tailnet by
     `tailscale serve`. Every request except `GET /v1/health` needs
@@ -35,6 +35,8 @@ tags:
     description: Links between tasks (FS, SS, FF with lag)
   - name: calendars
     description: Working calendars, holidays and other exceptions
+  - name: schedule
+    description: The critical-path schedule (dates, float, critical path, violations)
   - name: sync
     description: The change feed for client caches
   - name: admin
@@ -748,6 +750,87 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}
         '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/projects/{id}/schedule:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: getSchedule
+      tags: [schedule]
+      summary: The project's schedule, computed now
+      description: >-
+        Every task in outline order with early and late dates, total and free
+        float (working days) and whether it is critical, plus the critical
+        tasks, the project's forecast finish and the violations (reported,
+        never fixed: no_start, manual_no_dates, link_broken, constraint_missed,
+        deadline_missed, unknown_calendar). Auto tasks' and summaries' stored
+        start and finish are these early dates.
+      x-zproject-scope: schedule:read
+      x-zproject-destructive: false
+      x-zproject-dry-run: false
+      responses:
+        '200':
+          description: The schedule
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Schedule'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/projects/{id}/critical-path:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: getCriticalPath
+      tags: [schedule]
+      summary: The critical tasks, by start
+      x-zproject-scope: schedule:read
+      x-zproject-destructive: false
+      x-zproject-dry-run: false
+      responses:
+        '200':
+          description: The critical path
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CriticalPath'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/projects/{id}/reschedule:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      operationId: rescheduleProject
+      tags: [schedule]
+      summary: Recompute now and store any stale dates
+      description: >-
+        Every write that can move dates already reschedules in the same
+        transaction; this is for after a change outside the API. A no-op when
+        nothing is stale. The body, if any, must be empty.
+      x-zproject-scope: tasks:write
+      x-zproject-destructive: false
+      x-zproject-dry-run: true
+      parameters:
+        - $ref: '#/components/parameters/dryRun'
+      responses:
+        '200':
+          description: How many tasks changed, or a dry-run result with ?dryRun=true
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [projectId, changed]
+                    properties:
+                      projectId: {$ref: '#/components/schemas/Id'}
+                      changed: {type: integer, minimum: 0}
+                  - $ref: '#/components/schemas/DryRunResult'
+        '400': {$ref: '#/components/responses/Validation'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
   /v1/projects/{id}/dependencies:
     parameters:
       - $ref: '#/components/parameters/id'
@@ -1219,7 +1302,12 @@ components:
         type: {type: string, enum: [task, milestone]}
         mode: {type: string, enum: [auto, manual]}
         duration: {type: number, minimum: 0}
-        start: {$ref: '#/components/schemas/Date'}
+        start:
+          allOf: [{$ref: '#/components/schemas/Date'}]
+          description: >-
+            Set only on manual tasks. An auto task's and a summary's start and
+            finish come from the schedule (400 if set by hand: use an SNET
+            constraint, or make the task manual).
         finish: {$ref: '#/components/schemas/Date'}
         constraint: {type: string, enum: [ASAP, SNET, FNLT]}
         constraintDate: {$ref: '#/components/schemas/Date'}
@@ -1330,6 +1418,63 @@ components:
           type: array
           items: {$ref: '#/components/schemas/CalendarException'}
         nextCursor: {type: [string, 'null']}
+    ScheduleViolation:
+      type: object
+      required: [project, kind, task, other, message]
+      properties:
+        project: {$ref: '#/components/schemas/Id'}
+        kind:
+          type: string
+          enum: [no_start, manual_no_dates, link_broken, constraint_missed, deadline_missed, unknown_calendar]
+        task: {type: [string, 'null']}
+        other: {type: [string, 'null'], description: 'link_broken: the predecessor; unknown_calendar: the calendar'}
+        message: {type: string}
+    ScheduledTask:
+      type: object
+      required: [id, scheduled, summary, milestone, fixed, start, finish, lateStart, lateFinish, totalFloat, freeFloat, critical]
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        scheduled: {type: boolean, description: 'false: no dates (e.g. no project start and nothing else anchoring it)'}
+        summary: {type: boolean}
+        milestone: {type: boolean}
+        fixed: {type: boolean, description: 'manual, or done (an actual finish): never moved'}
+        start: {type: [string, 'null'], format: date}
+        finish: {type: [string, 'null'], format: date}
+        lateStart: {type: [string, 'null'], format: date}
+        lateFinish: {type: [string, 'null'], format: date}
+        totalFloat: {type: integer, description: Working days of the task's calendar}
+        freeFloat: {type: integer}
+        critical: {type: boolean, description: 'Total float <= 0 and not done'}
+    Schedule:
+      type: object
+      required: [projectId, finish, critical, violations, tasks]
+      properties:
+        projectId: {$ref: '#/components/schemas/Id'}
+        finish: {type: [string, 'null'], format: date, description: The latest scheduled finish}
+        critical:
+          type: array
+          items: {$ref: '#/components/schemas/Id'}
+        violations:
+          type: array
+          items: {$ref: '#/components/schemas/ScheduleViolation'}
+        tasks:
+          type: array
+          items: {$ref: '#/components/schemas/ScheduledTask'}
+    CriticalPath:
+      type: object
+      required: [projectId, finish, tasks]
+      properties:
+        projectId: {$ref: '#/components/schemas/Id'}
+        finish: {type: [string, 'null'], format: date}
+        tasks:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/ScheduledTask'
+              - type: object
+                required: [title]
+                properties:
+                  title: {type: string}
     LinkType:
       type: string
       enum: [FS, SS, FF]
@@ -1430,13 +1575,33 @@ components:
               after: {type: object}
         ripple:
           type: object
-          description: Schedule effects (empty until the scheduling engine lands)
+          description: >-
+            What the write would do to the schedule, computed by doing it and
+            undoing it: the tasks whose dates move (deltas in calendar days),
+            the largest change in a project's finish, whether the critical set
+            changes, and the violations afterwards. Empty for writes that
+            can't move dates.
+          required: [moved, finishDelta, criticalChanged, violations]
           properties:
             moved:
               type: array
-              items: {type: string}
-            finishDelta: {type: number}
+              items:
+                type: object
+                required: [project, task, startBefore, startAfter, finishBefore, finishAfter, startDelta, finishDelta]
+                properties:
+                  project: {$ref: '#/components/schemas/Id'}
+                  task: {$ref: '#/components/schemas/Id'}
+                  startBefore: {type: [string, 'null'], format: date}
+                  startAfter: {type: [string, 'null'], format: date}
+                  finishBefore: {type: [string, 'null'], format: date}
+                  finishAfter: {type: [string, 'null'], format: date}
+                  startDelta: {type: integer}
+                  finishDelta: {type: integer}
+            finishDelta: {type: integer}
             criticalChanged: {type: boolean}
+            violations:
+              type: array
+              items: {$ref: '#/components/schemas/ScheduleViolation'}
         confirmId:
           type: string
           description: For destructive operations; send it in X-Zproject-Confirm

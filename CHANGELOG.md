@@ -7,6 +7,53 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.22.0 — 2026-11-23
+
+Scheduling plan, PR S5: scheduling live on the server (plan §2.2, §2.3, §3;
+SPEC §5.1, §6, §7.2, §9.3, §9.4, §11, §17). This completes SPEC phase 1a on
+the server.
+
+- **Live dates**: every write that can move dates reschedules the projects
+  it touches in the same transaction, with S2's engine. That covers task
+  writes, moves, deletes and restores; links; a project's start, target
+  finish or calendar; and calendars and their exceptions, which reschedule
+  every project.
+  - **What changes**: auto tasks' and summaries' `start`/`finish` become the
+    schedule's dates, and only tasks whose dates change get a revision and
+    change row, under the writer's actor and request id.
+  - **Manual tasks** keep their dates.
+  - **No project start**: auto tasks stay unscheduled (`no_start`).
+- **Read-only dates** (plan Q2): setting an auto task's or a summary's
+  dates by hand is a 400 (field `start` or `finish`) that says to use a
+  start-no-earlier-than constraint or a manual task, including when
+  creating a task.
+- **Real ripple in every dry run**: the write runs inside a savepoint that
+  is always rolled back. The ripple lists each task that would move (before
+  and after, with deltas), the change in finish, whether the critical set
+  changes, and the violations, and a dry run refuses whatever the write
+  would.
+- **Endpoints**:
+  - `GET /v1/projects/{id}/schedule`: dates, float, critical, violations
+  - `GET /v1/projects/{id}/critical-path`
+  - `POST /v1/projects/{id}/reschedule`: dry run supported
+- **MCP**: `get_schedule` and `get_critical_path` (read scope).
+- **CLI**: `zproject-cli schedule show|critical|recompute`.
+  `tasks add --start` now needs `--manual`.
+- **Reconcile on open**: stale auto-task and summary dates are corrected
+  under actor `system`, once.
+- **Performance**: a PATCH that reschedules 2,000 tasks and 4,000 links
+  takes about 10 ms (SPEC §17 budget: 200 ms); a CI test guards it.
+- **Fixes**: `createTask` now returns the task as stored, so a client using
+  its `rev` (the desktop's Insert Task) isn't one revision behind.
+- **Tests**:
+  - New `tst_scheduling` (10): dates following every kind of write, the
+    read-only rule, manual and auto switching, calendars and project start,
+    no start, reconcile on open, dry-run ripple equal to the real write, the
+    endpoints, MCP, and the latency budget.
+  - `schedule` in `tst_cli`.
+  - Updated: GUI fixtures now place auto tasks with SNET (same dates), and
+    history counts include the schedule's rows.
+
 ## 0.21.0 — 2026-11-23
 
 Scheduling plan, PR S4: calendars on the server (plan §2.1, §3; SPEC §5.1,

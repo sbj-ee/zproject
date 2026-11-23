@@ -101,7 +101,14 @@ class Api {
   http::Response checkProjectAccess(Call& c, const QString& projectId);
   std::optional<qint64> ifMatch(const Call& c, http::Response* error) const;
   QString requestHash(const Call& c) const;
-  http::Response dryRunResponse(Call& c, const QJsonArray& changes);
+  // `ripple` defaults to "no schedule effect"; schedule-affecting writes pass rippleOf()'s.
+  http::Response dryRunResponse(Call& c, const QJsonArray& changes, const QJsonObject& ripple = {});
+  // A write's effect on the schedules of these projects (its dry run's
+  // ripple, SPEC.md §9.3): the write runs inside a savepoint that is always
+  // rolled back, between two schedules. A write the store refuses is that
+  // error, so a dry run refuses what the write would.
+  Result<QJsonObject> rippleOf(const QStringList& projectIds, const std::function<Status()>& write);
+  QStringList allProjectIds();  // every live project (calendar writes touch them all)
   std::optional<http::Response> requireConfirm(Call& c);
 
   // Handlers
@@ -131,6 +138,9 @@ class Api {
   http::Response deleteCalendarException(Call& c);
   http::Response importHolidays(Call& c);
   http::Response listDependencies(Call& c);
+  http::Response getSchedule(Call& c);
+  http::Response getCriticalPath(Call& c);
+  http::Response rescheduleProject(Call& c);
   http::Response createDependency(Call& c);
   http::Response getDependency(Call& c);
   http::Response updateDependency(Call& c);

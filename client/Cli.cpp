@@ -56,6 +56,9 @@ QString cliUsage() {
       "  tasks add PROJECT TITLE [--parent ID] [--milestone] [--duration DAYS]\n"
       "                       [--start D] [--finish D] [--deadline D] [--priority 1-4]\n"
       "                       [--notes T] [--manual] [--calendar ID|none] [--dry-run]\n"
+      "                       --start/--finish place a --manual task; an auto task's\n"
+      "                       dates come from the schedule (move it with links or\n"
+      "                       constraints)\n"
       "  tasks update ID [--title T] [--parent ID|none] [--status S] [--percent N]\n"
       "                       [--actual-start D] [--actual-finish D] [add options]\n"
       "                       [--rev N] [--dry-run]\n"
@@ -74,6 +77,12 @@ QString cliUsage() {
       "                       \"1.2SS\", \"4FF-1d\", several separated by commas\n"
       "  deps update ID [--type FS|SS|FF] [--lag DAYS] [--rev N] [--dry-run]\n"
       "  deps remove ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
+      "\n"
+      "Schedule (auto tasks' dates come from it; set --manual to place a task by hand)\n"
+      "  schedule show PROJECT       every task's dates, float and critical flag, and\n"
+      "                              what the schedule can't satisfy\n"
+      "  schedule critical PROJECT   the critical path\n"
+      "  schedule recompute PROJECT [--dry-run]   store any stale dates now\n"
       "\n"
       "Calendars (shared by every project; writing needs a token for all projects)\n"
       "  calendars list [--all]\n"
@@ -317,6 +326,7 @@ class Runner {
     if (cmd == QLatin1String("tasks")) return tasks();
     if (cmd == QLatin1String("deps")) return deps();
     if (cmd == QLatin1String("calendars")) return calendars();
+    if (cmd == QLatin1String("schedule")) return schedule();
     if (cmd == QLatin1String("token")) return token();
     if (cmd == QLatin1String("audit")) return audit();
     if (cmd == QLatin1String("backup")) return backup();
@@ -1050,6 +1060,76 @@ class Runner {
       return kExitOk;
     }
     return usage(QStringLiteral("unknown tasks command '%1'").arg(sub));
+  }
+
+  // ----------------------------------------------------------- schedule
+  int schedule() {
+    if (a_.pos.isEmpty()) return usage(QStringLiteral("schedule: show, critical or recompute"));
+    const QString sub = a_.pos.takeFirst();
+    if (sub != QLatin1String("show") && sub != QLatin1String("critical") && sub != QLatin1String("recompute")) {
+      return usage(QStringLiteral("unknown schedule command '%1'").arg(sub));
+    }
+    if (!allow(sub == QLatin1String("recompute") ? QStringList{QStringLiteral("dry-run")} : QStringList{})) return badOption();
+    if (a_.pos.size() != 1) return usage(QStringLiteral("schedule %1 PROJECT").arg(sub));
+    if (!checkId(a_.pos[0], "project ID")) return usage(badValue_);
+    const QString pid = a_.pos[0];
+    if (sub == QLatin1String("recompute")) {
+      WriteOpts w;
+      if (!writeOpts(&w)) return usage(badValue_);
+      if (int c = connect(); c != kExitOk) return c;
+      QJsonObject none;
+      const ApiResponse r = api_->send("POST", QStringLiteral("/v1/projects/%1/reschedule").arg(pid), w.query, &none, w.headers);
+      if (!r.ok()) return apiError(r);
+      if (w.dryRun || json_) {
+        printJson(r.json);
+        return kExitOk;
+      }
+      const int n = r.json.value(QStringLiteral("changed")).toInt();
+      out_ << (n == 0 ? QStringLiteral("Already up to date.") : QStringLiteral("Rescheduled %1 task%2.").arg(n).arg(n == 1 ? "" : "s"))
+           << '\n';
+      return kExitOk;
+    }
+    if (int c = connect(); c != kExitOk) return c;
+    const bool critical = sub == QLatin1String("critical");
+    const ApiResponse r = api_->get(QStringLiteral("/v1/projects/%1/%2").arg(pid, critical ? QStringLiteral("critical-path")
+                                                                                          : QStringLiteral("schedule")));
+    if (!r.ok()) return apiError(r);
+    if (json_) {
+      printJson(r.json);
+      return kExitOk;
+    }
+    int code = kExitOk;
+    auto wbs = loadWbs(pid, &code);
+    if (!wbs) return code;
+    QList<QStringList> rows;
+    for (const auto& v : r.json.value(QStringLiteral("tasks")).toArray()) {
+      const QJsonObject t = v.toObject();
+      const QString id = t.value(QStringLiteral("id")).toString();
+      QString title = wbs->title.value(id, t.value(QStringLiteral("title")).toString());
+      if (t.value(QStringLiteral("milestone")).toBool()) title += QStringLiteral(" ◆");
+      const bool scheduled = t.value(QStringLiteral("scheduled")).toBool();
+      rows << QStringList{wbs->code.value(id, QStringLiteral("-")),
+                          title,
+                          scheduled ? str(t.value(QStringLiteral("start"))) : QStringLiteral("unscheduled"),
+                          scheduled ? str(t.value(QStringLiteral("finish"))) : QString(),
+                          scheduled ? str(t.value(QStringLiteral("totalFloat"))) : QString(),
+                          t.value(QStringLiteral("critical")).toBool() ? QStringLiteral("critical") : QString()};
+    }
+    printTable(out_, {QStringLiteral("WBS"), QStringLiteral("TASK"), QStringLiteral("START"), QStringLiteral("FINISH"),
+                      QStringLiteral("FLOAT"), QString()},
+               rows);
+    out_ << "Finish: " << str(r.json.value(QStringLiteral("finish"))) << '\n';
+    const QJsonArray violations = r.json.value(QStringLiteral("violations")).toArray();
+    if (!violations.isEmpty()) {
+      out_ << "Problems:\n";
+      for (const auto& v : violations) {
+        const QJsonObject o = v.toObject();
+        const QString task = o.value(QStringLiteral("task")).toString();
+        out_ << "  " << (task.isEmpty() ? QStringLiteral("project") : wbs->code.value(task, task) + QLatin1Char(' ') + wbs->title.value(task))
+             << ": " << o.value(QStringLiteral("message")).toString() << '\n';
+      }
+    }
+    return kExitOk;
   }
 
   // ---------------------------------------------------------- calendars

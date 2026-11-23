@@ -336,16 +336,17 @@ class TestActivity : public QObject {
     QCOMPARE(shortcutFor(QStringLiteral("actionActivity")), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_A));
     QVERIFY(w->toolBar()->actions().contains(w->action(QStringLiteral("actionActivity"))));
     QVERIFY(!w->action(QStringLiteral("actionActivity"))->icon().isNull());
-    // Kitchen remodel: created, Survey, Drawings, Survey's update. Nothing
-    // from the garden.
-    QCOMPARE(a->shown().size(), 4);
+    // Kitchen remodel: created, Survey, Drawings, Survey's update, and the
+    // dates its actual start gives it (S5). Nothing from the garden.
+    QCOMPARE(a->shown().size(), 5);
     for (const client::ChangeRecord& c : a->shown()) {
       QVERIFY(c.entityId != ids_.value(QStringLiteral("Plants")));
       QVERIFY(c.entityId != garden_);
     }
     QTableWidget* t = a->table();
-    QVERIFY(t->item(0, C::Change)->text().contains(QStringLiteral("in_progress")));
-    QCOMPARE(t->item(3, C::Item)->text(), QStringLiteral("Project details"));
+    QVERIFY(t->item(0, C::Change)->text().startsWith(QStringLiteral("Finish:")));  // the schedule's dates
+    QVERIFY(t->item(1, C::Change)->text().contains(QStringLiteral("in_progress")));
+    QCOMPARE(t->item(4, C::Item)->text(), QStringLiteral("Project details"));
     // Drawings was created with this device's token.
     bool mine = false;
     for (int r = 0; r < t->rowCount(); ++r) {
@@ -364,7 +365,7 @@ class TestActivity : public QObject {
     login(owner_);
     auto w = open();
     ActivityView* a = w->activity();
-    a->table()->setCurrentCell(0, C::When);  // Survey's update
+    a->table()->setCurrentCell(0, C::When);  // Survey's dates from the schedule
     QTest::keyClick(a->table(), Qt::Key_Return);
     QCOMPARE(w->mainStack()->currentWidget(), w->outline());
     QCOMPARE(w->outline()->currentTaskId(), ids_.value(QStringLiteral("Survey")));
@@ -376,11 +377,11 @@ class TestActivity : public QObject {
     auto w = open();
     ActivityView* a = w->activity();
     a->setKindFilter(QStringLiteral("task"));
-    QCOMPARE(a->shown().size(), 3);
+    QCOMPARE(a->shown().size(), 4);
     const Task survey = store_->task(ids_.value(QStringLiteral("Survey")), true).value();
     QVERIFY(store_->deleteTask(survey.id, survey.rev, kOther).ok());
     w->session()->refresh();
-    QVERIFY(waitFor([&] { return a->shown().size() == 4; }));
+    QVERIFY(waitFor([&] { return a->shown().size() == 5; }));
     QCOMPARE(a->table()->item(0, C::Change)->text(), QStringLiteral("Deleted"));
     QCOMPARE(a->table()->item(0, C::Item)->text(), QStringLiteral("Survey (deleted)"));
     QCOMPARE(a->kindBox()->currentData().toString(), QStringLiteral("task"));

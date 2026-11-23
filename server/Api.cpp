@@ -13,6 +13,7 @@
 
 #include "core/Id.hpp"
 #include "core/Rollup.hpp"
+#include "core/Schedule.hpp"
 #include "core/Version.hpp"
 #include "server/Auth.hpp"
 #include "server/Mcp.hpp"
@@ -231,7 +232,40 @@ std::optional<Response> sinceParams(const QUrlQuery& q, qint64* since, int* limi
 QJsonObject ripple() {
   return QJsonObject{{QStringLiteral("moved"), QJsonArray()},
                      {QStringLiteral("finishDelta"), 0},
-                     {QStringLiteral("criticalChanged"), false}};
+                     {QStringLiteral("criticalChanged"), false},
+                     {QStringLiteral("violations"), QJsonArray()}};
+}
+
+QJsonValue dateJson(const QDate& d) { return d.isValid() ? QJsonValue(d.toString(Qt::ISODate)) : QJsonValue(); }
+
+QJsonObject violationJson(const ScheduleViolation& v, const QString& projectId) {
+  return QJsonObject{{QStringLiteral("project"), projectId},
+                     {QStringLiteral("kind"), v.kind},
+                     {QStringLiteral("task"), v.task.isEmpty() ? QJsonValue() : QJsonValue(v.task)},
+                     {QStringLiteral("other"), v.other.isEmpty() ? QJsonValue() : QJsonValue(v.other)},
+                     {QStringLiteral("message"), v.message}};
+}
+
+QJsonObject scheduledJson(const ScheduledTask& t) {
+  return QJsonObject{{QStringLiteral("id"), t.id},
+                     {QStringLiteral("scheduled"), t.scheduled},
+                     {QStringLiteral("summary"), t.summary},
+                     {QStringLiteral("milestone"), t.milestone},
+                     {QStringLiteral("fixed"), t.fixed},
+                     {QStringLiteral("start"), dateJson(t.start)},
+                     {QStringLiteral("finish"), dateJson(t.finish)},
+                     {QStringLiteral("lateStart"), dateJson(t.lateStart)},
+                     {QStringLiteral("lateFinish"), dateJson(t.lateFinish)},
+                     {QStringLiteral("totalFloat"), t.totalFloat},
+                     {QStringLiteral("freeFloat"), t.freeFloat},
+                     {QStringLiteral("critical"), t.critical}};
+}
+
+// Status from a write's Result, for rippleOf().
+template <typename T>
+Status statusOf(const Result<T>& r) {
+  if (r) return Ok{};
+  return r.error();
 }
 
 QJsonObject change(const QString& op, const QString& kind, const QString& id, const QJsonObject& before,
@@ -351,6 +385,15 @@ const QList<Api::Route>& Api::routeTable() {
       {{"POST", QStringLiteral("/v1/calendars/{id}/import-holidays"), QStringLiteral("importHolidays"),
         QStringLiteral("resources:write"), false, true},
        &Api::importHolidays, true},
+      {{"GET", QStringLiteral("/v1/projects/{id}/schedule"), QStringLiteral("getSchedule"),
+        QStringLiteral("schedule:read")},
+       &Api::getSchedule, false},
+      {{"GET", QStringLiteral("/v1/projects/{id}/critical-path"), QStringLiteral("getCriticalPath"),
+        QStringLiteral("schedule:read")},
+       &Api::getCriticalPath, false},
+      {{"POST", QStringLiteral("/v1/projects/{id}/reschedule"), QStringLiteral("rescheduleProject"),
+        QStringLiteral("tasks:write"), false, true},
+       &Api::rescheduleProject, true},
       {{"GET", QStringLiteral("/v1/projects/{id}/dependencies"), QStringLiteral("listDependencies"),
         QStringLiteral("tasks:read")},
        &Api::listDependencies, false},
@@ -739,10 +782,10 @@ QString Api::requestHash(const Call& c) const {
   return QString::fromLatin1(QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex());
 }
 
-Response Api::dryRunResponse(Call& c, const QJsonArray& changes) {
+Response Api::dryRunResponse(Call& c, const QJsonArray& changes, const QJsonObject& rip) {
   QJsonObject out{{QStringLiteral("dryRun"), true},
                   {QStringLiteral("changes"), changes},
-                  {QStringLiteral("ripple"), ripple()}};
+                  {QStringLiteral("ripple"), rip.isEmpty() ? ripple() : rip}};
   if (c.route->info.destructive) {
     const QDateTime t = now();
     const QString id = newId();
@@ -774,6 +817,50 @@ std::optional<Response> Api::requireConfirm(Call& c) {
   }
   c.confirmId = given;
   return std::nullopt;
+}
+
+QStringList Api::allProjectIds() {
+  QStringList out;
+  if (auto ps = store_.projects(); ps) {
+    for (const Project& p : ps.value()) out << p.id;
+  }
+  return out;
+}
+
+Result<QJsonObject> Api::rippleOf(const QStringList& projectIds, const std::function<Status()>& write) {
+  store::Transaction sandbox(store_.database());  // never committed: everything below is undone
+  if (!sandbox.ok()) return sandbox.error();
+  QHash<QString, Schedule> before;
+  for (const QString& pid : projectIds) {
+    if (auto s = store_.projectSchedule(pid); s) before.insert(pid, s.value());
+  }
+  if (auto s = write(); !s) return s.error();
+  QJsonArray moved;
+  QJsonArray violations;
+  qint64 finishDelta = 0;
+  bool criticalChanged = false;
+  for (const QString& pid : projectIds) {
+    auto after = store_.projectSchedule(pid);
+    if (!after || !before.contains(pid)) continue;
+    const Ripple r = diffSchedules(before.value(pid), after.value());
+    for (const RippleMove& m : r.moved) {
+      moved.append(QJsonObject{{QStringLiteral("project"), pid},
+                               {QStringLiteral("task"), m.task},
+                               {QStringLiteral("startBefore"), dateJson(m.startBefore)},
+                               {QStringLiteral("startAfter"), dateJson(m.startAfter)},
+                               {QStringLiteral("finishBefore"), dateJson(m.finishBefore)},
+                               {QStringLiteral("finishAfter"), dateJson(m.finishAfter)},
+                               {QStringLiteral("startDelta"), m.startDelta},
+                               {QStringLiteral("finishDelta"), m.finishDelta}});
+    }
+    if (std::abs(r.finishDelta) > std::abs(finishDelta)) finishDelta = r.finishDelta;
+    criticalChanged = criticalChanged || r.criticalChanged;
+    for (const ScheduleViolation& v : after->violations) violations.append(violationJson(v, pid));
+  }
+  return QJsonObject{{QStringLiteral("moved"), moved},
+                     {QStringLiteral("finishDelta"), finishDelta},
+                     {QStringLiteral("criticalChanged"), criticalChanged},
+                     {QStringLiteral("violations"), violations}};
 }
 
 // ---------------------------------------------------------------- handlers
@@ -853,7 +940,9 @@ Response Api::updateProject(Call& c) {
     const FieldDiff d = diffFields(toJson(cur.value()), toJson(p));
     QJsonArray changes;
     if (!d.empty()) changes.append(change(QStringLiteral("update"), kProject, id, d.before, d.after));
-    return dryRunResponse(c, changes);
+    auto rip = rippleOf({id}, [&] { return statusOf(store_.updateProject(p, cur->rev, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, changes, rip.value());
   }
   auto r = store_.updateProject(p, expected.value_or(cur->rev), {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -956,6 +1045,7 @@ Response Api::createTask(Call& c) {
   if (auto e = checkFields(body, toJson(Task{}), taskReadOnly(), {})) return *e;
   Task t = taskFromJson(body);
   t.project = projectId;
+  if (auto d = store::SqliteStore::checkDerivedDates(Task{}, t, false); !d) return storeError(d.error());
   if (auto e = toValidationError(validateTask(t))) return storeError(*e);
   if (c.dryRun) {
     if (auto p = store_.project(projectId); !p) return storeError(p.error());
@@ -977,7 +1067,9 @@ Response Api::createTask(Call& c) {
       next.append(created);
       appendRollupChanges(changes, ts.value(), next, created.id);
     }
-    return dryRunResponse(c, changes);
+    auto rip = rippleOf({projectId}, [&] { return statusOf(store_.createTask(t, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, changes, rip.value());
   }
   auto r = store_.createTask(t, {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -1013,9 +1105,12 @@ Response Api::updateTask(Call& c) {
   t.id = id;
   t.project = cur->project;
   if (c.dryRun) {
-    if (auto e = toValidationError(validateTask(t))) return storeError(*e);
     auto ts = store_.tasks(cur->project);
     if (!ts) return storeError(ts.error());
+    if (auto d = store::SqliteStore::checkDerivedDates(cur.value(), t, summaryIds(ts.value()).contains(id)); !d) {
+      return storeError(d.error());
+    }
+    if (auto e = toValidationError(validateTask(t))) return storeError(*e);
     if (summaryIds(ts.value()).contains(id)) {
       if (auto e = toValidationError(checkSummaryEdit(cur.value(), t))) return storeError(*e);
     }
@@ -1036,7 +1131,9 @@ Response Api::updateTask(Call& c) {
       }
       appendRollupChanges(changes, ts.value(), next, id);
     }
-    return dryRunResponse(c, changes);
+    auto rip = rippleOf({cur->project}, [&] { return statusOf(store_.updateTask(t, cur->rev, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, changes, rip.value());
   }
   auto r = store_.updateTask(t, expected.value_or(cur->rev), {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -1081,7 +1178,9 @@ Response Api::deleteTask(Call& c) {
       changes.append(change(QStringLiteral("delete"), kDependency, d.id, kDeletedBefore, kDeletedAfter));
     }
     appendRollupChanges(changes, ts.value(), next, id);
-    return dryRunResponse(c, changes);
+    auto rip = rippleOf({cur->project}, [&] { return statusOf(store_.deleteTask(id, cur->rev, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, changes, rip.value());
   }
   if (auto refuse = requireConfirm(c)) return *refuse;
   auto r = store_.deleteTask(id, expected.value_or(cur->rev), {c.token.id, c.requestId});
@@ -1141,9 +1240,14 @@ Response Api::moveTask(Call& c) {
     for (Task& row : next) {
       if (writes.contains(row.id)) row = writes.value(row.id);
     }
-    return dryRunResponse(c, treeChanges(ts.value(), next, [&id](const QString& tid) {
-                            return tid == id ? QStringLiteral("move") : QStringLiteral("update");
-                          }));
+    auto rip = rippleOf({cur->project}, [&] { return statusOf(store_.moveTask(id, parent, position, cur->rev, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c,
+                          treeChanges(ts.value(), next,
+                                      [&id](const QString& tid) {
+                                        return tid == id ? QStringLiteral("move") : QStringLiteral("update");
+                                      }),
+                          rip.value());
   }
   auto r = store_.moveTask(id, parent, position, expected.value_or(cur->rev), {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -1188,7 +1292,9 @@ Response Api::restoreTask(Call& c) {
     for (const Dependency& d : links.value()) {
       changes.append(change(QStringLiteral("restore"), kDependency, d.id, kDeletedAfter, kDeletedBefore));
     }
-    return dryRunResponse(c, changes);
+    auto rip = rippleOf({cur->project}, [&] { return statusOf(store_.restoreTask(id, cur->rev, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, changes, rip.value());
   }
   if (auto refuse = requireConfirm(c)) return *refuse;
   auto r = store_.restoreTask(id, expected.value_or(cur->rev), {c.token.id, c.requestId});
@@ -1304,7 +1410,9 @@ Response Api::updateCalendar(Call& c) {
     const FieldDiff d = diffFields(toJson(cur.value()), toJson(cal));
     QJsonArray changes;
     if (!d.empty()) changes.append(change(QStringLiteral("update"), kCalendar, id, d.before, d.after));
-    return dryRunResponse(c, changes);
+    auto rip = rippleOf(allProjectIds(), [&] { return statusOf(store_.updateCalendar(cal, cur->rev, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, changes, rip.value());
   }
   auto r = store_.updateCalendar(cal, expected.value_or(cur->rev), {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -1374,7 +1482,10 @@ Response Api::addCalendarException(Call& c) {
   if (c.dryRun) {
     QJsonObject after = toJson(e);
     for (const QString& k : baseReadOnly()) after.remove(k);
-    return dryRunResponse(c, QJsonArray{change(QStringLiteral("create"), kCalendarException, {}, {}, after)});
+    auto rip = rippleOf(allProjectIds(), [&] { return statusOf(store_.addCalendarException(e, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, QJsonArray{change(QStringLiteral("create"), kCalendarException, {}, {}, after)},
+                          rip.value());
   }
   auto r = store_.addCalendarException(e, {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -1397,8 +1508,12 @@ Response Api::deleteCalendarException(Call& c) {
   c.entityKind = kCalendarException;
   c.entityId = id;
   if (c.dryRun) {
-    return dryRunResponse(c, QJsonArray{change(QStringLiteral("delete"), kCalendarException, id, kDeletedBefore,
-                                               kDeletedAfter)});
+    auto rip = rippleOf(allProjectIds(), [&] { return statusOf(store_.deleteCalendarException(id, cur->rev, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c,
+                          QJsonArray{change(QStringLiteral("delete"), kCalendarException, id, kDeletedBefore,
+                                            kDeletedAfter)},
+                          rip.value());
   }
   if (auto refuse = requireConfirm(c)) return *refuse;
   auto r = store_.deleteCalendarException(id, expected.value_or(cur->rev), {c.token.id, c.requestId});
@@ -1431,7 +1546,9 @@ Response Api::importHolidays(Call& c) {
       for (const QString& k : baseReadOnly()) after.remove(k);
       changes.append(change(QStringLiteral("create"), kCalendarException, {}, {}, after));
     }
-    return dryRunResponse(c, changes);
+    auto rip = rippleOf(allProjectIds(), [&] { return statusOf(store_.importHolidays(id, country, year, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, changes, rip.value());
   }
   auto r = store_.importHolidays(id, country, year, {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -1442,6 +1559,68 @@ Response Api::importHolidays(Call& c) {
                         {QStringLiteral("year"), year}};
   c.hasDiff = true;
   return Response::json(200, QJsonObject{{QStringLiteral("items"), items}});
+}
+
+// ---------------------------------------------------------------- schedule
+
+Response Api::getSchedule(Call& c) {
+  const QString id = c.params.value(0);
+  if (auto a = checkProjectAccess(c, id); a.status) return a;
+  auto sched = store_.projectSchedule(id);
+  if (!sched) return storeError(sched.error());
+  QJsonArray tasks;
+  for (const QString& tid : sched->order) tasks.append(scheduledJson(*sched->task(tid)));
+  QJsonArray critical;
+  for (const QString& tid : sched->critical) critical.append(tid);
+  QJsonArray violations;
+  for (const ScheduleViolation& v : sched->violations) violations.append(violationJson(v, id));
+  return Response::json(200, QJsonObject{{QStringLiteral("projectId"), id},
+                                         {QStringLiteral("finish"), dateJson(sched->finish)},
+                                         {QStringLiteral("critical"), critical},
+                                         {QStringLiteral("violations"), violations},
+                                         {QStringLiteral("tasks"), tasks}});
+}
+
+Response Api::getCriticalPath(Call& c) {
+  const QString id = c.params.value(0);
+  if (auto a = checkProjectAccess(c, id); a.status) return a;
+  auto sched = store_.projectSchedule(id);
+  if (!sched) return storeError(sched.error());
+  auto ts = store_.tasks(id);
+  if (!ts) return storeError(ts.error());
+  QHash<QString, QString> titles;
+  for (const Task& t : ts.value()) titles.insert(t.id, t.title);
+  QJsonArray tasks;
+  for (const QString& tid : sched->critical) {
+    QJsonObject o = scheduledJson(*sched->task(tid));
+    o.insert(QStringLiteral("title"), titles.value(tid));
+    tasks.append(o);
+  }
+  return Response::json(200, QJsonObject{{QStringLiteral("projectId"), id},
+                                         {QStringLiteral("finish"), dateJson(sched->finish)},
+                                         {QStringLiteral("tasks"), tasks}});
+}
+
+Response Api::rescheduleProject(Call& c) {
+  const QString id = c.params.value(0);
+  if (auto a = checkProjectAccess(c, id); a.status) return a;
+  if (!c.body.isEmpty()) {
+    const QString key = c.body.constBegin().key();
+    return validation(QStringLiteral("unknown field '%1'").arg(key), QJsonObject{{QStringLiteral("field"), key}});
+  }
+  if (auto p = store_.project(id); !p) return storeError(p.error());
+  c.entityKind = kProject;
+  c.entityId = id;
+  if (c.dryRun) {
+    auto rip = rippleOf({id}, [&] { return statusOf(store_.reschedule(id, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, {}, rip.value());
+  }
+  auto n = store_.reschedule(id, {c.token.id, c.requestId});
+  if (!n) return storeError(n.error());
+  c.after = QJsonObject{{QStringLiteral("rescheduled"), n.value()}};
+  c.hasDiff = true;
+  return Response::json(200, QJsonObject{{QStringLiteral("projectId"), id}, {QStringLiteral("changed"), n.value()}});
 }
 
 // ---------------------------------------------------------------- dependencies
@@ -1484,7 +1663,9 @@ Response Api::createDependency(Call& c) {
     if (!checked) return storeError(checked.error());
     QJsonObject after = toJson(checked.value());
     for (const QString& k : baseReadOnly()) after.remove(k);
-    return dryRunResponse(c, QJsonArray{change(QStringLiteral("create"), kDependency, {}, {}, after)});
+    auto rip = rippleOf({checked->project}, [&] { return statusOf(store_.createDependency(d, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, QJsonArray{change(QStringLiteral("create"), kDependency, {}, {}, after)}, rip.value());
   }
   auto r = store_.createDependency(d, {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -1523,7 +1704,9 @@ Response Api::updateDependency(Call& c) {
     const FieldDiff diff = diffFields(toJson(cur.value()), toJson(d));
     QJsonArray changes;
     if (!diff.empty()) changes.append(change(QStringLiteral("update"), kDependency, id, diff.before, diff.after));
-    return dryRunResponse(c, changes);
+    auto rip = rippleOf({cur->project}, [&] { return statusOf(store_.updateDependency(d, cur->rev, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c, changes, rip.value());
   }
   auto r = store_.updateDependency(d, expected.value_or(cur->rev), {c.token.id, c.requestId});
   if (!r) return storeError(r.error());
@@ -1548,8 +1731,11 @@ Response Api::deleteDependency(Call& c) {
   c.entityKind = kDependency;
   c.entityId = id;
   if (c.dryRun) {
-    return dryRunResponse(c, QJsonArray{change(QStringLiteral("delete"), kDependency, id, kDeletedBefore,
-                                               kDeletedAfter)});
+    auto rip = rippleOf({cur->project}, [&] { return statusOf(store_.deleteDependency(id, cur->rev, {c.token.id, c.requestId})); });
+    if (!rip) return storeError(rip.error());
+    return dryRunResponse(c,
+                          QJsonArray{change(QStringLiteral("delete"), kDependency, id, kDeletedBefore, kDeletedAfter)},
+                          rip.value());
   }
   if (auto refuse = requireConfirm(c)) return *refuse;
   auto r = store_.deleteDependency(id, expected.value_or(cur->rev), {c.token.id, c.requestId});

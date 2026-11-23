@@ -1,6 +1,6 @@
 # zproject
 
-**0.21.0**
+**0.22.0**
 
 Current release: **0.13.0**
 
@@ -19,14 +19,18 @@ The full design is in [SPEC.md](SPEC.md).
 
 ## Status
 
-Phases 1a and 1b (SPEC.md §24) are under way: `zprojectd` serves the first slice of the `/v1` API (projects,
-tasks, WBS, dependencies, working calendars and holidays, history, the change
-feed, tokens, the audit log, backups) and an
+Phase 1a (SPEC.md §24) is complete on the server, and 1b is under way:
+`zprojectd` serves the `/v1` API for projects, tasks, the WBS, dependencies,
+working calendars and holidays, and the **critical-path schedule**. Auto tasks'
+dates are computed and kept up to date on every change, and dry runs show
+what a change would move. It also serves history, the change feed, tokens, the
+audit log and backups, and an
 MCP endpoint at `/mcp`, with scoped tokens, rate limits and a hash-chained
 audit log. `zproject-cli` covers all of it from Linux and macOS. The release
 workflow builds signed `.deb` and `.dmg` packages (see [Install](#install)).
-Dependencies, the scheduling engine, resources, baselines, the RAID log,
-reports and the rest of the desktop client's views follow.
+Next: dependency arrows and the critical path on the desktop Gantt, then
+resources, baselines, the RAID log, reports and the rest of the desktop
+client's views.
 
 The desktop app (`zproject`) has its shell: themes, the offline banner,
 first-run sign-in that reuses `zproject-cli`'s token, Preferences and Help. Projects can be listed (sidebar

@@ -262,10 +262,21 @@ class TestGantt : public QObject {
       t.priority = 1;
     });
     add(QStringLiteral("Build"), {});
-    add(QStringLiteral("Cabinets"), QStringLiteral("Build"), dated("auto", "2026-10-19", "2026-10-28", 8));
-    add(QStringLiteral("Counters"), QStringLiteral("Build"), dated("auto", "2026-10-29", "2026-11-04", 5));
+    // Auto tasks: the schedule gives their dates (S5); a start-no-earlier-than
+    // date puts them where they were (8 days from Mon 19 Oct is Wed 28 Oct).
+    auto snet = [](const char* from, double days) {
+      return [=](Task& t) {
+        t.constraintType = QStringLiteral("SNET");
+        t.constraintDate = QLatin1String(from);
+        t.duration = days;
+      };
+    };
+    add(QStringLiteral("Cabinets"), QStringLiteral("Build"), snet("2026-10-19", 8));
+    add(QStringLiteral("Counters"), QStringLiteral("Build"), snet("2026-10-29", 5));
     add(QStringLiteral("Lighting"), QStringLiteral("Build"), dated("manual", "2026-11-02", "2026-11-13", 10));
-    add(QStringLiteral("Snagging list"), {});  // auto, not scheduled yet
+    // Not scheduled: a manual task with no dates yet (an auto task always
+    // gets dates once the project has a start).
+    add(QStringLiteral("Snagging list"), {}, [](Task& t) { t.mode = QStringLiteral("manual"); });
     add(QStringLiteral("Handover"), {}, [&](Task& t) {
       t.type = QStringLiteral("milestone");
       t.duration = 0;
@@ -599,10 +610,7 @@ class TestGantt : public QObject {
     QCOMPARE(c->today(), kToday);
     const QString cabinets = ids_.value(QStringLiteral("Cabinets"));
     const int before = barOf(*c, cabinets).rect.left();
-    updateOther(QStringLiteral("Cabinets"), [](Task& t) {
-      t.start = QStringLiteral("2026-10-26");
-      t.finish = QStringLiteral("2026-11-04");
-    });
+    updateOther(QStringLiteral("Cabinets"), [](Task& t) { t.constraintDate = QStringLiteral("2026-10-26"); });
     w->session()->refresh();
     QVERIFY(waitFor([&] { return barOf(*c, cabinets).rect.left() > before; }));
     QCOMPARE(barOf(*c, cabinets).rect.left() - before, static_cast<int>(7 * c->pxPerDay()));

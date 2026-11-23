@@ -65,6 +65,11 @@ class SqliteStore final : public Store {
   Result<QList<CalendarException>> importHolidays(const QString& calendarId, const QString& country, int year,
                                                   const WriteContext& ctx) override;
   Result<QHash<QString, WorkCalendar>> workCalendars() override;
+  Result<Schedule> projectSchedule(const QString& projectId) override;
+  Result<int> reschedule(const QString& projectId, const WriteContext& ctx) override;
+  // 400 if a write would set derived dates by hand (auto tasks, summaries);
+  // the API checks it first too, so a dry run says the same.
+  static Status checkDerivedDates(const Task& before, const Task& after, bool summary);
 
   Result<QList<ChangeRecord>> changesSince(qint64 since, int limit = 500) override;
   Result<QList<ChangeRecord>> changesFor(const QString& entityKind, const QString& entityId,
@@ -105,6 +110,12 @@ class SqliteStore final : public Store {
   // On open: corrects summaries left stale by earlier versions (actor
   // "system"). A no-op when everything is already in step.
   Status reconcileRollups();
+  // On open: reschedules every project (actor "system"); a no-op when the
+  // stored dates are the schedule's.
+  Status reconcileSchedules();
+  // After a calendar changes: every live project.
+  Status rescheduleAll(const WriteContext& ctx);
+
 
   Database db_;
   int schemaVersion_ = 0;

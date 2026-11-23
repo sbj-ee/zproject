@@ -121,6 +121,7 @@ Result<std::unique_ptr<SqliteStore>> SqliteStore::open(const QString& path) {
   if (!version) return version.error();
   std::unique_ptr<SqliteStore> store(new SqliteStore(std::move(db).value(), *version));
   if (auto s = store->reconcileRollups(); !s) return s.error();
+  if (auto s = store->reconcileSchedules(); !s) return s.error();
   return store;
 }
 
@@ -300,6 +301,9 @@ Result<Project> SqliteStore::updateProject(const Project& in, qint64 expectedRev
   p.updatedAt = nextTimestamp();
   if (auto s = writeProject(p, false); !s) return s.error();
   if (auto s = appendChange(kProject, p.id, d.before, d.after, ctx, p.updatedAt); !s) return s.error();
+  if (p.start != cur->start || p.finish != cur->finish || p.calendar != cur->calendar) {
+    if (auto s = reschedule(p.id, ctx); !s) return s.error();
+  }
   if (auto s = tx.commit(); !s) return s.error();
   return p;
 }
@@ -370,6 +374,7 @@ Status SqliteStore::checkParent(const Task& t) {
 }
 
 Result<Task> SqliteStore::createTask(const Task& in, const WriteContext& ctx) {
+  if (auto s = checkDerivedDates(Task{}, in, false); !s) return s.error();
   if (auto e = toValidationError(validateTask(in))) return *e;
   Transaction tx(db_);
   if (!tx.ok()) return tx.error();
@@ -397,8 +402,9 @@ Result<Task> SqliteStore::createTask(const Task& in, const WriteContext& ctx) {
   const FieldDiff d = diffFields({}, toJson(t));
   if (auto s = appendChange(kTask, t.id, d.before, d.after, ctx, t.updatedAt); !s) return s.error();
   if (auto s = rollUp(t.project, ctx); !s) return s.error();
+  if (auto s = reschedule(t.project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
-  return t;
+  return task(t.id);  // as stored: the schedule may have given it dates (a newer rev)
 }
 
 Result<Task> SqliteStore::task(const QString& id, bool includeDeleted) {
@@ -462,6 +468,13 @@ Result<Task> SqliteStore::updateTask(const Task& in, qint64 expectedRev, const W
   t.updatedAt = cur->updatedAt;
   t.deleted = false;
   t.rev = cur->rev;
+  auto n = db_.prepare(QStringLiteral("SELECT COUNT(*) FROM task WHERE parent = ?1 AND deleted = 0"));
+  if (!n) return n.error();
+  n.value().bind(1, t.id);
+  n.value().step();
+  const bool isSummary = n.value().int64(0) > 0;
+  // Derived dates first: their reason (use SNET, or make it manual) is the useful one.
+  if (auto s = checkDerivedDates(cur.value(), t, isSummary); !s) return s.error();
   if (auto e = toValidationError(validateTask(t))) return *e;
   if (t.calendar != cur->calendar) {
     if (auto s = checkCalendarRef(t.calendar); !s) return s.error();
@@ -476,11 +489,6 @@ Result<Task> SqliteStore::updateTask(const Task& in, qint64 expectedRev, const W
     }
     if (auto s = checkLinkCycles(next); !s) return s.error();
   }
-  auto n = db_.prepare(QStringLiteral("SELECT COUNT(*) FROM task WHERE parent = ?1 AND deleted = 0"));
-  if (!n) return n.error();
-  n.value().bind(1, t.id);
-  n.value().step();
-  const bool isSummary = n.value().int64(0) > 0;
   if (isSummary && t.type == QLatin1String("milestone") && cur->type != QLatin1String("milestone")) {
     return Error::validation(QStringLiteral("a task with children cannot become a milestone"),
                              QJsonObject{{QStringLiteral("field"), QStringLiteral("type")}});
@@ -497,6 +505,7 @@ Result<Task> SqliteStore::updateTask(const Task& in, qint64 expectedRev, const W
   if (auto s = writeTask(t, false); !s) return s.error();
   if (auto s = appendChange(kTask, t.id, d.before, d.after, ctx, t.updatedAt); !s) return s.error();
   if (auto s = rollUp(t.project, ctx); !s) return s.error();
+  if (auto s = reschedule(t.project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return task(t.id);
 }
@@ -535,6 +544,7 @@ Result<Task> SqliteStore::deleteTask(const QString& id, qint64 expectedRev, cons
   }
   if (auto s = tombstoneLinks(cur->project, inSubtree, ctx, ts); !s) return s.error();
   if (auto s = rollUp(cur->project, ctx); !s) return s.error();
+  if (auto s = reschedule(cur->project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return task(id, true);
 }
@@ -623,6 +633,7 @@ Result<Task> SqliteStore::moveTask(const QString& id, const QString& parent, std
     if (auto s = writeRevision(now.value(), t, ctx, ts); !s) return s.error();
   }
   if (auto s = rollUp(cur->project, ctx); !s) return s.error();
+  if (auto s = reschedule(cur->project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return task(id);
 }
@@ -715,6 +726,7 @@ Result<Task> SqliteStore::restoreTask(const QString& id, qint64 expectedRev, con
     if (auto s = writeDependencyRevision(d, live, ctx, ts); !s) return s.error();
   }
   if (auto s = rollUp(cur->project, ctx); !s) return s.error();
+  if (auto s = reschedule(cur->project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return task(id);
 }
@@ -848,6 +860,7 @@ Result<Dependency> SqliteStore::createDependency(const Dependency& in, const Wri
   if (auto s = writeDependency(d, true); !s) return s.error();
   const FieldDiff diff = diffFields({}, toJson(d));
   if (auto s = appendChange(kDependency, d.id, diff.before, diff.after, ctx, d.updatedAt); !s) return s.error();
+  if (auto s = reschedule(d.project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return d;
 }
@@ -872,6 +885,7 @@ Result<Dependency> SqliteStore::updateDependency(const Dependency& in, qint64 ex
   if (auto e = toValidationError(validateDependency(d))) return *e;
   if (diffFields(toJson(cur.value()), toJson(d)).empty()) return cur.value();
   if (auto s = writeDependencyRevision(cur.value(), d, ctx, nextTimestamp()); !s) return s.error();
+  if (auto s = reschedule(d.project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return dependency(d.id);
 }
@@ -885,6 +899,7 @@ Result<Dependency> SqliteStore::deleteDependency(const QString& id, qint64 expec
   Dependency d = cur.value();
   d.deleted = true;
   if (auto s = writeDependencyRevision(cur.value(), d, ctx, nextTimestamp()); !s) return s.error();
+  if (auto s = reschedule(d.project, ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return dependency(id, true);
 }
@@ -1135,6 +1150,7 @@ Result<CalendarDef> SqliteStore::updateCalendar(const CalendarDef& in, qint64 ex
   c.updatedAt = nextTimestamp();
   if (auto s = writeCalendar(c, false); !s) return s.error();
   if (auto s = appendChange(kCalendar, c.id, d.before, d.after, ctx, c.updatedAt); !s) return s.error();
+  if (auto s = rescheduleAll(ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return calendar(c.id);
 }
@@ -1237,6 +1253,7 @@ Result<CalendarException> SqliteStore::addCalendarException(const CalendarExcept
   if (auto s = writeCalendarException(e, true); !s) return s.error();
   const FieldDiff d = diffFields({}, toJson(e));
   if (auto s = appendChange(kCalendarException, e.id, d.before, d.after, ctx, e.updatedAt); !s) return s.error();
+  if (auto s = rescheduleAll(ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return e;
 }
@@ -1255,6 +1272,7 @@ Result<CalendarException> SqliteStore::deleteCalendarException(const QString& id
   if (auto s = writeCalendarException(e, false); !s) return s.error();
   const FieldDiff d = diffFields(toJson(cur.value()), toJson(e));
   if (auto s = appendChange(kCalendarException, id, d.before, d.after, ctx, e.updatedAt); !s) return s.error();
+  if (auto s = rescheduleAll(ctx); !s) return s.error();
   if (auto s = tx.commit(); !s) return s.error();
   return calendarException(id, true);
 }
@@ -1314,6 +1332,87 @@ Result<QHash<QString, WorkCalendar>> SqliteStore::workCalendars() {
     if (r) out.insert(it.key(), r.value());  // the writes keep chains valid
   }
   return out;
+}
+
+// ---- scheduling -------------------------------------------------------------
+
+Status SqliteStore::checkDerivedDates(const Task& before, const Task& after, bool summary) {
+  const bool derived = summary || after.mode == QLatin1String("auto");
+  if (!derived) return Ok{};
+  for (const auto& [field, was, now] : {std::tuple{"start", before.start, after.start},
+                                        std::tuple{"finish", before.finish, after.finish}}) {
+    if (was == now) continue;
+    return Error::validation(summary ? QStringLiteral("a summary's %1 comes from its subtasks").arg(QLatin1String(field))
+                                     : QStringLiteral("an auto task's %1 comes from the schedule: set a start-no-earlier-"
+                                                      "than constraint, or make the task manual")
+                                           .arg(QLatin1String(field)),
+                             QJsonObject{{QStringLiteral("field"), QLatin1String(field)}});
+  }
+  return Ok{};
+}
+
+Result<Schedule> SqliteStore::projectSchedule(const QString& projectId) {
+  auto p = project(projectId);
+  if (!p) return p.error();
+  auto ts = tasks(projectId);
+  if (!ts) return ts.error();
+  auto links = dependencies(projectId);
+  if (!links) return links.error();
+  auto cals = workCalendars();
+  if (!cals) return cals.error();
+  ScheduleInput in;
+  in.projectStart = QDate::fromString(p->start, Qt::ISODate);
+  in.projectFinish = QDate::fromString(p->finish, Qt::ISODate);
+  in.projectCalendar = p->calendar.isEmpty() ? QString(kStandardCalendarId) : p->calendar;
+  in.tasks = ts.value();
+  in.links = links.value();
+  in.calendars = cals.value();
+  return computeSchedule(in);
+}
+
+Result<int> SqliteStore::reschedule(const QString& projectId, const WriteContext& ctx) {
+  auto p = project(projectId);
+  if (!p) return 0;  // deleted: nothing to keep in step
+  auto sched = projectSchedule(projectId);
+  if (!sched) return sched.error();
+  auto all = tasks(projectId);
+  if (!all) return all.error();
+  const QSet<QString> summaries = summaryIds(all.value());
+  QString ts;
+  int changed = 0;
+  for (const Task& t : all.value()) {
+    const bool summary = summaries.contains(t.id);
+    if (!summary && t.mode != QLatin1String("auto")) continue;  // manual: the user's dates
+    const ScheduledTask* st = sched->task(t.id);
+    if (st == nullptr) continue;
+    const QString start = st->scheduled ? st->start.toString(Qt::ISODate) : QString();
+    const QString finish = st->scheduled ? st->finish.toString(Qt::ISODate) : QString();
+    if (start == t.start && finish == t.finish) continue;
+    Task next = t;
+    next.start = start;
+    next.finish = finish;
+    if (ts.isEmpty()) ts = nextTimestamp();
+    if (auto s = writeRevision(t, next, ctx, ts); !s) return s.error();
+    ++changed;
+  }
+  return changed;
+}
+
+Status SqliteStore::rescheduleAll(const WriteContext& ctx) {
+  auto ps = projects();
+  if (!ps) return ps.error();
+  for (const Project& p : ps.value()) {
+    if (auto s = reschedule(p.id, ctx); !s) return s.error();
+  }
+  return Ok{};
+}
+
+Status SqliteStore::reconcileSchedules() {
+  Transaction tx(db_);
+  if (!tx.ok()) return tx.error();
+  const WriteContext system;  // actor "system", no request id
+  if (auto s = rescheduleAll(system); !s) return s;
+  return tx.commit();
 }
 
 // ---- sync feed --------------------------------------------------------------

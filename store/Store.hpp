@@ -10,6 +10,7 @@
 
 #include "core/Error.hpp"
 #include "core/Model.hpp"
+#include "core/Schedule.hpp"
 #include "core/WorkCalendar.hpp"
 
 namespace zproject::store {
@@ -128,6 +129,18 @@ class Store {
                                                           const WriteContext& ctx) = 0;
   // Every live calendar, resolved through its bases, by id (the scheduler's input).
   virtual Result<QHash<QString, WorkCalendar>> workCalendars() = 0;
+
+  // Scheduling (SPEC.md §6, §7.2; plan S5). The store keeps auto tasks' and
+  // summaries' start and finish equal to the project's schedule: every write
+  // that can move dates reschedules the projects it touches in the same
+  // transaction, writing a revision and change row (the writer's actor and
+  // request id) for each task whose dates change. Those dates are read-only
+  // (400 validation, field start or finish: set SNET or make the task
+  // manual). Opening the database corrects stale ones (actor "system").
+  // projectSchedule computes without writing; reschedule writes what's stale
+  // and returns how many tasks it changed.
+  virtual Result<Schedule> projectSchedule(const QString& projectId) = 0;
+  virtual Result<int> reschedule(const QString& projectId, const WriteContext& ctx) = 0;
 
   // The sync feed: change rows with seq > since, oldest first (limit <= 500).
   virtual Result<QList<ChangeRecord>> changesSince(qint64 since, int limit = 500) = 0;
