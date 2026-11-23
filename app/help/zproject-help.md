@@ -119,6 +119,9 @@ date: its WBS code, date, deadline, status, the summary it sits under, and
 how far away it is ("In 4 days", "Today", "6 days late"). Milestones with no
 date yet come last. Tick **All projects** to see every project's milestones
 in one list (done and cancelled projects only when the sidebar shows them).
+There, each milestone's diamond and its Project cell take the project's
+colour (set it in **Project → Edit Project Details…**); the project's name is
+always there too.
 
 - A milestone that is late, or dated after its deadline, is marked ⚠ and
   says so in words.

@@ -1,6 +1,6 @@
 # zproject
 
-**0.19.0**
+**0.20.0**
 
 Current release: **0.13.0**
 
@@ -43,8 +43,8 @@ View → Gantt (Ctrl + G) shows the project read-only as a timeline beside
 the task table: day to quarter timescales, a today line, bars from the
 stored dates, summary brackets, milestone diamonds, progress and deadline
 flags, all readable by screen readers. View → Milestones (Ctrl + Shift + M)
-lists the project's milestones, or every project's, by date, with days to
-go or days late and missed deadlines; Enter opens one in the outline, and
+lists the project's milestones, or every project's (each in its project's
+colour), by date, with days to go or days late and missed deadlines; Enter opens one in the outline, and
 Show in Gantt on the timeline. View → Activity (Ctrl + Shift + A) lists
 what changed in the project, newest first, from the change feed the app
 already keeps: when, who ("This computer" for this device's token), which

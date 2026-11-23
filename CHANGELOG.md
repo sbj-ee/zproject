@@ -7,6 +7,23 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.20.0 — 2026-11-23
+
+Project colours in the all-projects Milestones view (scheduling plan, side
+PR agreed 2026-11-23).
+
+- With **All projects** ticked, each milestone's diamond and its Project
+  cell take the project's colour (the `color` set in Edit Project Details).
+  A done milestone's diamond is hollow. Both are outlined in the theme's text
+  colour, so a pale colour still shows in Light, Dark and High contrast.
+- The project's name stays in its own column and in each row's accessible
+  description, so colour is never the only cue. Projects without a colour,
+  and the single-project view, keep the plain ◆ / ◇.
+- Help describes it. `tst_milestones` checks the colours (the swatch's
+  pixels), hollow done diamonds, no colour on one project or without a
+  project colour, and that the text stays. The screenshots now show two
+  coloured projects.
+
 ## 0.19.0 — 2026-11-23
 
 Scheduling plan, PR S3: dependencies on the server (plan §3; SPEC §5.1,

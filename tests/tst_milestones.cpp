@@ -17,6 +17,7 @@
 #include <QSignalSpy>
 #include <QStackedWidget>
 #include <QStyleFactory>
+#include <QImage>
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTest>
@@ -89,11 +90,13 @@ QList<MilestoneSource> sample() {
             jt("b1", "Permit granted", "b", 1, "milestone", "2026-09-10", "done"),
             jt("b2", "Inspection", "b", 2, "milestone"),  // no date yet
             handover},
-           {}},
+           {},
+           QStringLiteral("#d9822b")},
           {QStringLiteral("g"), QStringLiteral("Garden"),
            {jt("g1", "Plants ordered", nullptr, 1, "milestone", "2026-10-01"),
             jt("g2", "Planting done", nullptr, 2, "milestone", "2026-10-02")},
-           {}}};
+           {},
+           QString()}};  // the garden has no colour
 }
 
 const MilestoneRow* rowOf(const QList<MilestoneRow>& rows, const QString& id) {
@@ -204,8 +207,10 @@ class TestMilestones : public QObject {
     Project p;
     p.name = QStringLiteral("Kitchen remodel");
     p.owner = QStringLiteral("Alex Rivera");
+    p.color = QStringLiteral("#d9822b");
     kitchen_ = store_->createProject(p, kOther).value().id;
     p.name = QStringLiteral("Garden");
+    p.color = QStringLiteral("#3a9d5d");
     garden_ = store_->createProject(p, kOther).value().id;
     ids_.clear();
     add(kitchen_, QStringLiteral("Design"), {});
@@ -323,11 +328,52 @@ class TestMilestones : public QObject {
     QCOMPARE(v.table()->rowCount(), 6);
     // Nothing to show.
     v.setAllProjects(false);
-    v.reload({{QStringLiteral("e"), QStringLiteral("Empty"), {jt("t", "Task", nullptr, 1)}, {}}});
+    v.reload({{QStringLiteral("e"), QStringLiteral("Empty"), {jt("t", "Task", nullptr, 1)}, {}, QString()}});
     QCOMPARE(v.table()->rowCount(), 0);
     QVERIFY(v.note()->text().contains(QStringLiteral("no milestones")));
     QVERIFY(!v.outlineButton()->isEnabled());
     QVERIFY(!v.ganttButton()->isEnabled());
+  }
+
+  void projectColours() {
+    // The rows carry the project's colour; a project without one has none.
+    const QList<MilestoneRow> rows = milestoneRows(sample(), kToday);
+    QCOMPARE(rowOf(rows, QStringLiteral("h"))->projectColor, QColor(QStringLiteral("#d9822b")));
+    QVERIFY(!rowOf(rows, QStringLiteral("g1"))->projectColor.isValid());
+    MilestonesView v;
+    v.setToday(kToday);
+    v.setOutlineColor(Qt::black);
+    // One project: plain text diamonds, no colour.
+    v.reload({sample().first()});
+    QVERIFY(v.table()->item(0, C::Title)->icon().isNull());
+    QVERIFY(v.table()->item(0, C::Title)->text().startsWith(QStringLiteral("◇")));  // b1 is done
+    // All projects: the kitchen's diamonds and Project cells in its colour
+    // (hollow when done); the garden's stay text.
+    v.setAllProjects(true);
+    v.reload(sample());
+    for (int i = 0; i < v.rows().size(); ++i) {
+      const MilestoneRow& r = v.rows().at(i);
+      QTableWidgetItem* title = v.table()->item(i, C::Title);
+      QTableWidgetItem* project = v.table()->item(i, C::Project);
+      if (r.projectId == QLatin1String("k")) {
+        QVERIFY(!title->icon().isNull());
+        QVERIFY(!project->icon().isNull());
+        QCOMPARE(title->text(), r.title);  // the drawn diamond replaces the text one
+        QVERIFY(project->toolTip().contains(QStringLiteral("#d9822b")));
+        // The swatch is the project's colour.
+        const QImage img = project->icon().pixmap(16, 16).toImage();
+        QCOMPARE(img.pixelColor(8, 8), QColor(QStringLiteral("#d9822b")));
+      } else {
+        QVERIFY(title->icon().isNull());
+        QVERIFY(title->text().startsWith(QStringLiteral("◆")));
+      }
+      // Still said in words.
+      QVERIFY(title->data(Qt::AccessibleTextRole).toString().contains(r.projectName));
+    }
+    // Back to one project: colours go.
+    v.setAllProjects(false);
+    v.reload({sample().first()});
+    QVERIFY(v.table()->item(1, C::Title)->icon().isNull());
   }
 
   void enterAsksToOpen() {
