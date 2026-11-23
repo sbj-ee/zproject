@@ -7,6 +7,7 @@
 #include <QStringList>
 
 #include "core/Error.hpp"
+#include "core/Model.hpp"
 
 namespace zproject::client {
 
@@ -79,6 +80,12 @@ class ConflictMerge {
   QList<Field> fields_;
   qint64 theirRev_ = 0;
 };
+
+// The task editor's checks before anything is sent (plan §3.3): core/Model's
+// validateTask on the server's copy with the edits applied, and for a
+// summary task the roll-up rule (SPEC.md §5.3) and "a summary can't be a
+// milestone" (§5.2). Field names are the API's.
+QList<FieldError> validateTaskEdit(const QJsonObject& base, const QJsonObject& edited, bool summary);
 
 // A JSON value as the user reads it in a table: "" for null, numbers without
 // trailing zeros.

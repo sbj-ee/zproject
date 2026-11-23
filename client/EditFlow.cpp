@@ -3,6 +3,8 @@
 #include <QJsonDocument>
 #include <QSet>
 
+#include "core/Rollup.hpp"
+
 namespace zproject::client {
 
 namespace {
@@ -151,6 +153,21 @@ QString displayValue(const QJsonValue& v) {
   if (v.isString()) return v.toString();
   const QJsonDocument doc = v.isArray() ? QJsonDocument(v.toArray()) : QJsonDocument(v.toObject());
   return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+}
+
+QList<FieldError> validateTaskEdit(const QJsonObject& base, const QJsonObject& edited, bool summary) {
+  QJsonObject merged = base;
+  for (auto it = edited.constBegin(); it != edited.constEnd(); ++it) merged.insert(it.key(), it.value());
+  const Task next = taskFromJson(merged);
+  QList<FieldError> errs = validateTask(next);
+  if (summary) {
+    const QList<FieldError> rolled = checkSummaryEdit(taskFromJson(base), next);
+    errs.append(rolled);
+    if (next.type == QLatin1String("milestone")) {
+      errs.append({QStringLiteral("type"), QStringLiteral("can't be milestone: this task has subtasks")});
+    }
+  }
+  return errs;
 }
 
 }  // namespace zproject::client

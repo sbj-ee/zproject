@@ -7,6 +7,39 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.12.0 — 2026-11-22
+
+Desktop client plan, PR 7: the task editor (plan §3.3, §3.6, §4.4, §4.5).
+Selecting a task in the outline opens it for editing in the inspector.
+
+- **Details tab**: title, type (task or milestone), mode, status,
+  % complete, priority and Markdown notes with a plain preview (links are
+  not followed). **Schedule tab**: duration, start and finish (manual tasks
+  only), constraint and constraint date, deadline, actual start and finish.
+  **History tab**: `GET /v1/tasks/{id}/history`, newest first, with local
+  time, who ("This computer", "system" or the token label) and field
+  before → after.
+- **Checks before sending**: the client runs core's `validateTask` (one rule
+  set with the server), marks each failing field ⚠ with its reason, switches
+  to its tab and sends nothing. Milestones get duration 0; ASAP clears the
+  constraint date; % above 0 fills in the actual start; a summary's rolled-up
+  fields and type are locked.
+- **Save** (Ctrl + S, Edit → Save Task) does a dry run first; when the change
+  ripples into summaries (or deletes something) a preview shows it, otherwise
+  it saves directly. The PATCH carries If-Match with the rev read when the
+  task was shown; a 412 refetches and asks per field (Keep mine / Take
+  theirs / Cancel). Server 400s mark the field they name.
+- **Unsaved edits** are never dropped silently: moving to another task or
+  project asks Save / Discard, quitting asks Discard / Cancel. While
+  untouched the editor follows the server's copy.
+- **Edit → Task Details** (Alt + Enter) jumps to the editor.
+- **Icons**: each project in the sidebar has a folder icon with a dot in its
+  RAG colour (greyed when not active), and the menu actions use the same
+  set. They are drawn by the app in the theme's colours, so they look the
+  same on Linux (no dependence on the system icon theme) and macOS.
+- Read-only tokens and offline mode show the editor read-only, with the
+  reason.
+
 ## 0.11.0 — 2026-11-22
 
 Desktop client plan, PR 6: the WBS tree (plan §3.2). A project's tasks open

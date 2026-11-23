@@ -74,6 +74,7 @@ if(ZPROJECT_BUILD_GUI)
   # dialog, against the real server on loopback.
   zproject_add_test(tst_projects zproject_app_lib zproject_server_lib)
   zproject_add_test(tst_outline zproject_app_lib zproject_server_lib)
+  zproject_add_test(tst_taskeditor zproject_app_lib zproject_server_lib)
   # The signed in-app updater (SPEC.md §21) against a mock release feed.
   zproject_add_test(tst_update zproject_app_lib zproject_test_mock PkgConfig::SODIUM)
 endif()

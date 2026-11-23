@@ -48,6 +48,10 @@ class TaskActions : public QObject {
   // Task ⇄ milestone (duration 0); not for a summary.
   void toggleMilestone(const QString& id);
   void edit(const QString& id, const QString& field, const QJsonValue& value);
+  // The task editor's Save (plan §3.3): `body` holds the changed fields and
+  // `base` is the server's copy the user started from; its rev is the
+  // If-Match, so a change made meanwhile is a 412 and the conflict dialog.
+  void saveTask(const QString& id, const QJsonObject& base, const QJsonObject& body);
 
   // What the outline allows for `id` now (menus and keys).
   bool canIndent(const QString& id) const;
@@ -62,6 +66,8 @@ class TaskActions : public QObject {
   };
   const QList<Deleted>& deleted() const { return deleted_; }
   bool busy() const { return busy_; }
+  // The task the running (or last) write is about.
+  QString currentTask() const { return currentTask_; }
   QString lastMessage() const { return lastMessage_; }
   PreviewDialog* preview() const { return preview_.data(); }
   ConflictDialog* conflict() const { return conflict_.data(); }
@@ -72,6 +78,12 @@ class TaskActions : public QObject {
   void changed(const QString& selectId, bool editTitle);
   void deletedChanged();
   void notice(const QString& text, bool error);
+  // A field edit of `id` reached the server, or the server's copy should be
+  // shown again (conflict resolved by taking theirs).
+  void taskWritten(const QString& id);
+  // A 400 the editor can show next to its field.
+  void fieldError(const QString& id, const QString& field, const QString& message);
+  void busyChanged(bool busy);
 
  private:
   struct Op {
@@ -86,6 +98,7 @@ class TaskActions : public QObject {
     QJsonObject base;       // the server's copy the write starts from
     bool destructive = false;
     bool edit = false;      // a field edit: a 412 opens the conflict dialog
+    bool fromBase = false;  // rev and base given (the editor's): no fresh read
     QString previewTitle;
     QString previewIntro;
     QString confirmText;
@@ -103,7 +116,11 @@ class TaskActions : public QObject {
   void fail(const client::ApiError& e);
   void say(const QString& text, bool error);
   QString label(const QString& id) const;
-  void setBusy(bool busy) { busy_ = busy; }
+  void setBusy(bool busy) {
+    if (busy_ == busy) return;
+    busy_ = busy;
+    emit busyChanged(busy);
+  }
 
   QWidget* window_;
   SessionFn session_;
@@ -113,6 +130,7 @@ class TaskActions : public QObject {
   QList<Deleted> deleted_;
   bool busy_ = false;
   QString lastMessage_;
+  QString currentTask_;  // the task the running write is about
 };
 
 }  // namespace zproject::app

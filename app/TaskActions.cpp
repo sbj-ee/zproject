@@ -28,15 +28,24 @@ QString changeDetail(const client::DryRunPreview::Change& c) {
     const QString before = client::displayValue(c.before.value(k));
     const QString after = client::displayValue(c.after.value(k));
     if (k == QLatin1String("parent") || k == QLatin1String("order")) {
-      names.append(fieldLabel(k));
+      names.append(taskFieldLabel(k));
     } else {
       names.append(QStringLiteral("%1 %2 → %3")
-                       .arg(fieldLabel(k), before.isEmpty() ? QStringLiteral("—") : before,
+                       .arg(taskFieldLabel(k), before.isEmpty() ? QStringLiteral("—") : before,
                             after.isEmpty() ? QStringLiteral("—") : after));
     }
   }
   const QString list = names.join(QStringLiteral(", "));
   return c.op == QLatin1String("move") ? QObject::tr("moved (%1)").arg(list) : list;
+}
+
+// The message the server gave for `field` in details.fields[], else `fallback`.
+QString firstFieldMessage(const QJsonObject& details, const QString& field, const QString& fallback) {
+  for (const QJsonValue& v : details.value(QStringLiteral("fields")).toArray()) {
+    const QJsonObject f = v.toObject();
+    if (f.value(QStringLiteral("field")).toString() == field) return f.value(QStringLiteral("message")).toString();
+  }
+  return fallback;
 }
 
 }  // namespace
@@ -270,7 +279,8 @@ void TaskActions::toggleMilestone(const QString& id) {
   op.previewTitle = tr("Review Changes");
   op.previewIntro = tr("This changes more than %1. Nothing is written until you confirm.").arg(label(id));
   op.confirmText = tr("Save");
-  op.selectAfter = id;
+  // No selectAfter: a save from an unsaved-changes prompt is followed by the
+  // task the user was going to; the selection stays where they are.
   start(op);
 }
 
@@ -289,7 +299,30 @@ void TaskActions::edit(const QString& id, const QString& field, const QJsonValue
   op.previewIntro = tr("Saving %1 changes more than this task (summaries roll up). Nothing is written until you "
                        "confirm.").arg(label(id));
   op.confirmText = tr("Save");
-  op.selectAfter = id;
+  // No selectAfter: a save from an unsaved-changes prompt is followed by the
+  // task the user was going to; the selection stays where they are.
+  start(op);
+}
+
+void TaskActions::saveTask(const QString& id, const QJsonObject& base, const QJsonObject& body) {
+  Op op;
+  op.what = tr("Save %1").arg(label(id));
+  op.done = tr("Saved %1.").arg(label(id));
+  op.method = "PATCH";
+  op.path = QStringLiteral("/v1/tasks/") + id;
+  op.body = body;
+  op.hasBody = true;
+  op.taskId = id;
+  op.base = base;
+  op.rev = base.value(QStringLiteral("rev")).toInteger();
+  op.fromBase = op.rev > 0;
+  op.edit = true;
+  op.previewTitle = tr("Review Changes");
+  op.previewIntro = tr("Saving %1 changes more than this task (summaries roll up). Nothing is written until you "
+                       "confirm.").arg(label(id));
+  op.confirmText = tr("Save");
+  // No selectAfter: a save from an unsaved-changes prompt is followed by the
+  // task the user was going to; the selection stays where they are.
   start(op);
 }
 
@@ -305,8 +338,9 @@ void TaskActions::start(Op op) {
     say(tr("Still saving the last change; try again in a moment."), true);
     return;
   }
+  currentTask_ = op.taskId;
   setBusy(true);
-  if (op.taskId.isEmpty()) {
+  if (op.taskId.isEmpty() || op.fromBase) {
     dryRun(std::move(op));
     return;
   }
@@ -405,6 +439,7 @@ void TaskActions::commit(const Op& op, const QString& confirmId) {
 void TaskActions::finish(const Op& op) {
   setBusy(false);
   say(op.done.isEmpty() ? tr("Saved.") : op.done, false);
+  if (op.edit && !op.taskId.isEmpty()) emit taskWritten(op.taskId);
   emit changed(op.selectAfter, op.editTitle);
   if (AppSession* s = session_()) s->refresh();
 }
@@ -460,6 +495,7 @@ void TaskActions::showConflict(const Op& op, const QJsonObject& theirs) {
     if (next.body.isEmpty()) {
       setBusy(false);
       say(tr("Kept the server's version; nothing to send."), false);
+      emit taskWritten(op.taskId);
       if (AppSession* s = session_()) s->refresh();
       return;
     }
@@ -479,7 +515,14 @@ void TaskActions::fail(const client::ApiError& e) {
       text = tr("This task now has subtasks; its progress is rolled up. The outline is refreshed.");
       if (s) s->refresh();
       break;
-    case K::Validation: text = tr("The server refused the change: %1").arg(e.message); break;
+    case K::Validation:
+      text = tr("The server refused the change: %1").arg(e.message);
+      if (!e.field.isEmpty() && !currentTask_.isEmpty()) {
+        emit fieldError(currentTask_, e.field, e.details.value(QStringLiteral("fields")).toArray().isEmpty()
+                                                   ? e.message
+                                                   : firstFieldMessage(e.details, e.field, e.message));
+      }
+      break;
     case K::ForbiddenScope:
     case K::ForbiddenProject:
       text = tr("%1 This computer's token can't change tasks; nothing was saved.").arg(e.message);

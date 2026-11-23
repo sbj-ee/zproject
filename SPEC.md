@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.11.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.12.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -573,9 +573,20 @@ Carlo, multi-user permissions.
   Move Down, Rename Task, Convert to Milestone, Delete Task…, Restore Deleted
   Task…, Find…, Find Next and Find Previous. Selecting a task shows it,
   read-only, in the inspector.
+  As built (0.12.0): each project row in the sidebar has an icon, a folder
+  in the theme's text colour (muted unless active) with a RAG dot (none when
+  RAG is unset); the menu actions use the same set. The icons are drawn by
+  the app in the theme's colours (no system icon theme, no Qt SVG module),
+  so they look the same on Linux and macOS. The sidebar has no section rows
+  yet. Selecting a task opens the task editor in the inspector (§8.3); Edit
+  gains Task Details (Alt-Enter) and Save Task (Ctrl-S). Moving to another
+  task or project, or quitting, with unsaved edits asks first (Save /
+  Discard; Discard / Cancel when quitting).
 - Main area: the selected view. Inspector panel on the right for the selected
   task, milestone, resource or RAID item (Details, Schedule, Assignments,
-  Notes journal, Links, History tabs).
+  Notes journal, Links, History tabs). As built (0.12.0): Details, Schedule
+  and History; Assignments, Notes journal, Links and Tags arrive with their
+  features.
 - Status bar: server connection (connected with the server's version /
   offline-stale with last refresh time), a Read-only marker while editing is
   off, current filter, schedule warnings count.
@@ -627,7 +638,22 @@ status and % complete on leaf tasks, where % above 0 sends the scheduled start,
 else today, as the actual start if there is none; filter by status (All, Not
 done, To do, In progress, Done) keeps matches' ancestors; Find matches titles
 or an exact WBS code; a summary's start and finish show the span of its
-subtasks, display only, and its duration is blank until scheduling), Resources sheet
+subtasks, display only, and its duration is blank until scheduling), task
+editor (as built in 0.12.0, in the inspector: Details has title, type
+task/milestone, mode, status, % complete, priority 1–4 and Markdown notes with
+a plain preview, links not followed; Schedule has duration, start and finish
+(editable in manual mode only), constraint ASAP/SNET/FNLT and its date
+(cleared and locked for ASAP), deadline, actual start and finish; a milestone
+has duration 0; a summary's status, % complete and actual dates are locked as
+rolled up; % above 0 with no actual start fills it with the start, else
+today. Save runs core's validateTask on the client first and marks fields
+⚠ with nothing sent, then a dry run; a ripple into other tasks or a
+destructive change is previewed, else it saves directly; the PATCH carries
+If-Match with the rev read when the task was shown, and a 412 opens the
+per-field Keep mine / Take theirs / Cancel dialog after a refetch. A server
+400 marks the field it names. History lists GET /v1/tasks/{id}/history
+newest first, local time, actor as "This computer", "system" or the token
+label, and field before → after; up to 2,000 changes), Resources sheet
 and Resource Usage heat map, RAID table with type filters and risk heat map,
 Baselines and Variance table, Reports (rendered Markdown with export),
 Portfolio table and all-projects timeline, Calendar editor (work week and
@@ -652,7 +678,8 @@ focus: Insert Task Ins or Enter, indent Tab, outdent Shift-Tab, move up / down
 Alt-↑ / Alt-↓, rename F2, delete Del or Backspace (always previewed; Edit →
 Restore brings it back), find Ctrl-F, find next / previous F3 / Shift-F3
 (Enter / Shift-Enter in the find bar, Esc closes); Ctrl-Tab / Ctrl-Shift-Tab
-(Control on macOS) leave the tree, since Tab indents there. Ctrl-1…6 stay unassigned
+(Control on macOS) leave the tree, since Tab indents there. As built
+(0.12.0): Task Details Alt-Enter (outline focus) and Save Task Ctrl-S. Ctrl-1…6 stay unassigned
 until the views exist.
 
 ## 9. HTTP API

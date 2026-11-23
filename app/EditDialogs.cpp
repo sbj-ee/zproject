@@ -77,6 +77,19 @@ QString fieldLabel(const QString& field) {
   return labels.value(field, field);
 }
 
+QString taskFieldLabel(const QString& field) {
+  static const QHash<QString, QString> labels{
+      {QStringLiteral("start"), QObject::tr("Start")},
+      {QStringLiteral("finish"), QObject::tr("Finish")},
+      {QStringLiteral("mode"), QObject::tr("Mode")},
+      {QStringLiteral("constraint"), QObject::tr("Constraint")},
+      {QStringLiteral("constraintDate"), QObject::tr("Constraint date")},
+      {QStringLiteral("notes"), QObject::tr("Notes")},
+      {QStringLiteral("fixedCost"), QObject::tr("Fixed cost")},
+  };
+  return labels.value(field, fieldLabel(field));
+}
+
 QString ragLetter(const QString& rag) {
   if (rag == QLatin1String("green")) return QStringLiteral("G");
   if (rag == QLatin1String("amber")) return QStringLiteral("A");

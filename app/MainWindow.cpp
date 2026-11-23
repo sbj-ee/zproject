@@ -34,12 +34,14 @@
 
 #include "app/EditDialogs.hpp"
 #include "app/HelpDialog.hpp"
+#include "app/Icons.hpp"
 #include "app/OutlineModel.hpp"
 #include "app/OutlineView.hpp"
 #include "app/ProjectActions.hpp"
 #include "app/Shortcuts.hpp"
 #include "app/SignInDialog.hpp"
 #include "app/TaskActions.hpp"
+#include "app/TaskInspector.hpp"
 #include "app/Theme.hpp"
 #include "app/UpdateManager.hpp"
 #include "core/Version.hpp"
@@ -151,6 +153,24 @@ MainWindow::MainWindow(Options options, QWidget* parent) : QMainWindow(parent), 
     updateEditActions();
   });
   buildDocks();
+  connect(taskInspector_, &TaskInspector::saveRequested, taskActions_, &TaskActions::saveTask);
+  connect(taskInspector_, &TaskInspector::dirtyChanged, this, [this] { updateEditActions(); });
+  connect(taskActions_, &TaskActions::taskWritten, this, [this](const QString& id) {
+    if (id == taskInspector_->taskId()) taskInspector_->reloadFromServer();
+  });
+  connect(taskActions_, &TaskActions::notice, this, [this](const QString& text, bool error) {
+    // The editor says what happened to its own save.
+    if (taskActions_->currentTask() == taskInspector_->taskId() && inspectorStack_->currentWidget() == taskInspector_) {
+      taskInspector_->setMessage(text, error);
+    }
+  });
+  connect(taskActions_, &TaskActions::fieldError, this, [this](const QString& id, const QString& field, const QString& m) {
+    if (id == taskInspector_->taskId()) taskInspector_->showFieldError(field, m);
+  });
+  connect(taskActions_, &TaskActions::busyChanged, this, [this](bool busy) {
+    taskInspector_->setBusy(busy);
+    updateEditActions();
+  });
   buildMenus();
   buildStatusBar();
   applyAppearance();
@@ -282,6 +302,7 @@ void MainWindow::buildDocks() {
   projects_->setObjectName(QStringLiteral("sidebar"));
   projects_->setAccessibleName(tr("Projects"));
   projects_->setMinimumWidth(220);
+  projects_->setIconSize(QSize(16, 16));
   connect(projects_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* item) {
     showProject(item ? item->data(Qt::UserRole).toString() : QString());
   });
@@ -312,7 +333,13 @@ void MainWindow::buildDocks() {
   inspector_->setMargin(12);
   inspector_->setMinimumWidth(240);
   inspector_->setTextInteractionFlags(Qt::TextSelectableByMouse);
-  inspectorDock_->setWidget(inspector_);
+  // The project (or nothing) as text, or the selected task's editor.
+  inspectorStack_ = new QStackedWidget(inspectorDock_);
+  inspectorStack_->setObjectName(QStringLiteral("inspectorStack"));
+  inspectorStack_->addWidget(inspector_);
+  taskInspector_ = new TaskInspector([this] { return session_.get(); }, inspectorStack_);
+  inspectorStack_->addWidget(taskInspector_);
+  inspectorDock_->setWidget(inspectorStack_);
   addDockWidget(Qt::RightDockWidgetArea, inspectorDock_);
 }
 
@@ -362,6 +389,14 @@ void MainWindow::buildMenus() {
   add(edit, QStringLiteral("actionMoveTaskDown"), tr("Move Do&wn"), [this, current] { taskActions_->moveDown(current()); });
   edit->addSeparator();
   add(edit, QStringLiteral("actionRenameTask"), tr("&Rename Task"), [this, current] { outline_->editTitle(current()); });
+  add(edit, QStringLiteral("actionEditTask"), tr("Task D&etails"), [this] {
+    // The inspector's editor for the selected task (plan §3.3).
+    inspectorDock_->show();
+    if (inspectorStack_->currentWidget() != taskInspector_) return;
+    taskInspector_->tabs()->setCurrentIndex(0);
+    if (QWidget* t = taskInspector_->field(QStringLiteral("title"))) t->setFocus();
+  });
+  add(edit, QStringLiteral("actionSaveTask"), tr("&Save Task"), [this] { taskInspector_->save(); });
   add(edit, QStringLiteral("actionToggleMilestone"), tr("Convert to &Milestone"),
       [this, current] { taskActions_->toggleMilestone(current()); });
   edit->addSeparator();
@@ -376,7 +411,7 @@ void MainWindow::buildMenus() {
   add(edit, QStringLiteral("actionFindNext"), tr("Find &Next"), [this] { outline_->findNext(false); });
   add(edit, QStringLiteral("actionFindPrevious"), tr("Find Pre&vious"), [this] { outline_->findNext(true); });
   for (const char* name : {"actionInsertTask", "actionIndentTask", "actionOutdentTask", "actionMoveTaskUp",
-                           "actionMoveTaskDown", "actionRenameTask", "actionDeleteTask"}) {
+                           "actionMoveTaskDown", "actionRenameTask", "actionDeleteTask", "actionEditTask"}) {
     QAction* a = action(QString::fromLatin1(name));
     a->setShortcutContext(Qt::WidgetShortcut);
     outline_->tree()->addAction(a);
@@ -469,10 +504,34 @@ void MainWindow::applyAppearance() {
   QApplication::setPalette(Theme::palette(c));
   qApp->setStyleSheet(Theme::styleSheet(c, ViewZoom::pointSize(settings_.zoomPercent)));
   for (QAction* a : themeGroup_->actions()) a->setChecked(a->data().toString() == settings_.theme);
+  applyIcons(c);
   if (action(QStringLiteral("actionZoomIn")))
     action(QStringLiteral("actionZoomIn"))->setEnabled(settings_.zoomPercent < ViewZoom::kMaxPercent);
   if (action(QStringLiteral("actionZoomOut")))
     action(QStringLiteral("actionZoomOut"))->setEnabled(settings_.zoomPercent > ViewZoom::kMinPercent);
+}
+
+// The app's own icons (app/Icons.hpp), redrawn in the theme's colours.
+void MainWindow::applyIcons(const ThemeColors& c) {
+  using G = Icons::Glyph;
+  const std::pair<const char*, G> glyphs[] = {
+      {"actionNewProject", G::NewProject},     {"actionRefresh", G::Refresh},
+      {"actionEditProject", G::EditProject},   {"actionDeleteProject", G::DeleteProject},
+      {"actionAllProjects", G::AllProjects},   {"actionProjectDetails", G::ProjectDetails},
+      {"actionOutline", G::Outline},           {"actionInsertTask", G::InsertTask},
+      {"actionEditTask", G::TaskDetails},      {"actionSaveTask", G::SaveTask},
+      {"actionDeleteTask", G::DeleteTask},     {"actionFind", G::Find},
+  };
+  for (const auto& [name, g] : glyphs) {
+    if (QAction* a = action(QString::fromLatin1(name))) a->setIcon(Icons::glyph(g, c));
+  }
+  if (outlineButton_) outlineButton_->setIcon(Icons::glyph(G::Outline, c));
+  if (projects_) {
+    for (int i = 0; i < projects_->count(); ++i) {
+      QListWidgetItem* item = projects_->item(i);
+      item->setIcon(Icons::project(c, item->data(Qt::UserRole + 2).toString(), item->data(Qt::UserRole + 1).toString()));
+    }
+  }
 }
 
 void MainWindow::setTheme(const QString& choice) {
@@ -718,6 +777,8 @@ void MainWindow::reloadProjects() {
       const QString id = p.value(QStringLiteral("id")).toString();
       item->setData(Qt::UserRole, id);
       item->setData(Qt::UserRole + 1, status);
+      item->setData(Qt::UserRole + 2, p.value(QStringLiteral("rag")).toString());
+      item->setIcon(Icons::project(Theme::colors(resolvedTheme_), item->data(Qt::UserRole + 2).toString(), status));
       item->setToolTip(projectStatusName(status));
       if (status != QLatin1String("active")) {
         QFont f = item->font();
@@ -803,6 +864,9 @@ void MainWindow::updateEditActions() {
   enable("actionMoveTaskUp", canEdit && haveTask && taskActions_->canMoveUp(task));
   enable("actionMoveTaskDown", canEdit && haveTask && taskActions_->canMoveDown(task));
   enable("actionRenameTask", canEdit && haveTask);
+  enable("actionEditTask", inOutline && haveTask);
+  enable("actionSaveTask", taskInspector_ != nullptr && taskInspector_->canSave());
+  if (taskInspector_) taskInspector_->setEditable(editing);
   enable("actionToggleMilestone", canEdit && haveTask && taskActions_->canToggleMilestone(task));
   if (QAction* m = action(QStringLiteral("actionToggleMilestone"))) {
     m->setText(haveTask && outline_->model()->isMilestone(task) ? tr("Convert to &Task") : tr("Convert to &Milestone"));
@@ -839,7 +903,7 @@ void MainWindow::showProject(const QString& id) {
       empty_->setText(tr("Select a project."));
     }
     stack_->setCurrentIndex(0);
-    inspector_->setText(tr("Nothing selected."));
+    showInspectorText(tr("Nothing selected."));
     updateEditActions();
     return;
   }
@@ -900,37 +964,68 @@ void MainWindow::showProject(const QString& id) {
   // Only a snapshot carries the rev; rows built from the change feed don't.
   if (const qint64 rev = p->value(QStringLiteral("rev")).toInteger(); rev > 0) line(tr("Revision"), QString::number(rev));
   line(tr("Id"), id);
-  inspector_->setText(side);
-  if (page_ == ProjectPage::Outline && !outline_->currentTaskId().isEmpty()) showTaskInspector(outline_->currentTaskId());
+  if (page_ == ProjectPage::Outline && !outline_->currentTaskId().isEmpty()) {
+    inspector_->setText(side);
+    showTaskInspector(outline_->currentTaskId());
+  } else {
+    showInspectorText(side);
+  }
   updateEditActions();
 }
 
 void MainWindow::showTaskInspector(const QString& taskId) {
   if (stack_->currentWidget() != outline_ || taskId.isEmpty()) return;
+  if (taskInspector_->isDirty() && taskId != taskInspector_->taskId()) {
+    askUnsaved([this] { showTaskInspector(outline_->currentTaskId()); });
+    return;
+  }
   const OutlineModel* m = outline_->model();
   const QJsonObject t = m->task(taskId);
   if (t.isEmpty()) return;
-  auto get = [&t](const char* k) { return t.value(QLatin1String(k)).toString(); };
-  const bool summary = m->isSummary(taskId);
-  QString side = QStringLiteral("<b>%1 %2</b><br><br>").arg(m->wbsCode(taskId).toHtmlEscaped(), get("title").toHtmlEscaped());
-  auto line = [&side](const QString& k, const QString& v) {
-    if (!v.isEmpty()) side += QStringLiteral("%1: %2<br>").arg(k.toHtmlEscaped(), v.toHtmlEscaped());
-  };
-  line(tr("Type"), OutlineModel::typeName(t, summary));
-  line(tr("Status"), OutlineModel::statusName(get("status")) + (summary ? tr(" (rolled up)") : QString()));
-  line(tr("Complete"), QStringLiteral("%1%").arg(qRound(t.value(QStringLiteral("percentComplete")).toDouble())) +
-                           (summary ? tr(" (rolled up)") : QString()));
-  if (summary) {
-    const int kids = m->liveChildren(taskId);
-    line(tr("Rolled up from"), kids == 1 ? tr("1 child task") : tr("%1 child tasks").arg(kids));
+  taskInspector_->setEditable(editingAllowed());
+  taskInspector_->showTask(taskId, t, m->wbsCode(taskId), m->liveChildren(taskId));
+  inspectorStack_->setCurrentWidget(taskInspector_);
+  updateEditActions();
+}
+
+void MainWindow::showInspectorText(const QString& html) {
+  inspector_->setText(html);
+  if (inspectorStack_->currentWidget() == taskInspector_ && taskInspector_->isDirty()) {
+    // Leaving a task with unsaved edits (another project, or Details).
+    askUnsaved([this] { showProject(currentProjectId()); });
+    return;
   }
-  line(tr("Start"), get("start"));
-  line(tr("Finish"), get("finish"));
-  line(tr("Deadline"), get("deadline"));
-  line(tr("Priority"), QStringLiteral("P%1").arg(t.value(QStringLiteral("priority")).toInt(2)));
-  line(tr("Id"), taskId);
-  side += QStringLiteral("<br><i>%1</i>").arg(tr("The task editor arrives in the next release.").toHtmlEscaped());
-  inspector_->setText(side);
+  inspectorStack_->setCurrentWidget(inspector_);
+}
+
+void MainWindow::askUnsaved(std::function<void()> then) {
+  afterUnsaved_ = std::move(then);
+  if (unsavedBox_) return;  // already asking; the newest `then` wins
+  auto* box = new QMessageBox(QMessageBox::Question, tr("Unsaved Changes"),
+                              tr("Save your changes to %1?").arg(taskInspector_->taskLabel()),
+                              QMessageBox::Save | QMessageBox::Discard, this);
+  box->setObjectName(QStringLiteral("unsavedTaskBox"));
+  box->setInformativeText(tr("Discard puts the task back as the server has it."));
+  box->setDefaultButton(QMessageBox::Save);
+  box->setAttribute(Qt::WA_DeleteOnClose);
+  box->setWindowModality(Qt::WindowModal);
+  unsavedBox_ = box;
+  connect(box, &QMessageBox::finished, this, [this, box] {
+    const bool save = box->clickedButton() == box->button(QMessageBox::Save);
+    std::function<void()> next = std::move(afterUnsaved_);
+    afterUnsaved_ = nullptr;
+    if (save && !taskInspector_->save()) {
+      // Its checks failed (or it can't be saved now): stay on the task.
+      outline_->selectTask(taskInspector_->taskId());
+      inspectorStack_->setCurrentWidget(taskInspector_);
+      return;
+    }
+    // Saved (the write is on its way) or discarded: show the server's copy,
+    // then go where the user was going.
+    taskInspector_->revert();
+    if (next) next();
+  });
+  box->open();
 }
 
 // ---- cache ----
@@ -1113,6 +1208,24 @@ void MainWindow::changeEvent(QEvent* event) {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+  if (!closeAnyway_ && taskInspector_ != nullptr && taskInspector_->isDirty()) {
+    // Never lose typed edits silently.
+    event->ignore();
+    auto* box = new QMessageBox(QMessageBox::Question, tr("Unsaved Changes"),
+                                tr("Quit without saving your changes to %1?").arg(taskInspector_->taskLabel()),
+                                QMessageBox::Discard | QMessageBox::Cancel, this);
+    box->setObjectName(QStringLiteral("quitUnsavedBox"));
+    box->setDefaultButton(QMessageBox::Cancel);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->setWindowModality(Qt::WindowModal);
+    connect(box, &QMessageBox::finished, this, [this, box] {
+      if (box->clickedButton() != box->button(QMessageBox::Discard)) return;
+      closeAnyway_ = true;
+      QTimer::singleShot(0, this, [this] { close(); });
+    });
+    box->open();
+    return;
+  }
   if (session_ && session_->syncer()) session_->syncer()->stop();
   QMainWindow::closeEvent(event);
 }

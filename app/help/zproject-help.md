@@ -38,11 +38,14 @@ or **Preferences → Change server or token…**.
 
 ## The window
 
-- **Projects** (left) lists the projects your token can see.
+- **Projects** (left) lists the projects your token can see. Each has a
+  folder icon with a dot in its RAG colour (green, amber, red); projects that
+  aren't active are greyed and named with their status.
 - The **centre** shows the selected project: its details, or its tasks in
   the outline (**View → Outline**). The Gantt and resource views arrive in
   later versions.
-- The **Inspector** (right) shows the selected item's details.
+- The **Inspector** (right) shows the selected item's details; for a task
+  it is the task editor (below).
 - The **status bar** shows the connection, the server's version and when the
   data was last refreshed. **Read-only** means editing is off.
 
@@ -76,6 +79,30 @@ When a change affects more than the task itself (a summary's progress, say)
 or deletes something, zproject shows what will change before writing
 anything. If someone else changed the task a moment ago, nothing is
 overwritten: you choose, or the outline refreshes so you can try again.
+
+## Editing a task
+
+Select a task in the outline: the **Inspector** shows it with three tabs.
+**Edit → Task Details** (Alt + Enter) jumps to its title.
+
+- **Details**: title, type (task or milestone), mode, status, % complete,
+  priority and notes. Notes are Markdown; **Preview** shows how they read.
+- **Schedule**: duration, start and finish (manual tasks only; auto tasks
+  get their dates from the schedule), constraint and its date, deadline, and
+  the actual start and finish.
+- **History**: every change to the task, newest first: when, who ("This
+  computer" for yours) and what changed.
+
+**Save** (Ctrl + S, or **Edit → Save Task**) checks the fields first: a
+field with a problem is marked ⚠ with the reason and nothing is sent.
+Setting % complete above 0 fills in the actual start for you. A summary
+task's status, % complete and actual dates are rolled up from its subtasks,
+so they are locked. When a save changes more than this task (a summary's
+progress, say) zproject shows what will change and writes nothing until you
+confirm. If someone else saved the task since you opened it, you choose per
+field: keep yours or take theirs. **Revert** puts the task back as the
+server has it. Moving to another task, another project or quitting with
+unsaved changes asks first.
 
 ## Offline
 
@@ -152,6 +179,7 @@ the server machine.
 | Indent / outdent (outline) | Tab / Shift + Tab |
 | Move task up / down (outline) | Alt + ↑ / Alt + ↓ |
 | Rename task (outline) | F2 |
+| Edit task details / save task | Alt + Enter / Ctrl + S |
 | Delete task (outline) | Del or Backspace |
 | Leave the outline | Ctrl + Tab (Control, not ⌘, on macOS) |
 | Find / next / previous | Ctrl + F / F3 / Shift + F3 |
