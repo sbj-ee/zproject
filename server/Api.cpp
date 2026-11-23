@@ -52,6 +52,7 @@ namespace {
 
 const QString kProject = QStringLiteral("project");
 const QString kTask = QStringLiteral("task");
+const QString kDependency = QStringLiteral("dependency");
 const QString kToken = QStringLiteral("token");
 
 QString compact(const QJsonObject& o) {
@@ -323,6 +324,20 @@ const QList<Api::Route>& Api::routeTable() {
       {{"GET", QStringLiteral("/v1/tasks/{id}/history"), QStringLiteral("getTaskHistory"),
         QStringLiteral("tasks:read")},
        &Api::getTaskHistory, false},
+      {{"GET", QStringLiteral("/v1/projects/{id}/dependencies"), QStringLiteral("listDependencies"),
+        QStringLiteral("tasks:read")},
+       &Api::listDependencies, false},
+      {{"POST", QStringLiteral("/v1/dependencies"), QStringLiteral("createDependency"), QStringLiteral("tasks:write"),
+        false, true},
+       &Api::createDependency, true},
+      {{"GET", QStringLiteral("/v1/dependencies/{id}"), QStringLiteral("getDependency"), QStringLiteral("tasks:read")},
+       &Api::getDependency, false},
+      {{"PATCH", QStringLiteral("/v1/dependencies/{id}"), QStringLiteral("updateDependency"),
+        QStringLiteral("tasks:write"), false, true},
+       &Api::updateDependency, true},
+      {{"DELETE", QStringLiteral("/v1/dependencies/{id}"), QStringLiteral("deleteDependency"),
+        QStringLiteral("tasks:write"), true, true},
+       &Api::deleteDependency, true},
       {{"GET", QStringLiteral("/v1/changes"), QStringLiteral("listChanges"), QStringLiteral("tasks:read")},
        &Api::listChanges, false},
       {{"GET", QStringLiteral("/v1/tokens"), QStringLiteral("listTokens"), QStringLiteral("admin")}, &Api::listTokens,
@@ -977,6 +992,13 @@ Response Api::updateTask(Call& c) {
     if (summaryIds(ts.value()).contains(id)) {
       if (auto e = toValidationError(checkSummaryEdit(cur.value(), t))) return storeError(*e);
     }
+    if (t.parent != cur->parent) {
+      QList<Task> moved = ts.value();
+      for (Task& row : moved) {
+        if (row.id == id) row.parent = t.parent;
+      }
+      if (auto s = store_.checkLinkCycles(moved); !s) return storeError(s.error());
+    }
     const FieldDiff d = diffFields(toJson(cur.value()), toJson(t));
     QJsonArray changes;
     if (!d.empty()) {
@@ -1024,6 +1046,12 @@ Response Api::deleteTask(Call& c) {
         t.deleted = true;
         changes.append(change(QStringLiteral("delete"), kTask, t.id, kDeletedBefore, kDeletedAfter));
       }
+    }
+    // Its links go with it.
+    auto links = store_.linksTouching(cur->project, subtree);
+    if (!links) return storeError(links.error());
+    for (const Dependency& d : links.value()) {
+      changes.append(change(QStringLiteral("delete"), kDependency, d.id, kDeletedBefore, kDeletedAfter));
     }
     appendRollupChanges(changes, ts.value(), next, id);
     return dryRunResponse(c, changes);
@@ -1125,9 +1153,15 @@ Response Api::restoreTask(Call& c) {
     for (Task& row : next) {
       if (restored.contains(row.id)) row.deleted = false;
     }
-    return dryRunResponse(c, treeChanges(ts.value(), next, [&restored](const QString& tid) {
-                            return restored.contains(tid) ? QStringLiteral("restore") : QStringLiteral("update");
-                          }));
+    auto links = store_.planRestoreLinks(id);
+    if (!links) return storeError(links.error());
+    QJsonArray changes = treeChanges(ts.value(), next, [&restored](const QString& tid) {
+      return restored.contains(tid) ? QStringLiteral("restore") : QStringLiteral("update");
+    });
+    for (const Dependency& d : links.value()) {
+      changes.append(change(QStringLiteral("restore"), kDependency, d.id, kDeletedAfter, kDeletedBefore));
+    }
+    return dryRunResponse(c, changes);
   }
   if (auto refuse = requireConfirm(c)) return *refuse;
   auto r = store_.restoreTask(id, expected.value_or(cur->rev), {c.token.id, c.requestId});
@@ -1151,6 +1185,122 @@ Response Api::getTaskHistory(Call& c) {
   QJsonArray items;
   for (const auto& ch : rows.value()) items.append(changeJson(ch));
   return Response::json(200, QJsonObject{{QStringLiteral("items"), items}});
+}
+
+// ---------------------------------------------------------------- dependencies
+
+namespace {
+
+// A link's own fields; `project` may be given but must match the tasks'.
+QSet<QString> dependencyReadOnly() { return baseReadOnly(); }
+
+}  // namespace
+
+Response Api::listDependencies(Call& c) {
+  const QString id = c.params.value(0);
+  if (auto a = checkProjectAccess(c, id); a.status) return a;
+  int limit = 0;
+  qsizetype offset = 0;
+  if (auto e = pageParams(c.query, &limit, &offset)) return *e;
+  if (auto p = store_.project(id); !p) return storeError(p.error());
+  auto ds = store_.dependencies(id, truthy(c.query.queryItemValue(QStringLiteral("includeDeleted"))));
+  if (!ds) return storeError(ds.error());
+  const QString taskFilter = c.query.queryItemValue(QStringLiteral("task"));
+  QJsonArray items;
+  for (const Dependency& d : ds.value()) {
+    if (!taskFilter.isEmpty() && d.predecessor != taskFilter && d.successor != taskFilter) continue;
+    items.append(toJson(d));
+  }
+  return Response::json(200, page(items, limit, offset));
+}
+
+Response Api::createDependency(Call& c) {
+  if (auto e = checkFields(c.body, toJson(Dependency{}), dependencyReadOnly(), {})) return *e;
+  Dependency d = dependencyFromJson(c.body);
+  if (auto e = toValidationError(validateDependency(d))) return storeError(*e);
+  // Access follows the predecessor's project (both tasks must share it).
+  if (auto pred = store_.task(d.predecessor); pred) {
+    if (auto a = checkProjectAccess(c, pred->project); a.status) return a;
+  }
+  if (c.dryRun) {
+    auto checked = store_.checkDependency(d);
+    if (!checked) return storeError(checked.error());
+    QJsonObject after = toJson(checked.value());
+    for (const QString& k : baseReadOnly()) after.remove(k);
+    return dryRunResponse(c, QJsonArray{change(QStringLiteral("create"), kDependency, {}, {}, after)});
+  }
+  auto r = store_.createDependency(d, {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  c.entityKind = kDependency;
+  c.entityId = r->id;
+  c.after = toJson(r.value());
+  c.hasDiff = true;
+  return Response::json(201, toJson(r.value()));
+}
+
+Response Api::getDependency(Call& c) {
+  auto d = store_.dependency(c.params.value(0));
+  if (!d) return storeError(d.error());
+  if (auto a = checkProjectAccess(c, d->project); a.status) return a;
+  return Response::json(200, toJson(d.value()));
+}
+
+Response Api::updateDependency(Call& c) {
+  const QString id = c.params.value(0);
+  auto cur = store_.dependency(id);
+  if (!cur) return storeError(cur.error());
+  if (auto a = checkProjectAccess(c, cur->project); a.status) return a;
+  QSet<QString> readOnly = dependencyReadOnly();
+  for (const char* k : {"project", "predecessor", "successor"}) readOnly.insert(QLatin1String(k));
+  if (auto e = checkFields(c.body, toJson(Dependency{}), readOnly, {})) return *e;
+  Response err = Response::empty(0);
+  const auto expected = ifMatch(c, &err);
+  if (err.status) return err;
+  if (expected && *expected != cur->rev) return storeError(Error::revMismatch(*expected, cur->rev));
+  QJsonObject merged = toJson(cur.value());
+  for (auto it = c.body.constBegin(); it != c.body.constEnd(); ++it) merged.insert(it.key(), it.value());
+  Dependency d = dependencyFromJson(merged);
+  d.id = id;
+  if (c.dryRun) {
+    if (auto e = toValidationError(validateDependency(d))) return storeError(*e);
+    const FieldDiff diff = diffFields(toJson(cur.value()), toJson(d));
+    QJsonArray changes;
+    if (!diff.empty()) changes.append(change(QStringLiteral("update"), kDependency, id, diff.before, diff.after));
+    return dryRunResponse(c, changes);
+  }
+  auto r = store_.updateDependency(d, expected.value_or(cur->rev), {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  const FieldDiff diff = diffFields(toJson(cur.value()), toJson(r.value()));
+  c.entityKind = kDependency;
+  c.entityId = id;
+  c.before = diff.before;
+  c.after = diff.after;
+  c.hasDiff = true;
+  return Response::json(200, toJson(r.value()));
+}
+
+Response Api::deleteDependency(Call& c) {
+  const QString id = c.params.value(0);
+  auto cur = store_.dependency(id);
+  if (!cur) return storeError(cur.error());
+  if (auto a = checkProjectAccess(c, cur->project); a.status) return a;
+  Response err = Response::empty(0);
+  const auto expected = ifMatch(c, &err);
+  if (err.status) return err;
+  if (expected && *expected != cur->rev) return storeError(Error::revMismatch(*expected, cur->rev));
+  c.entityKind = kDependency;
+  c.entityId = id;
+  if (c.dryRun) {
+    return dryRunResponse(c, QJsonArray{change(QStringLiteral("delete"), kDependency, id, kDeletedBefore,
+                                               kDeletedAfter)});
+  }
+  if (auto refuse = requireConfirm(c)) return *refuse;
+  auto r = store_.deleteDependency(id, expected.value_or(cur->rev), {c.token.id, c.requestId});
+  if (!r) return storeError(r.error());
+  c.before = kDeletedBefore;
+  c.after = kDeletedAfter;
+  c.hasDiff = true;
+  return Response::json(200, toJson(r.value()));
 }
 
 Response Api::listChanges(Call& c) {

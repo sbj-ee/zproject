@@ -38,6 +38,16 @@ class SqliteStore final : public Store {
   Result<QList<Task>> planRestore(const QString& id) override;
   Result<Task> restoreTask(const QString& id, qint64 expectedRev, const WriteContext& ctx) override;
 
+  Result<Dependency> checkDependency(const Dependency& d) override;
+  Result<Dependency> createDependency(const Dependency& d, const WriteContext& ctx) override;
+  Result<Dependency> dependency(const QString& id, bool includeDeleted = false) override;
+  Result<QList<Dependency>> dependencies(const QString& projectId, bool includeDeleted = false) override;
+  Result<Dependency> updateDependency(const Dependency& d, qint64 expectedRev, const WriteContext& ctx) override;
+  Result<Dependency> deleteDependency(const QString& id, qint64 expectedRev, const WriteContext& ctx) override;
+  Result<QList<Dependency>> linksTouching(const QString& projectId, const QSet<QString>& taskIds) override;
+  Result<QList<Dependency>> planRestoreLinks(const QString& taskId) override;
+  Status checkLinkCycles(const QList<Task>& tasks) override;
+
   Result<QList<ChangeRecord>> changesSince(qint64 since, int limit = 500) override;
   Result<QList<ChangeRecord>> changesFor(const QString& entityKind, const QString& entityId,
                                          qint64 since = 0, int limit = 500) override;
@@ -56,8 +66,16 @@ class SqliteStore final : public Store {
   // Writes `t` as the next revision of `cur` (rev + 1, updatedAt = ts) with
   // its change row.
   Status writeRevision(const Task& cur, Task t, const WriteContext& ctx, const QString& ts);
-  // The ts of the task's newest change row if that row tombstoned it, else empty.
-  Result<QString> tombstoneTs(const QString& id);
+  // The ts of the entity's newest change row if that row tombstoned it, else empty.
+  Result<QString> tombstoneTs(const QString& id, const QString& kind = QStringLiteral("task"));
+  Status writeDependency(const Dependency& d, bool insert);
+  // Writes `d` as the next revision of `cur`, with its change row.
+  Status writeDependencyRevision(const Dependency& cur, Dependency d, const WriteContext& ctx, const QString& ts);
+  // Tombstones the live links touching these tasks (one task delete).
+  Status tombstoneLinks(const QString& projectId, const QSet<QString>& taskIds, const WriteContext& ctx,
+                        const QString& ts);
+  // checkLinkCycles over explicit links (a candidate included).
+  Status checkCycles(const QList<Task>& tasks, const QList<Dependency>& links);
   // Recomputes the project's summary tasks (core/Rollup.hpp) and writes the
   // ones that changed, each with its own revision and change row, inside the
   // caller's transaction.

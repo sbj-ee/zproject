@@ -100,8 +100,10 @@ bool isValidDate(const QString& yyyyMmDd);
 // and leaves missing ones at their defaults.
 QJsonObject toJson(const Project& p);
 QJsonObject toJson(const Task& t);
+QJsonObject toJson(const Dependency& d);
 Project projectFromJson(const QJsonObject& o);
 Task taskFromJson(const QJsonObject& o);
+Dependency dependencyFromJson(const QJsonObject& o);
 
 // The fields whose values differ between two JSON objects, as
 // {before: {...changed fields...}, after: {...}} for change records.

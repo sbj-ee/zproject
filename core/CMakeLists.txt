@@ -4,6 +4,7 @@ add_library(zproject_core STATIC
   Error.hpp
   Holidays.cpp Holidays.hpp
   Id.cpp Id.hpp
+  LinkNotation.cpp LinkNotation.hpp
   Model.cpp Model.hpp
   Rollup.cpp Rollup.hpp
   Schedule.cpp Schedule.hpp

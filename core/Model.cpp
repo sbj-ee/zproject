@@ -261,6 +261,31 @@ QJsonObject toJson(const Task& t) {
   return o;
 }
 
+QJsonObject toJson(const Dependency& d) {
+  QJsonObject o;
+  baseToJson(o, d);
+  o.insert(QStringLiteral("project"), d.project);
+  o.insert(QStringLiteral("predecessor"), d.predecessor);
+  o.insert(QStringLiteral("successor"), d.successor);
+  o.insert(QStringLiteral("type"), d.type);
+  o.insert(QStringLiteral("lag"), d.lag);
+  return o;
+}
+
+Dependency dependencyFromJson(const QJsonObject& o) {
+  Dependency d;
+  baseFromJson(d, o);
+  d.project = str(o, "project");
+  d.predecessor = str(o, "predecessor");
+  d.successor = str(o, "successor");
+  d.type = str(o, "type", d.type);
+  const double lag = num(o, "lag", 0);
+  // Out-of-range or fractional values fail validation rather than being clipped.
+  d.lag = std::isfinite(lag) && std::abs(lag) <= 1e6 && lag == std::trunc(lag) ? static_cast<int>(lag)
+                                                                                : kMaxLagDays + 1;
+  return d;
+}
+
 Task taskFromJson(const QJsonObject& o) {
   Task t;
   baseFromJson(t, o);

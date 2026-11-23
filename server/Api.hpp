@@ -121,6 +121,11 @@ class Api {
   http::Response moveTask(Call& c);
   http::Response restoreTask(Call& c);
   http::Response getTaskHistory(Call& c);
+  http::Response listDependencies(Call& c);
+  http::Response createDependency(Call& c);
+  http::Response getDependency(Call& c);
+  http::Response updateDependency(Call& c);
+  http::Response deleteDependency(Call& c);
   http::Response listChanges(Call& c);
   http::Response listTokens(Call& c);
   http::Response createToken(Call& c);

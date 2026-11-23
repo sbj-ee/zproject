@@ -376,6 +376,54 @@ jobs:
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: ctest --test-dir build --output-on-failure
 
+  # libFuzzer harnesses (fuzz/, SPEC.md §19): 60 s each on a scratch copy of
+  # the checked-in seed corpus. A crash uploads the reproducer.
+  fuzz:
+    name: Fuzz (libFuzzer, 60 s per harness)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Qt 6 + clang
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qt6-base-dev cmake ninja-build clang
+
+      - name: Restore SQLite download cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/zproject
+          key: sqlite-${{ runner.os }}-${{ hashFiles('cmake/FetchSQLite.cmake') }}
+
+      - name: Configure (clang, -fsanitize=fuzzer-no-link,address,undefined)
+        run: |
+          CC=clang CXX=clang++ cmake -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DZPROJECT_FUZZ=ON -DZPROJECT_BUILD_GUI=OFF -DZPROJECT_BUILD_TESTS=OFF
+
+      - name: Build the harnesses
+        run: cmake --build build-fuzz --target fuzz_link_notation fuzz_dependency_json
+
+      - name: Fuzz
+        env:
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/artifacts"
+          for h in link_notation dependency_json; do
+            corpus="$RUNNER_TEMP/corpus-$h"
+            cp -R "fuzz/corpus/$h" "$corpus"
+            build-fuzz/fuzz/fuzz_$h -max_total_time=60 -print_final_stats=1 \
+              -artifact_prefix="$RUNNER_TEMP/artifacts/$h-" "$corpus"
+          done
+
+      - name: Upload crash reproducers
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-artifacts
+          path: ${{ runner.temp }}/artifacts
+
   clang-tidy:
     name: clang-tidy (ubuntu-24.04)
     runs-on: ubuntu-24.04

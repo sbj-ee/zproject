@@ -384,6 +384,60 @@ class TestCli : public QObject {
     QCOMPARE(cliAs(owner_, {QStringLiteral("audit"), QStringLiteral("--limit"), QStringLiteral("5")}).code, 0);
   }
 
+  // deps (scheduling plan S3): links by WBS code and the "3FS+2d" notation.
+  void deps() {
+    const QString p = createProject(QStringLiteral("Kitchen"));
+    const QString a = addTask(p, QStringLiteral("Survey"));     // 1
+    addTask(p, QStringLiteral("Drawings"));                     // 2
+    const QString c = addTask(p, QStringLiteral("Permits"));    // 3
+    auto deps = [&](const QStringList& args) { return cliAs(owner_, QStringList{QStringLiteral("deps")} + args); };
+    // Two predecessors for task 3 in one go; a dry run first writes nothing.
+    Run r = deps({QStringLiteral("add"), p, QStringLiteral("3"), QStringLiteral("1FS+2d, 2SS"), QStringLiteral("--dry-run")});
+    QCOMPARE(r.code, 0);
+    QVERIFY2(r.out.contains(QStringLiteral("3 after 1FS+2d: Dry run: 1 change")), qPrintable(r.out));
+    QCOMPARE(deps({QStringLiteral("--json"), QStringLiteral("list"), p}).json().toArray().size(), 0);
+    r = deps({QStringLiteral("add"), p, QStringLiteral("3"), QStringLiteral("1FS+2d, 2SS")});
+    QCOMPARE(r.code, 0);
+    QVERIFY(r.out.contains(QStringLiteral("Linked 3 after 1FS+2d")));
+    QVERIFY(r.out.contains(QStringLiteral("Linked 3 after 2SS")));
+    // The list in the same notation, by WBS code.
+    r = deps({QStringLiteral("list"), p});
+    QCOMPARE(r.code, 0);
+    QVERIFY2(r.out.contains(QStringLiteral("1FS+2d")), qPrintable(r.out));
+    QVERIFY(r.out.contains(QStringLiteral("3 Permits")));
+    QVERIFY(r.out.contains(QStringLiteral("1 Survey")));
+    // A task id works as well as a WBS code, and --task narrows the list.
+    QCOMPARE(deps({QStringLiteral("--json"), QStringLiteral("list"), p, QStringLiteral("--task"), a}).json().toArray().size(), 1);
+    QCOMPARE(deps({QStringLiteral("--json"), QStringLiteral("list"), p, QStringLiteral("--task"), QStringLiteral("3")})
+                 .json().toArray().size(), 2);
+    // Update the lag (a lead), then remove.
+    const QJsonArray links = deps({QStringLiteral("--json"), QStringLiteral("list"), p, QStringLiteral("--task"), a}).json().toArray();
+    const QString id = links.first().toObject().value(QStringLiteral("id")).toString();
+    r = deps({QStringLiteral("update"), id, QStringLiteral("--lag"), QStringLiteral("-1d")});
+    QCOMPARE(r.code, 0);
+    QVERIFY(r.out.contains(QStringLiteral("FS -1 days")));
+    QCOMPARE(deps({QStringLiteral("update"), id, QStringLiteral("--type"), QStringLiteral("SF")}).code, int(kExitUsage));
+    QCOMPARE(deps({QStringLiteral("update"), id}).code, int(kExitUsage));
+    // A loop back and a duplicate are refused (3: validation or conflict).
+    r = deps({QStringLiteral("add"), p, QStringLiteral("1"), QStringLiteral("3")});
+    QCOMPARE(r.code, int(kExitConflict));
+    QVERIFY(r.err.contains(QStringLiteral("cycle")));
+    r = deps({QStringLiteral("add"), p, QStringLiteral("3"), QStringLiteral("2")});  // 2 → 3 is linked (SS) already
+    QCOMPARE(r.code, int(kExitConflict));
+    QVERIFY(r.err.contains(QStringLiteral("already linked")));
+    // Bad notation and unknown tasks.
+    QCOMPARE(deps({QStringLiteral("add"), p, QStringLiteral("3"), QStringLiteral("1XY")}).code, int(kExitUsage));
+    QCOMPARE(deps({QStringLiteral("add"), p, QStringLiteral("9"), QStringLiteral("1")}).code, int(kExitConflict));
+    QCOMPARE(deps({QStringLiteral("add"), p, QStringLiteral("3"), QStringLiteral("9")}).code, int(kExitConflict));
+    r = deps({QStringLiteral("remove"), id});
+    QCOMPARE(r.code, 0);
+    // Task 3 keeps only its 2SS link; --all shows the removed one too.
+    QCOMPARE(deps({QStringLiteral("--json"), QStringLiteral("list"), p, QStringLiteral("--task"), c}).json().toArray().size(), 1);
+    QCOMPARE(deps({QStringLiteral("--json"), QStringLiteral("list"), p, QStringLiteral("--task"), c, QStringLiteral("--all")})
+                 .json().toArray().size(), 2);
+    QCOMPARE(deps({QStringLiteral("frob")}).code, int(kExitUsage));
+  }
+
   void tasksMove() {
     const QString p = createProject(QStringLiteral("Garage"));
     const QString a = addTask(p, QStringLiteral("Foundation"));
