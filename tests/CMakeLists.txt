@@ -28,6 +28,7 @@ target_link_libraries(zproject_test_mock PUBLIC Qt6::Network)
 zproject_set_warnings(zproject_test_mock)
 zproject_add_test(tst_clientcore zproject_client)
 zproject_add_test(tst_cache zproject_client)
+zproject_add_test(tst_editflow zproject_client)
 zproject_add_test(tst_asyncapi zproject_client zproject_test_mock)
 zproject_add_test(tst_syncer zproject_client zproject_test_mock zproject_server_lib)
 
@@ -69,6 +70,9 @@ endif()
 # The desktop app shell (SPEC.md §8), offscreen.
 if(ZPROJECT_BUILD_GUI)
   zproject_add_test(tst_appshell zproject_app_lib zproject_test_mock)
+  # Projects: list, details, editor, dry-run preview, the 412 conflict
+  # dialog, against the real server on loopback.
+  zproject_add_test(tst_projects zproject_app_lib zproject_server_lib)
   # The signed in-app updater (SPEC.md §21) against a mock release feed.
   zproject_add_test(tst_update zproject_app_lib zproject_test_mock PkgConfig::SODIUM)
 endif()

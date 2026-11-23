@@ -14,6 +14,7 @@ add_library(zproject_client STATIC
   Cli.cpp Cli.hpp
   ClientConfig.cpp ClientConfig.hpp
   DesktopSettings.cpp DesktopSettings.hpp
+  EditFlow.cpp EditFlow.hpp
   TokenStore.cpp TokenStore.hpp)
 target_link_libraries(zproject_client PUBLIC zproject_core zproject_store Qt6::Network)
 zproject_set_warnings(zproject_client)

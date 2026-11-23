@@ -7,6 +7,56 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.10.0 — 2026-11-22
+
+Desktop client plan, PR 5: the project list and project details, with
+create, edit and delete through dry-run previews, and the shared 412 conflict
+dialog (plan §4.4–4.5, §7.10, §8.1, §9.3). Also makes task `order`
+read-only in the API.
+
+- **Sidebar:** projects sorted active, then on hold (italic, "(on hold)");
+  done and cancelled are hidden behind "Show done and cancelled (N)".
+- **View → All Projects:** a table of Name, Status, RAG (letter and coloured
+  dot, with an accessible name), Priority, Start, Target finish and Owner;
+  activating a row opens that project's Details. View → Project Details goes
+  back.
+- **Project details** page: every field read-only, with Edit Details… and
+  Delete Project…; the empty state points at File → New Project….
+- **Project editor** (File → New Project… Ctrl-N, Project → Edit Project
+  Details… Ctrl-E): local checks first (⚠ next to each field, nothing sent),
+  only changed fields in the `PATCH`, and `If-Match` with the `rev` read from
+  the server when the editor opens. Every write is a dry run first; a preview
+  appears only when the dry run changes more than the project itself.
+- **Delete Project…** always previews the project and each of its tasks,
+  then sends the dry run's `confirmId` (needed by `requireConfirm` tokens); an
+  expired or mismatched confirmation, or a 412, re-runs the preview.
+- **Conflict dialog (412):** refetches the project, says who changed it and
+  when (change feed, else cached activity, else `updatedAt`), and lists field ·
+  your value · server value · result. Fields only you changed are kept; fields
+  both changed need Keep Mine / Take Theirs / Cancel (default). Either choice
+  re-runs the dry run on the server's revision; nothing is retried blindly.
+- Errors map per plan §4.3: inline field errors for 400, a "this computer's
+  token can't change projects" note for 403, "deleted elsewhere" and a refresh
+  for 404, and no edits while offline (actions and buttons are disabled).
+- **API — task `order` is read-only:** a create (`POST
+  /v1/projects/{id}/tasks`) or `PATCH /v1/tasks/{id}` body with `order` is
+  now 400 `validation` (`details.field: "order"`), like the other read-only
+  fields; `order` stays in task JSON (OpenAPI `readOnly`). Reorder with `POST
+  /v1/tasks/{id}/move`. Clients that sent `order` must drop it. Project
+  `order` is unchanged.
+- Inspector: "Revision" is shown only when the cache knows it (rows built from
+  the change feed carry no `rev`).
+- **Tests:** `tst_editflow` (changed-field bodies, dry-run preview rules,
+  conflict merge) and `tst_projects` (offscreen, against the real API on
+  loopback: list grouping, create, edit with If-Match, conflict take theirs /
+  keep mine / cancel, delete previews, confirm expiry, read-only token, deleted
+  elsewhere, offline); `tst_api` covers `order` being refused.
+- **Screenshots** (offscreen, example data): `projects-details-light/dark`,
+  `projects-table-light/high-contrast`, `project-editor`,
+  `project-conflict-light/dark`, `project-delete-preview`; the main-window and
+  offline screenshots are re-rendered with the new sidebar and Project menu.
+- README "Current release" is now 0.9.0.
+
 ## 0.9.0 — 2026-11-22
 
 Desktop client plan, PR 4: server move and restore, for the outline's

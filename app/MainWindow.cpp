@@ -7,6 +7,11 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFileInfo>
+#include <QHeaderView>
+#include <QPainter>
+#include <QPixmap>
+#include <QTableWidget>
+#include <QToolButton>
 #include <QSpinBox>
 #include <QDockWidget>
 #include <QFrame>
@@ -26,7 +31,9 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include "app/EditDialogs.hpp"
 #include "app/HelpDialog.hpp"
+#include "app/ProjectActions.hpp"
 #include "app/Shortcuts.hpp"
 #include "app/SignInDialog.hpp"
 #include "app/Theme.hpp"
@@ -63,6 +70,38 @@ QString formatWhen(const QDateTime& t) {
   return loc.toString(local, QLocale::ShortFormat);
 }
 
+// Sidebar order (SPEC.md §8.1): active, on hold, then done and cancelled.
+int statusRank(const QString& s) {
+  if (s == QLatin1String("active")) return 0;
+  if (s == QLatin1String("on_hold")) return 1;
+  if (s == QLatin1String("done")) return 2;
+  if (s == QLatin1String("cancelled")) return 3;
+  return 4;
+}
+bool isClosed(const QString& s) { return statusRank(s) >= 2 && statusRank(s) <= 3; }
+
+QIcon ragIcon(const QString& rag) {
+  QColor c(0x9a, 0x9a, 0x9a);
+  if (rag == QLatin1String("green")) c = QColor(0x2e, 0x9d, 0x4f);
+  if (rag == QLatin1String("amber")) c = QColor(0xe0, 0x9b, 0x1a);
+  if (rag == QLatin1String("red")) c = QColor(0xd2, 0x3b, 0x3b);
+  QPixmap px(12, 12);
+  px.fill(Qt::transparent);
+  QPainter painter(&px);
+  painter.setRenderHint(QPainter::Antialiasing);
+  painter.setBrush(c);
+  painter.setPen(Qt::NoPen);
+  painter.drawEllipse(1, 1, 10, 10);
+  return QIcon(px);
+}
+
+QString ragName(const QString& rag) {
+  if (rag == QLatin1String("green")) return QObject::tr("Green");
+  if (rag == QLatin1String("amber")) return QObject::tr("Amber");
+  if (rag == QLatin1String("red")) return QObject::tr("Red");
+  return rag;
+}
+
 }  // namespace
 
 MainWindow::Options MainWindow::defaultOptions() {
@@ -85,6 +124,13 @@ MainWindow::MainWindow(Options options, QWidget* parent) : QMainWindow(parent), 
 
   updater_ = new UpdateManager({updateStatePath(), appVersion(), hostPackagePlatform()}, this);
   updater_->setOpenUrlHandler([this](const QUrl& u) { openUrl(u); });
+  projectActions_ = new ProjectActions(this, [this] { return session_.get(); }, this);
+  connect(projectActions_, &ProjectActions::notice, this, [this](const QString& text, bool) {
+    statusBar()->showMessage(text, 10000);
+  });
+  connect(projectActions_, &ProjectActions::saved, this, [this](const QString& id, bool created) {
+    if (created) pendingSelect_ = id;
+  });
   buildCentral();
   buildDocks();
   buildMenus();
@@ -160,8 +206,45 @@ void MainWindow::buildCentral() {
   projectSummary_->setWordWrap(true);
   projectSummary_->setTextInteractionFlags(Qt::TextSelectableByMouse);
   pv->addWidget(projectSummary_);
-  pv->addStretch(1);
+  auto* buttons = new QHBoxLayout;
+  editButton_ = new QPushButton(tr("Edit Details…"), page);
+  editButton_->setObjectName(QStringLiteral("editProjectButton"));
+  connect(editButton_, &QPushButton::clicked, this, [this] { projectActions_->editProject(currentProjectId()); });
+  buttons->addWidget(editButton_);
+  deleteButton_ = new QPushButton(tr("Delete Project…"), page);
+  deleteButton_->setObjectName(QStringLiteral("deleteProjectButton"));
+  connect(deleteButton_, &QPushButton::clicked, this, [this] { projectActions_->deleteProject(currentProjectId()); });
+  buttons->addWidget(deleteButton_);
+  buttons->addStretch(1);
+  pv->addLayout(buttons);
+  projectDetails_ = new QLabel(page);
+  projectDetails_->setObjectName(QStringLiteral("projectDetails"));
+  projectDetails_->setAccessibleName(tr("Project details"));
+  projectDetails_->setWordWrap(true);
+  projectDetails_->setTextFormat(Qt::RichText);
+  projectDetails_->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+  projectDetails_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  pv->addWidget(projectDetails_, 1);
   stack_->addWidget(page);
+
+  projectTable_ = new QTableWidget(0, 7, stack_);
+  projectTable_->setObjectName(QStringLiteral("projectTable"));
+  projectTable_->setAccessibleName(tr("All projects"));
+  projectTable_->setHorizontalHeaderLabels(
+      {tr("Name"), tr("Status"), tr("RAG"), tr("Priority"), tr("Start"), tr("Target finish"), tr("Owner")});
+  projectTable_->verticalHeader()->hide();
+  projectTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+  projectTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
+  projectTable_->setSelectionMode(QAbstractItemView::SingleSelection);
+  projectTable_->horizontalHeader()->setStretchLastSection(true);
+  projectTable_->setShowGrid(false);
+  connect(projectTable_, &QTableWidget::cellActivated, this, [this](int row, int) {
+    if (QTableWidgetItem* it = projectTable_->item(row, 0)) {
+      selectProject(it->data(Qt::UserRole).toString());
+      showProjectDetails();
+    }
+  });
+  stack_->addWidget(projectTable_);
   v->addWidget(stack_, 1);
   setCentralWidget(central);
 }
@@ -177,7 +260,20 @@ void MainWindow::buildDocks() {
   connect(projects_, &QListWidget::currentItemChanged, this, [this](QListWidgetItem* item) {
     showProject(item ? item->data(Qt::UserRole).toString() : QString());
   });
-  sidebarDock_->setWidget(projects_);
+  auto* side = new QWidget(sidebarDock_);
+  auto* sv = new QVBoxLayout(side);
+  sv->setContentsMargins(0, 0, 0, 0);
+  sv->setSpacing(0);
+  sv->addWidget(projects_, 1);
+  showClosed_ = new QToolButton(side);
+  showClosed_->setObjectName(QStringLiteral("showClosedProjects"));
+  showClosed_->setCheckable(true);
+  showClosed_->setAutoRaise(true);
+  showClosed_->setToolButtonStyle(Qt::ToolButtonTextOnly);
+  showClosed_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  connect(showClosed_, &QToolButton::toggled, this, [this] { reloadProjects(); });
+  sv->addWidget(showClosed_);
+  sidebarDock_->setWidget(side);
   addDockWidget(Qt::LeftDockWidgetArea, sidebarDock_);
 
   inspectorDock_ = new QDockWidget(tr("Inspector"), this);
@@ -209,6 +305,8 @@ void MainWindow::buildMenus() {
   };
 
   QMenu* file = menuBar()->addMenu(tr("&File"));
+  add(file, QStringLiteral("actionNewProject"), tr("&New Project…"), [this] { projectActions_->newProject(); });
+  file->addSeparator();
   add(file, QStringLiteral("actionRefresh"), tr("&Refresh"), [this] {
     if (session_) session_->refresh();
   });
@@ -221,7 +319,16 @@ void MainWindow::buildMenus() {
   auto* quit = add(file, QStringLiteral("actionQuit"), tr("&Quit"), [this] { close(); });
   quit->setMenuRole(QAction::QuitRole);
 
+  QMenu* project = menuBar()->addMenu(tr("&Project"));
+  add(project, QStringLiteral("actionEditProject"), tr("&Edit Project Details…"),
+      [this] { projectActions_->editProject(currentProjectId()); });
+  add(project, QStringLiteral("actionDeleteProject"), tr("&Delete Project…"),
+      [this] { projectActions_->deleteProject(currentProjectId()); });
+
   QMenu* view = menuBar()->addMenu(tr("&View"));
+  add(view, QStringLiteral("actionAllProjects"), tr("All &Projects"), [this] { showProjectTable(); });
+  add(view, QStringLiteral("actionProjectDetails"), tr("Project &Details"), [this] { showProjectDetails(); });
+  view->addSeparator();
   QMenu* themes = view->addMenu(tr("&Theme"));
   themeGroup_ = new QActionGroup(this);
   for (const QString& t : Theme::choices()) {
@@ -242,15 +349,17 @@ void MainWindow::buildMenus() {
                    [this](bool on) { sidebarDock_->setVisible(on); });
   side->setCheckable(true);
   side->setChecked(true);
-  connect(sidebarDock_, &QDockWidget::visibilityChanged, side, [this, side](bool) {
-    side->setChecked(!sidebarDock_->isHidden());
+  // The dock, not this: the signal also fires while ~QWidget runs.
+  connect(sidebarDock_, &QDockWidget::visibilityChanged, side, [dock = sidebarDock_, side](bool) {
+    side->setChecked(!dock->isHidden());
   });
   auto* insp = add(view, QStringLiteral("actionToggleInspector"), tr("&Inspector"),
                    [this](bool on) { inspectorDock_->setVisible(on); });
   insp->setCheckable(true);
   insp->setChecked(true);
-  connect(inspectorDock_, &QDockWidget::visibilityChanged, insp, [this, insp](bool) {
-    insp->setChecked(!inspectorDock_->isHidden());
+  // The dock, not this: the signal also fires while ~QWidget runs.
+  connect(inspectorDock_, &QDockWidget::visibilityChanged, insp, [dock = inspectorDock_, insp](bool) {
+    insp->setChecked(!dock->isHidden());
   });
   add(view, QStringLiteral("actionFocusSidebar"), tr("Go to &Projects"), [this] {
     sidebarDock_->show();
@@ -478,6 +587,7 @@ void MainWindow::updateConnectionUi() {
   const bool editing = editingAllowed();
   readOnly_->setVisible(!editing);
   if (QAction* r = action(QStringLiteral("actionRefresh"))) r->setEnabled(session_ != nullptr);
+  updateEditActions();
   if (editing != lastEditing_) {
     lastEditing_ = editing;
     emit editingAllowedChanged(editing);
@@ -485,19 +595,131 @@ void MainWindow::updateConnectionUi() {
   if (PreferencesDialog* prefs = preferences_.data()) prefs->setConnectionInfo(connectionInfo());
 }
 
+QString MainWindow::currentProjectId() const {
+  return projects_->currentItem() ? projects_->currentItem()->data(Qt::UserRole).toString() : QString();
+}
+
+void MainWindow::selectProject(const QString& id) {
+  for (int i = 0; i < projects_->count(); ++i) {
+    QListWidgetItem* item = projects_->item(i);
+    if (item->data(Qt::UserRole).toString() != id) continue;
+    if (item->isHidden()) {
+      showClosed_->setChecked(true);  // reloads; the item is visible now
+      selectProject(id);
+      return;
+    }
+    projects_->setCurrentItem(item);
+    return;
+  }
+}
+
+void MainWindow::showProjectTable() {
+  stack_->setCurrentWidget(projectTable_);
+  projectTable_->setFocus(Qt::ShortcutFocusReason);
+  updateEditActions();
+}
+
+void MainWindow::showProjectDetails() { showProject(currentProjectId()); }
+
 void MainWindow::reloadProjects() {
-  const QString current = projects_->currentItem() ? projects_->currentItem()->data(Qt::UserRole).toString() : QString();
-  const QSignalBlocker block(projects_);
-  projects_->clear();
-  if (session_ && session_->cache()) {
-    for (const QJsonObject& p : session_->cache()->projects()) {
+  QString current = currentProjectId();
+  if (!pendingSelect_.isEmpty()) current = pendingSelect_;
+  const bool tableShown = stack_->currentWidget() == projectTable_;
+  QList<QJsonObject> list;
+  if (session_ && session_->cache()) list = session_->cache()->projects();
+  std::stable_sort(list.begin(), list.end(), [](const QJsonObject& a, const QJsonObject& b) {
+    return statusRank(a.value(QStringLiteral("status")).toString()) < statusRank(b.value(QStringLiteral("status")).toString());
+  });
+  int closed = 0;
+  for (const QJsonObject& p : list) {
+    if (isClosed(p.value(QStringLiteral("status")).toString())) ++closed;
+  }
+  {
+    const QSignalBlocker block(projects_);
+    projects_->clear();
+    for (const QJsonObject& p : list) {
+      const QString status = p.value(QStringLiteral("status")).toString();
       auto* item = new QListWidgetItem(p.value(QStringLiteral("name")).toString(), projects_);
-      item->setData(Qt::UserRole, p.value(QStringLiteral("id")).toString());
-      if (item->data(Qt::UserRole).toString() == current) projects_->setCurrentItem(item);
+      const QString id = p.value(QStringLiteral("id")).toString();
+      item->setData(Qt::UserRole, id);
+      item->setData(Qt::UserRole + 1, status);
+      item->setToolTip(projectStatusName(status));
+      if (status != QLatin1String("active")) {
+        QFont f = item->font();
+        f.setItalic(true);
+        item->setFont(f);
+        item->setText(item->text() + QStringLiteral(" (%1)").arg(projectStatusName(status).toLower()));
+        item->setData(Qt::AccessibleTextRole, item->text());
+      }
+      item->setHidden(isClosed(status) && !showClosed_->isChecked());
+      if (id == current && !item->isHidden()) projects_->setCurrentItem(item);
+      if (id == pendingSelect_) pendingSelect_.clear();
+    }
+    if (!projects_->currentItem()) {
+      for (int i = 0; i < projects_->count(); ++i) {
+        if (!projects_->item(i)->isHidden()) {
+          projects_->setCurrentRow(i);
+          break;
+        }
+      }
     }
   }
-  if (!projects_->currentItem() && projects_->count() > 0) projects_->setCurrentRow(0);
-  showProject(projects_->currentItem() ? projects_->currentItem()->data(Qt::UserRole).toString() : QString());
+  showClosed_->setVisible(closed > 0);
+  showClosed_->setText(showClosed_->isChecked() ? tr("Hide done and cancelled (%1)").arg(closed)
+                                                : tr("Show done and cancelled (%1)").arg(closed));
+  showClosed_->setAccessibleName(showClosed_->text());
+  fillProjectTable(list);
+  showProject(currentProjectId());
+  if (tableShown) stack_->setCurrentWidget(projectTable_);
+  updateEditActions();
+}
+
+void MainWindow::fillProjectTable(const QList<QJsonObject>& projects) {
+  const QString selected = projectTable_->currentRow() >= 0 && projectTable_->item(projectTable_->currentRow(), 0)
+                               ? projectTable_->item(projectTable_->currentRow(), 0)->data(Qt::UserRole).toString()
+                               : currentProjectId();
+  projectTable_->setRowCount(0);
+  for (const QJsonObject& p : projects) {
+    const int row = projectTable_->rowCount();
+    projectTable_->insertRow(row);
+    auto put = [this, row](int col, const QString& text, const QString& tip = {}) {
+      auto* item = new QTableWidgetItem(text);
+      item->setToolTip(tip.isEmpty() ? text : tip);
+      projectTable_->setItem(row, col, item);
+      return item;
+    };
+    const QString rag = p.value(QStringLiteral("rag")).toString();
+    QTableWidgetItem* name = put(0, p.value(QStringLiteral("name")).toString());
+    name->setData(Qt::UserRole, p.value(QStringLiteral("id")).toString());
+    put(1, projectStatusName(p.value(QStringLiteral("status")).toString()));
+    QTableWidgetItem* r = put(2, ragLetter(rag), ragName(rag));
+    r->setIcon(ragIcon(rag));
+    r->setData(Qt::AccessibleTextRole, tr("RAG %1").arg(ragName(rag)));
+    put(3, QStringLiteral("P%1").arg(p.value(QStringLiteral("priority")).toInt(2)),
+        tr("Priority %1 (1 = highest)").arg(p.value(QStringLiteral("priority")).toInt(2)));
+    put(4, p.value(QStringLiteral("start")).toString());
+    put(5, p.value(QStringLiteral("finish")).toString());
+    put(6, p.value(QStringLiteral("owner")).toString());
+    if (name->data(Qt::UserRole).toString() == selected) projectTable_->setCurrentCell(row, 0);
+  }
+  projectTable_->resizeColumnsToContents();
+}
+
+void MainWindow::updateEditActions() {
+  const bool editing = editingAllowed();
+  const bool haveProject = !currentProjectId().isEmpty();
+  auto enable = [this](const char* name, bool on) {
+    if (QAction* a = action(QString::fromLatin1(name))) a->setEnabled(on);
+  };
+  enable("actionNewProject", editing);
+  enable("actionEditProject", editing && haveProject);
+  enable("actionDeleteProject", editing && haveProject);
+  enable("actionProjectDetails", haveProject);
+  if (editButton_) editButton_->setEnabled(editing && haveProject);
+  if (deleteButton_) deleteButton_->setEnabled(editing && haveProject);
+  const QString why = editing ? QString() : tr("Editing is off until the server answers");
+  if (editButton_) editButton_->setToolTip(why);
+  if (deleteButton_) deleteButton_->setToolTip(why);
 }
 
 void MainWindow::showProject(const QString& id) {
@@ -507,13 +729,16 @@ void MainWindow::showProject(const QString& id) {
     if (!session_) {
       empty_->setText(tr("Connect to a zproject server to see your projects.\nFile → Connect to Server…"));
     } else if (projects_->count() == 0) {
-      empty_->setText(session_->health() == AppSession::Health::Connecting ? tr("Loading projects…")
-                                                                            : tr("No projects yet."));
+      empty_->setText(session_->health() == AppSession::Health::Connecting
+                          ? tr("Loading projects…")
+                          : tr("No projects yet.\nFile → New Project… (%1) creates one.")
+                                .arg(shortcutFor(QStringLiteral("actionNewProject")).toString(QKeySequence::NativeText)));
     } else {
       empty_->setText(tr("Select a project."));
     }
     stack_->setCurrentIndex(0);
     inspector_->setText(tr("Nothing selected."));
+    updateEditActions();
     return;
   }
   const QList<QJsonObject> tasks = session_->cache()->tasks(id);
@@ -529,19 +754,46 @@ void MainWindow::showProject(const QString& id) {
   const int n = static_cast<int>(tasks.size());
   projectSummary_->setText((n == 1 ? tr("1 task") : tr("%1 tasks").arg(n)) + tr(" · %1 complete").arg(done) +
                            (milestones == 1 ? tr(" · 1 milestone") : tr(" · %1 milestones").arg(milestones)) +
-                           tr("\n\nThe outline, Gantt and resource views arrive in the next releases."));
-  stack_->setCurrentIndex(1);
-  QString html = QStringLiteral("<b>%1</b><br><br>").arg(name.toHtmlEscaped());
+                           tr("\nThe outline, Gantt and resource views arrive in the next releases."));
+  auto get = [&p](const char* k) { return p->value(QLatin1String(k)).toString(); };
+  const QString rag = get("rag");
+  QString html = QStringLiteral("<table cellspacing='0' cellpadding='3'>");
   auto row = [&html](const QString& k, const QString& v) {
-    if (!v.isEmpty()) html += QStringLiteral("%1: %2<br>").arg(k.toHtmlEscaped(), v.toHtmlEscaped());
+    html += QStringLiteral("<tr><td><b>%1</b></td><td>%2</td></tr>")
+                .arg(k.toHtmlEscaped(), v.isEmpty() ? QStringLiteral("—") : v.toHtmlEscaped());
   };
-  row(tr("Status"), p->value(QStringLiteral("status")).toString());
-  row(tr("Owner"), p->value(QStringLiteral("owner")).toString());
-  row(tr("Start"), p->value(QStringLiteral("start")).toString());
-  row(tr("Finish"), p->value(QStringLiteral("finish")).toString());
-  row(tr("Revision"), QString::number(p->value(QStringLiteral("rev")).toInteger()));
-  row(tr("Id"), id);
-  inspector_->setText(html);
+  row(tr("Status"), projectStatusName(get("status")));
+  row(tr("RAG"), ragName(rag).isEmpty() ? QString() : QStringLiteral("%1 · %2").arg(ragLetter(rag), ragName(rag)));
+  row(tr("Priority"), QStringLiteral("P%1").arg(p->value(QStringLiteral("priority")).toInt(2)));
+  row(tr("Start"), get("start"));
+  row(tr("Target finish"), get("finish"));
+  row(tr("Owner"), get("owner"));
+  row(tr("Sponsor"), get("sponsor"));
+  const QJsonValue budget = p->value(QStringLiteral("budget"));
+  row(tr("Budget"), budget.isDouble() ? QLocale().toString(budget.toDouble(), 'f', 2) : QString());
+  html += QStringLiteral("</table>");
+  for (const char* k : {"description", "objectives", "scope", "outOfScope", "successCriteria"}) {
+    const QString text = get(k).trimmed();
+    if (text.isEmpty()) continue;
+    html += QStringLiteral("<h4>%1</h4><p>%2</p>")
+                .arg(fieldLabel(QString::fromLatin1(k)).toHtmlEscaped(),
+                     text.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>")));
+  }
+  projectDetails_->setText(html);
+  stack_->setCurrentIndex(1);
+  QString side = QStringLiteral("<b>%1</b><br><br>").arg(name.toHtmlEscaped());
+  auto line = [&side](const QString& k, const QString& v) {
+    if (!v.isEmpty()) side += QStringLiteral("%1: %2<br>").arg(k.toHtmlEscaped(), v.toHtmlEscaped());
+  };
+  line(tr("Status"), projectStatusName(get("status")));
+  line(tr("Owner"), get("owner"));
+  line(tr("Start"), get("start"));
+  line(tr("Finish"), get("finish"));
+  // Only a snapshot carries the rev; rows built from the change feed don't.
+  if (const qint64 rev = p->value(QStringLiteral("rev")).toInteger(); rev > 0) line(tr("Revision"), QString::number(rev));
+  line(tr("Id"), id);
+  inspector_->setText(side);
+  updateEditActions();
 }
 
 // ---- cache ----
