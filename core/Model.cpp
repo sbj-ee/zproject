@@ -161,6 +161,22 @@ QList<FieldError> validateTask(const Task& t) {
   return errs;
 }
 
+QList<FieldError> validateDependency(const Dependency& d) {
+  QList<FieldError> errs;
+  if (d.predecessor.isEmpty()) errs.append({QStringLiteral("predecessor"), QStringLiteral("is required")});
+  if (d.successor.isEmpty()) errs.append({QStringLiteral("successor"), QStringLiteral("is required")});
+  if (!d.predecessor.isEmpty() && d.predecessor == d.successor) {
+    errs.append({QStringLiteral("successor"), QStringLiteral("must not be the predecessor itself")});
+  }
+  if (d.type != QLatin1String("FS") && d.type != QLatin1String("SS") && d.type != QLatin1String("FF")) {
+    errs.append({QStringLiteral("type"), QStringLiteral("must be FS, SS or FF")});
+  }
+  if (d.lag < -kMaxLagDays || d.lag > kMaxLagDays) {
+    errs.append({QStringLiteral("lag"), QStringLiteral("must be between -%1 and %1 working days").arg(kMaxLagDays)});
+  }
+  return errs;
+}
+
 std::optional<Error> toValidationError(const QList<FieldError>& errors) {
   if (errors.isEmpty()) {
     return std::nullopt;

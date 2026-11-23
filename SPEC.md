@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.17.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.18.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -395,6 +395,38 @@ Sunday → Monday, Juneteenth from 2021. So New Year's Day can be observed on
 Auto tasks are rescheduled whenever an input changes. Every change shows (UI) or
 returns (API `dryRun`) the ripple first: tasks moved and by how much, project
 finish change, critical path change.
+
+As built (0.18.0, scheduling plan S2; core only, used by the server from S5):
+`core/Schedule` `computeSchedule()` implements the passes above with these
+conventions.
+- **Durations and lag:** time is counted in working days of each task's own
+  calendar. A duration of d days (rounded up to whole days) starting on S
+  finishes on the (d − 1)-th working day after S. Lag is whole working days
+  of the successor's calendar, from −3650 to 3650.
+- **Milestones:** a milestone is a point. When a finish drives it (FS or FF)
+  it shows that finish's date. When a start drives it (the project start,
+  SNET or SS) it shows that day.
+- **Links to and from summaries:** as a predecessor, a summary is its span
+  (earliest leaf start to latest leaf finish). A link into a summary bounds
+  every leaf below it. A link between a task and its own ancestor is a 409
+  `cycle` with `details.path`.
+- **Fixed tasks:** manual tasks keep their dates, an actual finish fixes the
+  task, and an actual start fixes its start. A manual task that a link would
+  move is reported as `link_broken`, not moved.
+- **No project start:** an auto task gets dates only from SNET, an actual
+  start or a scheduled predecessor. Otherwise it stays unscheduled with
+  `no_start`.
+- **Backward pass:** it runs from the later of the latest finish and the
+  target finish. FNLT bounds the late finish (`constraint_missed` when
+  broken); a deadline only reports (`deadline_missed`).
+- **Float and critical:** total float = late finish − early finish. A task
+  that isn't done is critical at float ≤ 0. Free float is the slack before
+  the nearest successor moves, never more than the total float.
+- **Determinism:** ties break by the input (outline) order.
+
+`diffSchedules()` gives the ripple: the tasks moved (deltas in calendar days),
+the change in project finish, and whether the critical set changed. 2,200
+tasks and 4,000 links schedule in about 1 ms (the budget is 50 ms).
 
 ### 6.3 Phase 2+
 

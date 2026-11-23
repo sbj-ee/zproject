@@ -7,6 +7,45 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.18.0 — 2026-11-23
+
+Scheduling plan, PR S2: the CPM engine (plan §2.2; SPEC §6.2, §7.2, §17,
+§19). Core only. The server starts using it in S5; until then nothing in
+the app or API changes.
+
+- **`core/Schedule`**: `computeSchedule()` builds the order of work (Kahn,
+  ties by outline order), then runs a forward pass (FS, SS and FF with lag
+  and lead, SNET, project start, actual start and finish, manual tasks
+  kept) and a backward pass (from the later of the latest finish and the
+  target finish, with FNLT). It returns early and late dates, total and
+  free float, and the critical tasks (float ≤ 0, not done). Violations are
+  reported, never fixed: `no_start`, `manual_no_dates`, `link_broken`,
+  `constraint_missed`, `deadline_missed`, `unknown_calendar`. A cycle
+  (including a link between a task and its own summary) is a 409 `cycle`
+  with the path.
+- Each task uses its own calendar (task → project → Standard); links
+  between tasks on different calendars convert through dates.
+- Milestones driven by a finish show that finish's date, as MS Project
+  does. Summaries are spans; a link into one bounds all its leaves.
+- **`diffSchedules()`**: the ripple for dry runs (tasks moved with deltas,
+  the project finish change, whether the critical set changed).
+- **`Dependency`** model and `validateDependency` (FS/SS/FF, not a
+  self-link, lag within ±3650 working days); `Task` gains `calendar`
+  (stored and served from S4).
+- **`tst_schedule`** (24 tests):
+  - one golden case per rule, dates worked out by hand: each link type
+    with lag and lead, weekends, holidays, calendars per task, milestones,
+    SNET and FNLT, float (total and free), the target finish, deadlines,
+    manual tasks, actuals, summaries (nested), no project start, cycles and
+    the ripple
+  - property tests on six random plans of up to 500 tasks and 1,000 links:
+    every link is satisfied, float is never negative, the critical tasks
+    reach from the start to the finish, and the link order changes nothing
+  - 2,200 tasks with 4,000 links within 50 ms (about 1 ms)
+
+  A deliberately broken engine (FS lag ignored) fails both the golden and
+  the property tests.
+
 ## 0.17.0 — 2026-11-23
 
 Scheduling plan, PR S1: working calendars (plan §2.1; SPEC §6.1, §17,
