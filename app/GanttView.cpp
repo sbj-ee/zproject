@@ -950,6 +950,13 @@ bool GanttView::handleKey(QKeyEvent* e) {
     chart_->scrollToToday();
     return true;
   }
+  // Enter opens the task here on every platform (macOS item views don't
+  // emit activated for it).
+  if ((mods & ~Qt::KeypadModifier) == Qt::NoModifier && (k == Qt::Key_Return || k == Qt::Key_Enter)) {
+    const QString id = currentTaskId();
+    if (!id.isEmpty()) emit openTask(id);
+    return true;
+  }
   return false;
 }
 
