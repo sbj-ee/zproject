@@ -38,8 +38,9 @@ keyboard, filter by status and find. The inspector edits the selected task
 (Details, Schedule and History tabs; Alt + Enter, Ctrl + S): fields are
 checked before anything is sent, changes that ripple into summaries are
 previewed, and a save that crosses someone else's edit asks field by field.
-The project sidebar and the menus use zproject's own icons (a folder per
-project with its RAG colour), drawn the same on every platform.
+The project sidebar, the menus and the toolbar (View → Show Toolbar) use
+zproject's own icons (a folder per project with its RAG colour), drawn the
+same on every platform; on Linux the menu bar always stays in the window.
 **Help → Check for Updates…** installs new desktop releases after checking
 their minisign signature and SHA-256 (SPEC.md §21); it never touches
 `zprojectd`.

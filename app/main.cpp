@@ -25,6 +25,13 @@ int main(int argc, char* argv[]) {
   }
 
   Q_INIT_RESOURCE(zproject_app);
+#ifndef Q_OS_MACOS
+  // Menus stay in the window on Linux. A global-menu service on the session
+  // bus (com.canonical.AppMenu.Registrar, e.g. Fildem or an appmenu applet)
+  // otherwise makes Qt export them over D-Bus and hide the in-window bar,
+  // and if that service shows nothing the menus are gone (SPEC.md §8.1).
+  QApplication::setAttribute(Qt::AA_DontUseNativeMenuBar);
+#endif
   QApplication app(argc, argv);
   QApplication::setApplicationName(QStringLiteral("zproject"));
   QApplication::setApplicationVersion(zproject::appVersion());

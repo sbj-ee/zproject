@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QPixmap>
 #include <QTableWidget>
+#include <QToolBar>
 #include <QToolButton>
 #include <QSpinBox>
 #include <QDockWidget>
@@ -172,6 +173,7 @@ MainWindow::MainWindow(Options options, QWidget* parent) : QMainWindow(parent), 
     updateEditActions();
   });
   buildMenus();
+  buildToolBar();
   buildStatusBar();
   applyAppearance();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
@@ -356,6 +358,12 @@ void MainWindow::buildMenus() {
     return a;
   };
 
+#ifndef Q_OS_MACOS
+  // Always in the window on Linux (main.cpp sets AA_DontUseNativeMenuBar
+  // too): a global-menu service must not take the menus away. macOS keeps
+  // its native menu bar.
+  menuBar()->setNativeMenuBar(false);
+#endif
   QMenu* file = menuBar()->addMenu(tr("&File"));
   add(file, QStringLiteral("actionNewProject"), tr("&New Project…"), [this] { projectActions_->newProject(); });
   file->addSeparator();
@@ -444,6 +452,8 @@ void MainWindow::buildMenus() {
   add(view, QStringLiteral("actionZoomOut"), tr("Zoom &Out"), [this] { zoomOut(); });
   add(view, QStringLiteral("actionZoomReset"), tr("&Actual Size"), [this] { zoomReset(); });
   view->addSeparator();
+  auto* bar = add(view, QStringLiteral("actionToggleToolbar"), tr("Show &Toolbar"), [this](bool on) { setToolbarShown(on); });
+  bar->setCheckable(true);
   auto* side = add(view, QStringLiteral("actionToggleSidebar"), tr("&Sidebar"),
                    [this](bool on) { sidebarDock_->setVisible(on); });
   side->setCheckable(true);
@@ -478,6 +488,55 @@ void MainWindow::buildMenus() {
   updates->setMenuRole(QAction::ApplicationSpecificRole);
   auto* about = add(help, QStringLiteral("actionAbout"), tr("&About zproject"), [this] { showAbout(); });
   about->setMenuRole(QAction::AboutRole);
+}
+
+// The main toolbar (SPEC.md §8.1): the common actions, with the app's icons.
+// View → Show Toolbar toggles it; the choice is kept in zproject.ini.
+void MainWindow::buildToolBar() {
+  toolBar_ = new QToolBar(tr("Toolbar"), this);
+  toolBar_->setObjectName(QStringLiteral("mainToolBar"));
+  toolBar_->setMovable(false);
+  toolBar_->setFloatable(false);
+  toolBar_->setIconSize(QSize(20, 20));
+  toolBar_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+  // Our View menu item is the one toggle (no right-click menu that would
+  // hide it without saving the choice).
+  toolBar_->setContextMenuPolicy(Qt::PreventContextMenu);
+  toolBar_->toggleViewAction()->setVisible(false);
+  const QList<QList<const char*>> groups = {
+      {"actionNewProject", "actionEditProject", "actionRefresh"},
+      {"actionOutline", "actionInsertTask", "actionEditTask", "actionSaveTask"},
+      {"actionFind"},
+      {"actionCheckUpdates"},
+  };
+  for (const auto& group : groups) {
+    if (!toolBar_->actions().isEmpty()) toolBar_->addSeparator();
+    for (const char* name : group) {
+      QAction* a = action(QString::fromLatin1(name));
+      if (a == nullptr) continue;
+      // "&Edit Project Details…" reads "Edit Project Details (Ctrl+E)".
+      QString tip = a->text().remove(QLatin1Char('&')).remove(QChar(0x2026));
+      if (!a->shortcut().isEmpty()) tip += QStringLiteral(" (%1)").arg(a->shortcut().toString(QKeySequence::NativeText));
+      a->setToolTip(tip);
+      toolBar_->addAction(a);
+      if (QWidget* button = toolBar_->widgetForAction(a)) {
+        button->setObjectName(QStringLiteral("toolbar-") + QString::fromLatin1(name));
+        button->setAccessibleName(tip);
+      }
+    }
+  }
+  addToolBar(Qt::TopToolBarArea, toolBar_);
+  toolBar_->setVisible(settings_.showToolbar);
+  QAction* show = action(QStringLiteral("actionToggleToolbar"));
+  show->setChecked(settings_.showToolbar);
+}
+
+void MainWindow::setToolbarShown(bool on) {
+  if (toolBar_ != nullptr) toolBar_->setVisible(on);
+  if (QAction* a = action(QStringLiteral("actionToggleToolbar"))) a->setChecked(on);
+  if (settings_.showToolbar == on) return;
+  settings_.showToolbar = on;
+  saveSettings();
 }
 
 void MainWindow::buildStatusBar() {
@@ -521,6 +580,7 @@ void MainWindow::applyIcons(const ThemeColors& c) {
       {"actionOutline", G::Outline},           {"actionInsertTask", G::InsertTask},
       {"actionEditTask", G::TaskDetails},      {"actionSaveTask", G::SaveTask},
       {"actionDeleteTask", G::DeleteTask},     {"actionFind", G::Find},
+      {"actionCheckUpdates", G::CheckUpdates},
   };
   for (const auto& [name, g] : glyphs) {
     if (QAction* a = action(QString::fromLatin1(name))) a->setIcon(Icons::glyph(g, c));

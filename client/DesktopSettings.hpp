@@ -34,6 +34,7 @@ struct DesktopSettings {
   int zoomPercent = 100;      // UI text zoom (View → Zoom)
   bool updateCheckDaily = true;  // the updater's daily check (SPEC.md §21)
   bool updateAsked = false;      // asked about it on first run
+  bool showToolbar = true;       // View → Show Toolbar
 };
 DesktopSettings loadDesktopSettings(const DesktopPaths& paths);
 // Writes zproject.ini, mode 0600 in a 0700 directory. Never a token.

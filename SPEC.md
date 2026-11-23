@@ -582,6 +582,15 @@ Carlo, multi-user permissions.
   gains Task Details (Alt-Enter) and Save Task (Ctrl-S). Moving to another
   task or project, or quitting, with unsaved edits asks first (Save /
   Discard; Discard / Cancel when quitting).
+  As built (0.12.0): on Linux the menu bar is always inside the window
+  (AA_DontUseNativeMenuBar and QMenuBar::setNativeMenuBar(false)), so a
+  global-menu service on the session bus (com.canonical.AppMenu.Registrar,
+  e.g. Fildem) can't take the menus away; macOS keeps the native menu bar.
+  A main toolbar under the menu bar (icons only, tooltips with the action
+  and its shortcut, not movable or floatable) has New Project, Edit Project
+  Details, Refresh | Outline, Insert Task, Task Details, Save Task | Find |
+  Check for Updates, each enabled like its menu item. View → Show Toolbar
+  toggles it and the choice is saved in zproject.ini (`[view] toolbar`).
 - Main area: the selected view. Inspector panel on the right for the selected
   task, milestone, resource or RAID item (Details, Schedule, Assignments,
   Notes journal, Links, History tabs). As built (0.12.0): Details, Schedule
@@ -679,7 +688,9 @@ Alt-↑ / Alt-↓, rename F2, delete Del or Backspace (always previewed; Edit �
 Restore brings it back), find Ctrl-F, find next / previous F3 / Shift-F3
 (Enter / Shift-Enter in the find bar, Esc closes); Ctrl-Tab / Ctrl-Shift-Tab
 (Control on macOS) leave the tree, since Tab indents there. As built
-(0.12.0): Task Details Alt-Enter (outline focus) and Save Task Ctrl-S. Ctrl-1…6 stay unassigned
+(0.12.0): Task Details Alt-Enter (outline focus) and Save Task Ctrl-S;
+View → Show Toolbar has no shortcut, and the toolbar's buttons use their
+menu items' shortcuts. Ctrl-1…6 stay unassigned
 until the views exist.
 
 ## 9. HTTP API

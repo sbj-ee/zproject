@@ -262,6 +262,10 @@ class TestClientCore : public QObject {
     const DesktopSettings back = loadDesktopSettings(p);
     QCOMPARE(back.serverUrl, s.serverUrl);
     QVERIFY(!back.cacheEnabled);
+    QVERIFY(back.showToolbar);
+    s.showToolbar = false;
+    QVERIFY(saveDesktopSettings(p, s).ok());
+    QVERIFY(!loadDesktopSettings(p).showToolbar);
     QFile f(p.settingsFile);
     QVERIFY(f.open(QIODevice::ReadOnly));
     QVERIFY(!f.readAll().contains("zpt_"));

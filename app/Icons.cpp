@@ -169,6 +169,18 @@ QIcon glyph(Glyph g, const ThemeColors& c) {
         p.setBrush(accent);
         p.drawRect(QRectF(5, 9, 6, 4.8));
         break;
+      case Glyph::CheckUpdates: {
+        p.setPen(pen(fg));
+        p.setBrush(Qt::NoBrush);
+        p.drawLine(QPointF(2.5, 11), QPointF(2.5, 13.5));
+        p.drawLine(QPointF(2.5, 13.5), QPointF(13.5, 13.5));
+        p.drawLine(QPointF(13.5, 13.5), QPointF(13.5, 11));
+        p.setPen(pen(accent, 1.6));
+        p.drawLine(QPointF(8, 2), QPointF(8, 10));
+        p.drawLine(QPointF(4.8, 7), QPointF(8, 10.2));
+        p.drawLine(QPointF(11.2, 7), QPointF(8, 10.2));
+        break;
+      }
       case Glyph::Find:
         p.setPen(pen(fg, 1.6));
         p.setBrush(Qt::NoBrush);

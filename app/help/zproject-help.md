@@ -38,6 +38,12 @@ or **Preferences → Change server or token…**.
 
 ## The window
 
+- The **menu bar** (File, Edit, Project, View, Help) is always in the
+  window on Linux; on macOS it is at the top of the screen.
+- The **toolbar** below it has the common actions: New Project, Edit
+  Project Details, Refresh, Outline, Insert Task, Task Details, Save Task,
+  Find and Check for Updates. Hover a button for its name and shortcut.
+  **View → Show Toolbar** hides or shows it; zproject remembers.
 - **Projects** (left) lists the projects your token can see. Each has a
   folder icon with a dot in its RAG colour (green, amber, red); projects that
   aren't active are greyed and named with their status.

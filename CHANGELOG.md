@@ -39,6 +39,17 @@ Selecting a task in the outline opens it for editing in the inspector.
   same on Linux (no dependence on the system icon theme) and macOS.
 - Read-only tokens and offline mode show the editor read-only, with the
   reason.
+- **Menu bar always in the window on Linux.** A global-menu service on the
+  session bus (`com.canonical.AppMenu.Registrar`, e.g. Fildem on GNOME) made
+  Qt hand the menus to it and hide the window's menu bar; when that service
+  shows nothing, File, Edit, View, Project and Help were unreachable. The
+  app now sets `AA_DontUseNativeMenuBar` and a non-native menu bar on Linux;
+  macOS keeps its native menu bar.
+- **Toolbar** with the common actions (New Project, Edit Project Details,
+  Refresh, Outline, Insert Task, Task Details, Save Task, Find, Check for
+  Updates) in the app's icons, with tooltips naming the shortcut. **View →
+  Show Toolbar** toggles it; the choice is saved (`[view] toolbar` in
+  `zproject.ini`).
 
 ## 0.11.0 — 2026-11-22
 

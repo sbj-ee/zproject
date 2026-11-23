@@ -37,6 +37,7 @@ DesktopSettings loadDesktopSettings(const DesktopPaths& paths) {
   s.zoomPercent = ini.value(QStringLiteral("appearance/zoomPercent"), s.zoomPercent).toInt();
   s.updateCheckDaily = ini.value(QStringLiteral("updates/checkDaily"), s.updateCheckDaily).toBool();
   s.updateAsked = ini.value(QStringLiteral("updates/asked"), s.updateAsked).toBool();
+  s.showToolbar = ini.value(QStringLiteral("view/toolbar"), s.showToolbar).toBool();
   return s;
 }
 
@@ -56,6 +57,7 @@ Status saveDesktopSettings(const DesktopPaths& paths, const DesktopSettings& set
     ini.setValue(QStringLiteral("appearance/zoomPercent"), settings.zoomPercent);
     ini.setValue(QStringLiteral("updates/checkDaily"), settings.updateCheckDaily);
     ini.setValue(QStringLiteral("updates/asked"), settings.updateAsked);
+    ini.setValue(QStringLiteral("view/toolbar"), settings.showToolbar);
     ini.sync();
     if (ini.status() != QSettings::NoError) {
       return Error{QStringLiteral("io"), QStringLiteral("cannot write %1").arg(paths.settingsFile), {}};

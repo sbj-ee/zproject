@@ -25,6 +25,7 @@ enum class Glyph {
   SaveTask,
   DeleteTask,
   Find,
+  CheckUpdates,
 };
 
 QIcon glyph(Glyph g, const ThemeColors& c);

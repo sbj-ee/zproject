@@ -26,6 +26,7 @@ class QMessageBox;
 class QPushButton;
 class QStackedWidget;
 class QTableWidget;
+class QToolBar;
 class QToolButton;
 
 namespace zproject::app {
@@ -115,6 +116,8 @@ class MainWindow : public QMainWindow {
   // Projects), the details page and the editing actions.
   QTableWidget* projectTable() const { return projectTable_; }
   QToolButton* showClosedButton() const { return showClosed_; }
+  QToolBar* toolBar() const { return toolBar_; }
+  void setToolbarShown(bool on);
   QStackedWidget* mainStack() const { return stack_; }
   QLabel* projectDetails() const { return projectDetails_; }
   ProjectActions* projectActions() const { return projectActions_; }
@@ -140,6 +143,7 @@ class MainWindow : public QMainWindow {
 
  private:
   void buildMenus();
+  void buildToolBar();
   void buildCentral();
   void buildDocks();
   void buildStatusBar();
@@ -184,6 +188,7 @@ class MainWindow : public QMainWindow {
   QLabel* projectSummary_ = nullptr;
   QListWidget* projects_ = nullptr;
   QToolButton* showClosed_ = nullptr;
+  QToolBar* toolBar_ = nullptr;
   QTableWidget* projectTable_ = nullptr;
   QLabel* projectDetails_ = nullptr;
   QPushButton* editButton_ = nullptr;
