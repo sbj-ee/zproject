@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QHash>
+#include <QDate>
 #include <QMainWindow>
 #include <QMessageBox>
 #include <QPalette>
@@ -32,6 +33,7 @@ class QToolButton;
 namespace zproject::app {
 
 class HelpDialog;
+class GanttView;
 class OutlineView;
 class ProjectActions;
 class TaskActions;
@@ -58,6 +60,7 @@ class MainWindow : public QMainWindow {
     bool autoConnect = true;               // false: tests call connectToServer()
     QPalette systemPalette;                // the platform palette before ours
     bool startupUpdateCheck = true;        // false: tests start the updater themselves
+    QDate today;                           // the Gantt's today line; invalid: the real date
   };
   static Options defaultOptions();
 
@@ -127,11 +130,16 @@ class MainWindow : public QMainWindow {
   void showProjectDetails();
   // The WBS outline of the selected project (View → Outline; SPEC.md §7.1).
   OutlineView* outline() const { return outline_; }
+  GanttView* gantt() const { return gantt_; }
   TaskActions* taskActions() const { return taskActions_; }
   TaskInspector* taskInspector() const { return taskInspector_; }
   // The "Save your changes?" question while one is open (tests).
   QMessageBox* unsavedBox() const { return unsavedBox_.data(); }
   void showOutline();
+  void showGantt();
+  // The window title for a project (empty: none selected).
+  static QString titleFor(const QString& projectName);
+  QString viewTaskId() const;
   QAction* action(const QString& objectName) const;
 
  signals:
@@ -144,6 +152,7 @@ class MainWindow : public QMainWindow {
  private:
   void buildMenus();
   void buildToolBar();
+  void updateWindowTitle(const QString& projectName);
   void buildCentral();
   void buildDocks();
   void buildStatusBar();
@@ -195,11 +204,12 @@ class MainWindow : public QMainWindow {
   QPushButton* deleteButton_ = nullptr;
   ProjectActions* projectActions_ = nullptr;
   // What a selected project shows: its details or its outline.
-  enum class ProjectPage { Details, Outline };
+  enum class ProjectPage { Details, Outline, Gantt };
   ProjectPage page_ = ProjectPage::Details;
   QWidget* detailsPage_ = nullptr;
   QPushButton* outlineButton_ = nullptr;
   OutlineView* outline_ = nullptr;
+  GanttView* gantt_ = nullptr;
   TaskActions* taskActions_ = nullptr;
   QString pendingSelect_;  // a project just created: select it once the feed has it
   QDockWidget* sidebarDock_ = nullptr;

@@ -28,6 +28,7 @@ QList<ShortcutInfo> shellShortcuts() {
       {QStringLiteral("actionSaveTask"), QObject::tr("Save the task editor's changes"),
        {QKeySequence(Qt::CTRL | Qt::Key_S)}},
       {QStringLiteral("actionFind"), QObject::tr("Find a task"), {QKeySequence(Qt::CTRL | Qt::Key_F)}},
+      {QStringLiteral("actionGantt"), QObject::tr("Show the Gantt"), {QKeySequence(Qt::CTRL | Qt::Key_G)}},
       {QStringLiteral("actionFindNext"), QObject::tr("Find next"), {QKeySequence(Qt::Key_F3)}},
       {QStringLiteral("actionFindPrevious"), QObject::tr("Find previous"), {QKeySequence(Qt::SHIFT | Qt::Key_F3)}},
       {QStringLiteral("actionRefresh"), QObject::tr("Refresh from the server"),

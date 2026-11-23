@@ -38,18 +38,21 @@ or **Preferences → Change server or token…**.
 
 ## The window
 
+- The **title bar** shows zproject's version and the selected project, for
+  example "zproject 0.13.0 — Kitchen remodel"; a * (the dot in the close
+  button on macOS) means the task editor has unsaved changes.
 - The **menu bar** (File, Edit, Project, View, Help) is always in the
   window on Linux; on macOS it is at the top of the screen.
 - The **toolbar** below it has the common actions: New Project, Edit
-  Project Details, Refresh, Outline, Insert Task, Task Details, Save Task,
+  Project Details, Refresh, Outline, Gantt, Insert Task, Task Details, Save Task,
   Find and Check for Updates. Hover a button for its name and shortcut.
   **View → Show Toolbar** hides or shows it; zproject remembers.
 - **Projects** (left) lists the projects your token can see. Each has a
   folder icon with a dot in its RAG colour (green, amber, red); projects that
   aren't active are greyed and named with their status.
 - The **centre** shows the selected project: its details, or its tasks in
-  the outline (**View → Outline**). The Gantt and resource views arrive in
-  later versions.
+  the outline (**View → Outline**), or its Gantt (**View → Gantt**). The
+  resource views arrive in later versions.
 - The **Inspector** (right) shows the selected item's details; for a task
   it is the task editor (below).
 - The **status bar** shows the connection, the server's version and when the
@@ -85,6 +88,29 @@ When a change affects more than the task itself (a summary's progress, say)
 or deletes something, zproject shows what will change before writing
 anything. If someone else changed the task a moment ago, nothing is
 overwritten: you choose, or the outline refreshes so you can try again.
+
+## The Gantt
+
+**View → Gantt** (Ctrl + G) shows the project's tasks as a timeline next to
+a task table. The two scroll together, and collapsing a summary in the table
+hides its rows on the right. The Gantt is read-only: it shows the dates
+stored on each task and changes nothing.
+
+- **Bars**: an automatically scheduled task is a solid bar; a task with
+  manual dates is an outlined bar. A summary is a bracket over its subtasks,
+  a milestone is a diamond. The darker band inside a bar is its % complete.
+- **Deadlines** are small flags: outlined while the finish is on time, filled
+  red when the finish is after the deadline.
+- **Today** is the dashed red line. **Today** (or **T**) scrolls to it.
+- **Timescale**: Day, Week, Month or Quarter. Ctrl + Shift + = and
+  Ctrl + Shift + − (or Ctrl + mouse wheel) zoom in and out; Shift + wheel
+  scrolls sideways. Weekends are shaded at Day and Week.
+- A task with no dates yet says *unscheduled* in the Start column and has no
+  bar.
+- **↑ / ↓** move between tasks; the inspector follows. **Enter**, or a
+  double-click on a bar, opens the task editor there.
+- Screen readers read each bar in words, for example "Task 1.2 Drawings, 3
+  days, 9–11 Sep, 40% complete"; hovering a bar shows the same text.
 
 ## Editing a task
 
@@ -129,8 +155,8 @@ zwriter.
 
 **View → Zoom In / Zoom Out / Actual Size** (Ctrl + = , Ctrl + − , Ctrl + 0;
 ⌘ on macOS) changes the size of all interface text from 50 % to 300 %. In
-the Gantt view of later versions, Ctrl + Shift + = / − and Ctrl + mouse wheel
-zoom the timeline instead.
+the Gantt, Ctrl + Shift + = / − and Ctrl + mouse wheel zoom the timeline
+instead.
 
 ## Preferences
 
@@ -189,6 +215,9 @@ the server machine.
 | Delete task (outline) | Del or Backspace |
 | Leave the outline | Ctrl + Tab (Control, not ⌘, on macOS) |
 | Find / next / previous | Ctrl + F / F3 / Shift + F3 |
+| Show the Gantt | Ctrl + G |
+| Gantt timescale in / out | Ctrl + Shift + = / Ctrl + Shift + − (or Ctrl + wheel) |
+| Scroll the Gantt to today | T |
 | Help | F1 |
 | Keyboard shortcuts | Ctrl + / |
 | Quit | Ctrl + Q |
