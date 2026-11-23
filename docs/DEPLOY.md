@@ -23,7 +23,7 @@ Scratch files go in `~/agent-work/zproject-X.Y.Z/`.
 | Asset | Contents |
 |---|---|
 | `zprojectd_X.Y.Z_amd64.deb` | `/usr/bin/zprojectd`, `/etc/zproject/zprojectd.conf` (conffile), `zprojectd.service`, `zprojectd-backup.service`, `zprojectd-backup.timer` |
-| `zproject_X.Y.Z_amd64.deb` | `/usr/bin/zproject-cli`, `/usr/bin/zproject` (desktop placeholder), desktop file, icons |
+| `zproject_X.Y.Z_amd64.deb` | `/usr/bin/zproject` (the desktop app), `/usr/bin/zproject-cli`, desktop file, icons |
 | `zproject-X.Y.Z-Darwin.dmg` | `zproject.app` with `Contents/MacOS/zproject-cli`; ad-hoc signed, not notarized |
 | `SHA256SUMS`, `SHA256SUMS.minisig` | checksums, and their minisign signature |
 
@@ -198,7 +198,11 @@ zproject-cli login --url https://<server-host>.<tailnet>.ts.net --store file --f
 rm <linux-client>.token
 stat -c '%a' ~/.config/zproject/token ~/.config/zproject/cli.ini   # 600 600
 zproject-cli status
+QT_QPA_PLATFORM=offscreen zproject --smoke-test                  # ... smoke test: ok
 ```
+
+Then start **zproject** from the applications menu (or run `zproject`); see
+section 5.1 for the first run.
 
 ## 5. macOS client
 
@@ -231,6 +235,37 @@ zproject-cli status
 On macOS the default `--store` is the login Keychain (service
 `ee.sbj.zproject`). `--store file` keeps the token in a 0600 file, the same
 as on Linux.
+
+To check the app itself without touching your settings, run
+`/Applications/zproject.app/Contents/MacOS/zproject --smoke-test`: it opens
+the window briefly in a throwaway home and prints `... smoke test: ok`.
+
+### 5.1 The desktop app (Linux and macOS)
+
+Log the CLI in first (sections 4 and 5): the app uses the same device token
+and server URL, so each machine keeps one identity.
+
+1. **First run.** The sign-in dialog offers *Use this machine's zproject
+   token (zpt_…)*, showing only the token's label, never the secret. Choose
+   it. Without a CLI login it asks for the server URL and a device token
+   instead, and stores the token the way `zproject-cli login` would.
+2. **Updates.** After a few seconds it asks whether to check for updates once
+   a day (the default is yes). Updates are verified (minisign signature, then
+   SHA-256) before anything installs. On Linux the install runs
+   `pkexec apt install` and asks for your password; it never touches
+   `zprojectd`. On macOS it opens the verified `.dmg`.
+3. **Offline.** The app keeps a read-only copy of the plans so it opens fast
+   and works while the server is away; editing is off until it answers
+   again. The copy never holds a token.
+
+| | Linux | macOS |
+|---|---|---|
+| Settings | `~/.config/zproject/zproject.ini` | `~/Library/Preferences/zproject/zproject.ini` |
+| Read-only cache (0600, in a 0700 directory) | `~/.cache/zproject/cache.db` | `~/Library/Caches/zproject/cache.db` |
+| Token and server URL | shared with `zproject-cli` (`cli.ini`, the token store) | the same |
+
+**Preferences → Clear cache** empties the cache. Preferences can also turn
+the cache off, so plan data is never kept on that machine.
 
 ## 6. Smoke tests
 
@@ -301,12 +336,12 @@ zproject-cli projects create "<client> smoke"; zproject-cli projects show <ID>; 
   sudo systemctl start zprojectd.service
   ```
 - **Linux client:** `zproject-cli logout`, then `sudo apt remove zproject`,
-  then `rm -rf ~/.config/zproject`.
+  then `rm -rf ~/.config/zproject ~/.cache/zproject`.
 - **macOS client:**
   1. `zproject-cli logout`
   2. `rm /usr/local/bin/zproject-cli`
   3. Move `zproject.app` to the Trash.
-  4. `rm -rf ~/.config/zproject`
+  4. `rm -rf ~/.config/zproject ~/Library/Preferences/zproject ~/Library/Caches/zproject`
 - **Server:**
   ```sh
   sudo tailscale serve --https=443 off

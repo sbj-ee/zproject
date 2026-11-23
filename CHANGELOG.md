@@ -7,6 +7,34 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.16.0 — 2026-11-23
+
+Desktop client plan, PR 11: packaging and docs polish (plan §6; SPEC §18,
+§19, §20). This completes the desktop client plan's eleven PRs.
+
+- **`zproject --smoke-test`**: builds the real main window in a throwaway
+  home, config and cache (it never reads the user's settings, connects, or
+  checks for updates), shows it, checks the platform plugin, the Fusion
+  style, the bundled help and icon, the menus and views, and exits 0 with
+  "smoke test: ok". It runs as a ctest, from the mounted `.dmg` in the
+  macOS CI job (the bundle's own cocoa plugin), and from the installed
+  `.deb` in the Ubuntu 24.04 container.
+- **`.deb`**: the desktop package now depends on `qt6-qpa-plugins`. Qt's
+  platform plugins (xcb, offscreen) are loaded at run time, so
+  `dpkg-shlibdeps` never listed them; without one the app cannot open a
+  window. CI checks the dependency.
+- **Accessibility pass** (`tst_accessibility`): on every view (details, all
+  projects, outline, Gantt, milestones, activity) and in the task editor,
+  every control Tab reaches has a name a screen reader can read; every menu
+  item has text and every toolbar button a name; every listed shortcut is a
+  real action and no key is used twice. It found one gap, now fixed: the
+  task editor's Details and Schedule tabs were Tab stops with no name.
+- **docs/DEPLOY.md**: the `.deb` row no longer calls the app a placeholder;
+  new section 5.1 on the desktop app (first run with the CLI's token,
+  updates, the offline cache, where settings and cache live, Clear cache);
+  `--smoke-test` in the client steps; uninstall also removes the app's
+  settings and cache. README points to it.
+
 ## 0.15.0 — 2026-11-23
 
 Desktop client plan, PR 10: project activity (plan §3.6; SPEC §8.3, §18).

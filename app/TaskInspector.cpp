@@ -254,6 +254,8 @@ TaskInspector::TaskInspector(SessionFn session, QWidget* parent) : QWidget(paren
 QFormLayout* TaskInspector::addTab(const QString& title, const QString& objectName) {
   auto* scroll = new QScrollArea(this);
   scroll->setObjectName(objectName);
+  // Tab stops on the scroll area: a screen reader names it after its tab.
+  scroll->setAccessibleName(title);
   scroll->setWidgetResizable(true);
   scroll->setFrameShape(QFrame::NoFrame);
   auto* inner = new QWidget(scroll);
