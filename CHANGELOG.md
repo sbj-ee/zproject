@@ -7,6 +7,37 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.17.0 — 2026-11-23
+
+Scheduling plan, PR S1: working calendars (plan §2.1; SPEC §6.1, §17,
+§19). Core only. Nothing uses it yet; calendars reach the store and API in
+S4, and the scheduler in S2.
+
+- **`core/WorkCalendar`**: a calendar's work week (working flag and hours
+  per weekday), `base` inheritance (a missing work week comes from the
+  base, exceptions add to the base's, and the calendar's own win where they
+  overlap; loops, unknown ids and chains deeper than 8 are errors) and
+  exceptions (`holiday` and `non_working` take days out; `custom_hours`
+  changes hours, never day counting). Answers `isWorking`, `hoursOn`,
+  `nextWorking` / `previousWorking`, `addWorkingDays(d, n)` (n may be
+  negative) and `workingDaysBetween(a, b)`. `prepare(from, to)` builds a
+  bitmap with prefix counts so these are O(1) / O(log n); 20,000 queries
+  take about 2 ms. A calendar with no working day gives no date instead of
+  looping.
+- **`core/Holidays`**: US federal holidays for any year from 1971, computed
+  in code (no network): fixed dates moved Saturday → Friday and Sunday →
+  Monday, the Monday holidays, Thanksgiving, and Juneteenth from 2021,
+  labelled "(observed)" when moved. A year lists the holidays observed in
+  it, so 2027 has twelve (New Year's Day 2028 falls on 31 December 2027).
+- **Validation** for calendars and exceptions (name, hours per day, a work
+  week with at least one working day, exception range and kind), for the
+  API in S4.
+- **`tst_workcalendar`** (23 tests): Standard, exceptions, custom hours,
+  own work weeks, inheritance and its errors; the fast path checked against
+  a day-by-day count on random calendars (fixed seeds, queries inside and
+  outside the prepared range); OPM's dates for 2020, 2021, 2022, 2024, 2026
+  and 2027; and a 20,000-query budget of 50 ms.
+
 ## 0.16.0 — 2026-11-23
 
 Desktop client plan, PR 11: packaging and docs polish (plan §6; SPEC §18,
