@@ -35,6 +35,7 @@
 
 #include "app/EditDialogs.hpp"
 #include "app/GanttView.hpp"
+#include "app/MilestonesView.hpp"
 #include "app/HelpDialog.hpp"
 #include "app/Icons.hpp"
 #include "app/OutlineModel.hpp"
@@ -310,6 +311,29 @@ void MainWindow::buildCentral() {
   gantt_ = new GanttView(stack_);
   if (options_.today.isValid()) gantt_->setToday(options_.today);
   stack_->addWidget(gantt_);
+  milestones_ = new MilestonesView(stack_);
+  if (options_.today.isValid()) milestones_->setToday(options_.today);
+  // A milestone opens where it lives: its project, in the outline or the
+  // Gantt, selected (and so in the inspector).
+  connect(milestones_, &MilestonesView::openTask, this, [this](const QString& project, const QString& task, bool gantt) {
+    page_ = gantt ? ProjectPage::Gantt : ProjectPage::Outline;
+    if (project != currentProjectId()) selectProject(project);
+    if (gantt) {
+      showGantt();
+      gantt_->selectTask(task);
+    } else {
+      showOutline();
+      // A status filter that hides it is cleared; any other is kept.
+      if (!outline_->selectTask(task)) {
+        outline_->setStatusFilter(QString());
+        outline_->selectTask(task);
+      }
+    }
+  });
+  connect(milestones_, &MilestonesView::allProjectsChanged, this, [this] {
+    if (page_ == ProjectPage::Milestones) showProject(currentProjectId());
+  });
+  stack_->addWidget(milestones_);
   v->addWidget(stack_, 1);
   setCentralWidget(central);
 }
@@ -454,6 +478,7 @@ void MainWindow::buildMenus() {
   add(view, QStringLiteral("actionProjectDetails"), tr("Project &Details"), [this] { showProjectDetails(); });
   add(view, QStringLiteral("actionOutline"), tr("&Outline"), [this] { showOutline(); });
   add(view, QStringLiteral("actionGantt"), tr("&Gantt"), [this] { showGantt(); });
+  add(view, QStringLiteral("actionMilestones"), tr("&Milestones"), [this] { showMilestones(); });
   view->addSeparator();
   QMenu* themes = view->addMenu(tr("&Theme"));
   themeGroup_ = new QActionGroup(this);
@@ -524,7 +549,7 @@ void MainWindow::buildToolBar() {
   toolBar_->toggleViewAction()->setVisible(false);
   const QList<QList<const char*>> groups = {
       {"actionNewProject", "actionEditProject", "actionRefresh"},
-      {"actionOutline", "actionGantt", "actionInsertTask", "actionEditTask", "actionSaveTask"},
+      {"actionOutline", "actionGantt", "actionMilestones", "actionInsertTask", "actionEditTask", "actionSaveTask"},
       {"actionFind"},
       {"actionCheckUpdates"},
   };
@@ -601,6 +626,7 @@ void MainWindow::applyIcons(const ThemeColors& c) {
       {"actionEditTask", G::TaskDetails},      {"actionSaveTask", G::SaveTask},
       {"actionDeleteTask", G::DeleteTask},     {"actionFind", G::Find},
       {"actionCheckUpdates", G::CheckUpdates}, {"actionGantt", G::Gantt},
+      {"actionMilestones", G::Milestones},
   };
   for (const auto& [name, g] : glyphs) {
     if (QAction* a = action(QString::fromLatin1(name))) a->setIcon(Icons::glyph(g, c));
@@ -845,6 +871,14 @@ void MainWindow::showGantt() {
   if (!was) gantt_->table()->setFocus(Qt::OtherFocusReason);
 }
 
+void MainWindow::showMilestones() {
+  if (currentProjectId().isEmpty()) return;
+  const bool was = stack_->currentWidget() == milestones_;
+  page_ = ProjectPage::Milestones;
+  showProject(currentProjectId());
+  if (!was) milestones_->table()->setFocus(Qt::OtherFocusReason);
+}
+
 // The task selected in the outline or the Gantt, whichever is showing.
 QString MainWindow::viewTaskId() const {
   if (stack_->currentWidget() == outline_) return outline_->currentTaskId();
@@ -958,6 +992,7 @@ void MainWindow::updateEditActions() {
   enable("actionProjectDetails", haveProject);
   enable("actionOutline", haveProject);
   enable("actionGantt", haveProject);
+  enable("actionMilestones", haveProject);
   if (outlineButton_) outlineButton_->setEnabled(haveProject);
   const bool inOutline = stack_ && stack_->currentWidget() == outline_ && haveProject;
   const QString task = inOutline ? outline_->currentTaskId() : QString();
@@ -1029,7 +1064,7 @@ void MainWindow::showProject(const QString& id) {
   const int n = static_cast<int>(tasks.size());
   projectSummary_->setText((n == 1 ? tr("1 task") : tr("%1 tasks").arg(n)) + tr(" · %1 complete").arg(done) +
                            (milestones == 1 ? tr(" · 1 milestone") : tr(" · %1 milestones").arg(milestones)) +
-                           tr("\nOpen Outline shows its tasks; the Gantt and resource views arrive in later releases."));
+                           tr("\nOpen Outline shows its tasks; View → Gantt and View → Milestones show its schedule."));
   auto get = [&p](const char* k) { return p->value(QLatin1String(k)).toString(); };
   const QString rag = get("rag");
   QString html = QStringLiteral("<table cellspacing='0' cellpadding='3'>");
@@ -1063,6 +1098,23 @@ void MainWindow::showProject(const QString& id) {
     gantt_->setProject(id, name);
     gantt_->reload(tasks, session_->cache()->wbs(id));
     stack_->setCurrentWidget(gantt_);
+  } else if (page_ == ProjectPage::Milestones) {
+    milestones_->setProject(id, name);
+    QList<MilestoneSource> sources;
+    if (milestones_->allProjects()) {
+      // The projects the sidebar shows: done and cancelled ones only when
+      // they are shown there too.
+      for (const QJsonObject& other : session_->cache()->projects()) {
+        const QString oid = other.value(QStringLiteral("id")).toString();
+        if (isClosed(other.value(QStringLiteral("status")).toString()) && !showClosed_->isChecked() && oid != id) continue;
+        sources.append({oid, other.value(QStringLiteral("name")).toString(), session_->cache()->tasks(oid),
+                        session_->cache()->wbs(oid)});
+      }
+    } else {
+      sources.append({id, name, tasks, session_->cache()->wbs(id)});
+    }
+    milestones_->reload(sources);
+    stack_->setCurrentWidget(milestones_);
   } else {
     stack_->setCurrentWidget(detailsPage_);
   }

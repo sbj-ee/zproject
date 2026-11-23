@@ -10,6 +10,7 @@ add_library(zproject_app_lib STATIC
   HelpDialog.cpp HelpDialog.hpp
   Icons.cpp Icons.hpp
   MainWindow.cpp MainWindow.hpp
+  MilestonesView.cpp MilestonesView.hpp
   OutlineModel.cpp OutlineModel.hpp
   OutlineView.cpp OutlineView.hpp
   TaskInspector.cpp TaskInspector.hpp

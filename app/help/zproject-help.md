@@ -112,6 +112,22 @@ stored on each task and changes nothing.
 - Screen readers read each bar in words, for example "Task 1.2 Drawings, 3
   days, 9–11 Sep, 40% complete"; hovering a bar shows the same text.
 
+## Milestones
+
+**View → Milestones** (Ctrl + Shift + M) lists the project's milestones by
+date: its WBS code, date, deadline, status, the summary it sits under, and
+how far away it is ("In 4 days", "Today", "6 days late"). Milestones with no
+date yet come last. Tick **All projects** to see every project's milestones
+in one list (done and cancelled projects only when the sidebar shows them).
+
+- A milestone that is late, or dated after its deadline, is marked ⚠ and
+  says so in words.
+- **Enter** (or a double-click) opens the milestone in the outline;
+  **Show in Gantt** opens it on the timeline. Either way the inspector then
+  shows it for editing. The list itself is read-only.
+- To make a milestone, select a task in the outline and use
+  **Edit → Convert to Milestone**.
+
 ## Editing a task
 
 Select a task in the outline: the **Inspector** shows it with three tabs.
@@ -216,6 +232,7 @@ the server machine.
 | Leave the outline | Ctrl + Tab (Control, not ⌘, on macOS) |
 | Find / next / previous | Ctrl + F / F3 / Shift + F3 |
 | Show the Gantt | Ctrl + G |
+| Show the milestones | Ctrl + Shift + M |
 | Gantt timescale in / out | Ctrl + Shift + = / Ctrl + Shift + − (or Ctrl + wheel) |
 | Scroll the Gantt to today | T |
 | Help | F1 |

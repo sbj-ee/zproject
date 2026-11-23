@@ -27,6 +27,7 @@ enum class Glyph {
   Find,
   CheckUpdates,
   Gantt,
+  Milestones,
 };
 
 QIcon glyph(Glyph g, const ThemeColors& c);
