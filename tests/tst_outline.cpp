@@ -635,7 +635,7 @@ class TestOutline : public QObject {
     QCOMPARE(restore->text(), QStringLiteral("Re&store “3 Build”…"));
     restore->trigger();
     d = waitPreview(*w);
-    QVERIFY(d);
+    QVERIFY2(d, qPrintable(w->taskActions()->lastMessage()));
     QCOMPARE(d->table()->rowCount(), 3);
     d->confirmButton()->click();
     QVERIFY(waitRows(*w, {QStringLiteral("1 Design"), QStringLiteral("1.1 Survey"), QStringLiteral("1.2 Drawings"),

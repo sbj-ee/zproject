@@ -228,6 +228,11 @@ void TaskActions::restoreLast() {
   op.done = tr("Restored %1.").arg(d.label);
   op.method = "POST";
   op.path = QStringLiteral("/v1/tasks/%1/restore").arg(d.id);
+  // An empty JSON object rather than no body: some Qt versions (6.12 on
+  // macOS) send a bodiless POST without a Content-Length, which zprojectd
+  // refuses. zproject-cli does the same for `backup`.
+  op.body = QJsonObject{};
+  op.hasBody = true;
   op.destructive = true;  // the server treats restore as destructive (SPEC.md §9.3)
   op.previewTitle = tr("Restore Task");
   op.previewIntro = tr("Restore %1 and the subtasks deleted with it?").arg(d.label);
