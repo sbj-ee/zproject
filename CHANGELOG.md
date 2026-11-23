@@ -7,6 +7,12 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.13.2 — 2026-11-23
+
+- SPEC.md §22: `scripts/check-version.sh` also checks `api/openapi.yaml`
+  `info.version`, which follows the product version while the API stays
+  `/v1` (`apiVersion` 1).
+
 ## 0.13.1 — 2026-11-23
 
 Documentation and version drift fixes.

@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.13.1**, the version in `CMakeLists.txt`
+This specification describes zproject **0.13.2**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -1206,11 +1206,14 @@ shows when the server is older or newer than itself.
 - **Every pull request bumps the version** — patch for fixes and documentation,
   minor for features (SemVer) — and adds a dated `## X.Y.Z — YYYY-MM-DD`
   CHANGELOG entry. Dependabot PRs are exempt. `scripts/check-version.sh`
-  checks CMake, CHANGELOG, README and this SPEC agree;
+  checks CMake, CHANGELOG, README, this SPEC and `api/openapi.yaml`
+  `info.version` agree;
   `check-version-increase.sh` checks the PR is greater than its base.
 - API versioning is separate: `/v1` changes only additively within a major
   app version line; breaking API changes need `/v2`. Database
-  `schemaVersion` increments with each migration.
+  `schemaVersion` increments with each migration. The OpenAPI document's
+  `info.version` follows the product version (since 0.13.1); the API
+  itself stays `/v1`, `apiVersion` 1 in `/v1/health`.
 - Tags `vX.Y.Z` only after merge and only with Stephen's yes.
 
 ## 23. Branding
