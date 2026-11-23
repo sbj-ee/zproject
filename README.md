@@ -1,8 +1,8 @@
 # zproject
 
-**0.10.0**
+**0.11.0**
 
-Current release: **0.9.0**
+Current release: **0.10.0**
 
 Project management for the z-suite: projects with a WBS, milestones,
 dependencies, a critical-path schedule, baselines, resources and cost, a RAID
@@ -12,7 +12,7 @@ one repository (C++20, Qt 6):
 | Program | What it is |
 |---|---|
 | `zprojectd` | Headless server (Qt Core/Network, SQLite). Listens on `127.0.0.1:8788` only and is published on the tailnet with `tailscale serve`. Runs on a home server (Pop!_OS 24.04, amd64). |
-| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. The app shell (menus, themes, Help, Preferences), the signed in-app updater, and the project list and project details editor; its client core (non-blocking `/v1` client, read-only cache, change-feed sync) is in `client/` and tested headless. |
+| `zproject` | Desktop client (Qt Widgets) for Linux amd64 and macOS on Apple Silicon. The app shell (menus, themes, Help, Preferences), the signed in-app updater, the project list and project details editor, and the task outline (WBS tree); its client core (non-blocking `/v1` client, read-only cache, change-feed sync) is in `client/` and tested headless. |
 | `zproject-cli` | Command-line client of the `/v1` API, shipped with the desktop app (Linux `.deb`, inside `zproject.app` on macOS). |
 
 The full design is in [SPEC.md](SPEC.md).
@@ -31,7 +31,10 @@ The desktop app (`zproject`) has its shell: themes, the offline banner,
 first-run sign-in that reuses `zproject-cli`'s token, Preferences and Help. Projects can be listed (sidebar
 and View → All Projects), created, edited and deleted: every write is a dry
 run first, deletes show what goes with them, and a save that crosses someone
-else's change opens a conflict dialog instead of overwriting it.
+else's change opens a conflict dialog instead of overwriting it. A project's
+tasks open as an outline (View → Outline): WBS codes, roll-ups locked on
+summary rows, insert, indent, outdent, move, delete and restore from the
+keyboard, filter by status and find.
 **Help → Check for Updates…** installs new desktop releases after checking
 their minisign signature and SHA-256 (SPEC.md §21); it never touches
 `zprojectd`.
@@ -44,10 +47,15 @@ their minisign signature and SHA-256 (SPEC.md §21); it never touches
 |---|---|---|
 | ![Project details](docs/screenshots/projects-details-light.png) | ![All projects table](docs/screenshots/projects-table-light.png) | ![Conflict dialog](docs/screenshots/project-conflict-light.png) |
 
+| Outline | Filter and find | Indent preview |
+|---|---|---|
+| ![Task outline](docs/screenshots/outline-light.png) | ![Outline filtered, with find](docs/screenshots/outline-filter-find.png) | ![Indent preview](docs/screenshots/outline-indent-preview.png) |
+
 More in [docs/screenshots](docs/screenshots/): High contrast, first run,
-Preferences, Help, About, the update dialog, the project editor and the delete
-preview, rendered offscreen from example data
-(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R 'tst_appshell|tst_update|tst_projects'`).
+Preferences, Help, About, the update dialog, the project editor, the delete
+previews and the outline in Dark and High contrast, rendered offscreen from
+example data
+(`ZPROJECT_SCREENSHOT_DIR=$PWD/docs/screenshots ctest --test-dir build -R 'tst_appshell|tst_update|tst_projects|tst_outline'`).
 
 ## Running the server
 

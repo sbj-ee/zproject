@@ -29,13 +29,17 @@
 #include <QStatusBar>
 #include <QStyleHints>
 #include <QTimer>
+#include <QTreeView>
 #include <QVBoxLayout>
 
 #include "app/EditDialogs.hpp"
 #include "app/HelpDialog.hpp"
+#include "app/OutlineModel.hpp"
+#include "app/OutlineView.hpp"
 #include "app/ProjectActions.hpp"
 #include "app/Shortcuts.hpp"
 #include "app/SignInDialog.hpp"
+#include "app/TaskActions.hpp"
 #include "app/Theme.hpp"
 #include "app/UpdateManager.hpp"
 #include "core/Version.hpp"
@@ -132,6 +136,20 @@ MainWindow::MainWindow(Options options, QWidget* parent) : QMainWindow(parent), 
     if (created) pendingSelect_ = id;
   });
   buildCentral();
+  taskActions_ = new TaskActions(this, [this] { return session_.get(); }, outline_->model(), this);
+  connect(taskActions_, &TaskActions::notice, this, [this](const QString& text, bool error) {
+    statusBar()->showMessage(text, 10000);
+    outline_->showMessage(text, error);
+    updateEditActions();
+  });
+  connect(taskActions_, &TaskActions::changed, this,
+          [this](const QString& id, bool editTitle) { outline_->setPending(id, editTitle); });
+  connect(taskActions_, &TaskActions::deletedChanged, this, [this] { updateEditActions(); });
+  connect(outline_->model(), &OutlineModel::editRequested, taskActions_, &TaskActions::edit);
+  connect(outline_, &OutlineView::currentTaskChanged, this, [this](const QString& id) {
+    showTaskInspector(id);
+    updateEditActions();
+  });
   buildDocks();
   buildMenus();
   buildStatusBar();
@@ -195,6 +213,7 @@ void MainWindow::buildCentral() {
   stack_->addWidget(empty_);
 
   auto* page = new QWidget(stack_);
+  detailsPage_ = page;
   auto* pv = new QVBoxLayout(page);
   pv->setContentsMargins(28, 22, 28, 22);
   projectTitle_ = new QLabel(page);
@@ -215,6 +234,10 @@ void MainWindow::buildCentral() {
   deleteButton_->setObjectName(QStringLiteral("deleteProjectButton"));
   connect(deleteButton_, &QPushButton::clicked, this, [this] { projectActions_->deleteProject(currentProjectId()); });
   buttons->addWidget(deleteButton_);
+  outlineButton_ = new QPushButton(tr("Open Outline"), page);
+  outlineButton_->setObjectName(QStringLiteral("openOutlineButton"));
+  connect(outlineButton_, &QPushButton::clicked, this, [this] { showOutline(); });
+  buttons->addWidget(outlineButton_);
   buttons->addStretch(1);
   pv->addLayout(buttons);
   projectDetails_ = new QLabel(page);
@@ -245,6 +268,8 @@ void MainWindow::buildCentral() {
     }
   });
   stack_->addWidget(projectTable_);
+  outline_ = new OutlineView(stack_);
+  stack_->addWidget(outline_);
   v->addWidget(stack_, 1);
   setCentralWidget(central);
 }
@@ -319,6 +344,44 @@ void MainWindow::buildMenus() {
   auto* quit = add(file, QStringLiteral("actionQuit"), tr("&Quit"), [this] { close(); });
   quit->setMenuRole(QAction::QuitRole);
 
+  // Edit: the outline's task actions (SPEC.md §8.1, §8.4). The structural
+  // keys belong to the task tree only, so Tab, Enter and Del keep their
+  // usual meaning everywhere else.
+  QMenu* edit = menuBar()->addMenu(tr("&Edit"));
+  auto current = [this] { return outline_->currentTaskId(); };
+  add(edit, QStringLiteral("actionInsertTask"), tr("&Insert Task"), [this] {
+    // Read the current row first: opening the outline focuses the tree, which
+    // picks a current row of its own.
+    const QString below = page_ == ProjectPage::Outline ? outline_->currentTaskId() : QString();
+    showOutline();
+    taskActions_->insertBelow(currentProjectId(), below);
+  });
+  add(edit, QStringLiteral("actionIndentTask"), tr("In&dent"), [this, current] { taskActions_->indent(current()); });
+  add(edit, QStringLiteral("actionOutdentTask"), tr("&Outdent"), [this, current] { taskActions_->outdent(current()); });
+  add(edit, QStringLiteral("actionMoveTaskUp"), tr("Move &Up"), [this, current] { taskActions_->moveUp(current()); });
+  add(edit, QStringLiteral("actionMoveTaskDown"), tr("Move Do&wn"), [this, current] { taskActions_->moveDown(current()); });
+  edit->addSeparator();
+  add(edit, QStringLiteral("actionRenameTask"), tr("&Rename Task"), [this, current] { outline_->editTitle(current()); });
+  add(edit, QStringLiteral("actionToggleMilestone"), tr("Convert to &Milestone"),
+      [this, current] { taskActions_->toggleMilestone(current()); });
+  edit->addSeparator();
+  add(edit, QStringLiteral("actionDeleteTask"), tr("Delete &Task…"), [this, current] { taskActions_->deleteTask(current()); });
+  add(edit, QStringLiteral("actionRestoreTask"), tr("Re&store Deleted Task…"), [this] { taskActions_->restoreLast(); });
+  edit->addSeparator();
+  add(edit, QStringLiteral("actionFind"), tr("&Find…"), [this] {
+    if (currentProjectId().isEmpty()) return;
+    showOutline();
+    outline_->showFind();
+  });
+  add(edit, QStringLiteral("actionFindNext"), tr("Find &Next"), [this] { outline_->findNext(false); });
+  add(edit, QStringLiteral("actionFindPrevious"), tr("Find Pre&vious"), [this] { outline_->findNext(true); });
+  for (const char* name : {"actionInsertTask", "actionIndentTask", "actionOutdentTask", "actionMoveTaskUp",
+                           "actionMoveTaskDown", "actionRenameTask", "actionDeleteTask"}) {
+    QAction* a = action(QString::fromLatin1(name));
+    a->setShortcutContext(Qt::WidgetShortcut);
+    outline_->tree()->addAction(a);
+  }
+
   QMenu* project = menuBar()->addMenu(tr("&Project"));
   add(project, QStringLiteral("actionEditProject"), tr("&Edit Project Details…"),
       [this] { projectActions_->editProject(currentProjectId()); });
@@ -328,6 +391,7 @@ void MainWindow::buildMenus() {
   QMenu* view = menuBar()->addMenu(tr("&View"));
   add(view, QStringLiteral("actionAllProjects"), tr("All &Projects"), [this] { showProjectTable(); });
   add(view, QStringLiteral("actionProjectDetails"), tr("Project &Details"), [this] { showProjectDetails(); });
+  add(view, QStringLiteral("actionOutline"), tr("&Outline"), [this] { showOutline(); });
   view->addSeparator();
   QMenu* themes = view->addMenu(tr("&Theme"));
   themeGroup_ = new QActionGroup(this);
@@ -619,7 +683,18 @@ void MainWindow::showProjectTable() {
   updateEditActions();
 }
 
-void MainWindow::showProjectDetails() { showProject(currentProjectId()); }
+void MainWindow::showProjectDetails() {
+  page_ = ProjectPage::Details;
+  showProject(currentProjectId());
+}
+
+void MainWindow::showOutline() {
+  if (currentProjectId().isEmpty()) return;
+  const bool was = stack_->currentWidget() == outline_;
+  page_ = ProjectPage::Outline;
+  showProject(currentProjectId());
+  if (!was) outline_->tree()->setFocus(Qt::OtherFocusReason);
+}
 
 void MainWindow::reloadProjects() {
   QString current = currentProjectId();
@@ -715,6 +790,33 @@ void MainWindow::updateEditActions() {
   enable("actionEditProject", editing && haveProject);
   enable("actionDeleteProject", editing && haveProject);
   enable("actionProjectDetails", haveProject);
+  enable("actionOutline", haveProject);
+  if (outlineButton_) outlineButton_->setEnabled(haveProject);
+  const bool inOutline = stack_ && stack_->currentWidget() == outline_ && haveProject;
+  const QString task = inOutline ? outline_->currentTaskId() : QString();
+  const bool canEdit = editing && inOutline && taskActions_ != nullptr && !taskActions_->busy();
+  const bool haveTask = !task.isEmpty();
+  if (outline_) outline_->setEditable(editing);
+  enable("actionInsertTask", editing && haveProject);
+  enable("actionIndentTask", canEdit && haveTask && taskActions_->canIndent(task));
+  enable("actionOutdentTask", canEdit && haveTask && taskActions_->canOutdent(task));
+  enable("actionMoveTaskUp", canEdit && haveTask && taskActions_->canMoveUp(task));
+  enable("actionMoveTaskDown", canEdit && haveTask && taskActions_->canMoveDown(task));
+  enable("actionRenameTask", canEdit && haveTask);
+  enable("actionToggleMilestone", canEdit && haveTask && taskActions_->canToggleMilestone(task));
+  if (QAction* m = action(QStringLiteral("actionToggleMilestone"))) {
+    m->setText(haveTask && outline_->model()->isMilestone(task) ? tr("Convert to &Task") : tr("Convert to &Milestone"));
+  }
+  enable("actionDeleteTask", canEdit && haveTask);
+  const bool canRestore = editing && taskActions_ != nullptr && !taskActions_->deleted().isEmpty();
+  enable("actionRestoreTask", canRestore);
+  if (QAction* r = action(QStringLiteral("actionRestoreTask"))) {
+    r->setText(canRestore ? tr("Re&store “%1”…").arg(taskActions_->deleted().last().label)
+                          : tr("Re&store Deleted Task…"));
+  }
+  enable("actionFind", haveProject);
+  enable("actionFindNext", inOutline);
+  enable("actionFindPrevious", inOutline);
   if (editButton_) editButton_->setEnabled(editing && haveProject);
   if (deleteButton_) deleteButton_->setEnabled(editing && haveProject);
   const QString why = editing ? QString() : tr("Editing is off until the server answers");
@@ -754,7 +856,7 @@ void MainWindow::showProject(const QString& id) {
   const int n = static_cast<int>(tasks.size());
   projectSummary_->setText((n == 1 ? tr("1 task") : tr("%1 tasks").arg(n)) + tr(" · %1 complete").arg(done) +
                            (milestones == 1 ? tr(" · 1 milestone") : tr(" · %1 milestones").arg(milestones)) +
-                           tr("\nThe outline, Gantt and resource views arrive in the next releases."));
+                           tr("\nOpen Outline shows its tasks; the Gantt and resource views arrive in later releases."));
   auto get = [&p](const char* k) { return p->value(QLatin1String(k)).toString(); };
   const QString rag = get("rag");
   QString html = QStringLiteral("<table cellspacing='0' cellpadding='3'>");
@@ -780,7 +882,13 @@ void MainWindow::showProject(const QString& id) {
                      text.toHtmlEscaped().replace(QLatin1Char('\n'), QStringLiteral("<br>")));
   }
   projectDetails_->setText(html);
-  stack_->setCurrentIndex(1);
+  if (page_ == ProjectPage::Outline) {
+    outline_->setProject(id, name);
+    outline_->reload(tasks, session_->cache()->wbs(id));
+    stack_->setCurrentWidget(outline_);
+  } else {
+    stack_->setCurrentWidget(detailsPage_);
+  }
   QString side = QStringLiteral("<b>%1</b><br><br>").arg(name.toHtmlEscaped());
   auto line = [&side](const QString& k, const QString& v) {
     if (!v.isEmpty()) side += QStringLiteral("%1: %2<br>").arg(k.toHtmlEscaped(), v.toHtmlEscaped());
@@ -793,7 +901,36 @@ void MainWindow::showProject(const QString& id) {
   if (const qint64 rev = p->value(QStringLiteral("rev")).toInteger(); rev > 0) line(tr("Revision"), QString::number(rev));
   line(tr("Id"), id);
   inspector_->setText(side);
+  if (page_ == ProjectPage::Outline && !outline_->currentTaskId().isEmpty()) showTaskInspector(outline_->currentTaskId());
   updateEditActions();
+}
+
+void MainWindow::showTaskInspector(const QString& taskId) {
+  if (stack_->currentWidget() != outline_ || taskId.isEmpty()) return;
+  const OutlineModel* m = outline_->model();
+  const QJsonObject t = m->task(taskId);
+  if (t.isEmpty()) return;
+  auto get = [&t](const char* k) { return t.value(QLatin1String(k)).toString(); };
+  const bool summary = m->isSummary(taskId);
+  QString side = QStringLiteral("<b>%1 %2</b><br><br>").arg(m->wbsCode(taskId).toHtmlEscaped(), get("title").toHtmlEscaped());
+  auto line = [&side](const QString& k, const QString& v) {
+    if (!v.isEmpty()) side += QStringLiteral("%1: %2<br>").arg(k.toHtmlEscaped(), v.toHtmlEscaped());
+  };
+  line(tr("Type"), OutlineModel::typeName(t, summary));
+  line(tr("Status"), OutlineModel::statusName(get("status")) + (summary ? tr(" (rolled up)") : QString()));
+  line(tr("Complete"), QStringLiteral("%1%").arg(qRound(t.value(QStringLiteral("percentComplete")).toDouble())) +
+                           (summary ? tr(" (rolled up)") : QString()));
+  if (summary) {
+    const int kids = m->liveChildren(taskId);
+    line(tr("Rolled up from"), kids == 1 ? tr("1 child task") : tr("%1 child tasks").arg(kids));
+  }
+  line(tr("Start"), get("start"));
+  line(tr("Finish"), get("finish"));
+  line(tr("Deadline"), get("deadline"));
+  line(tr("Priority"), QStringLiteral("P%1").arg(t.value(QStringLiteral("priority")).toInt(2)));
+  line(tr("Id"), taskId);
+  side += QStringLiteral("<br><i>%1</i>").arg(tr("The task editor arrives in the next release.").toHtmlEscaped());
+  inspector_->setText(side);
 }
 
 // ---- cache ----

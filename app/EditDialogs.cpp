@@ -66,6 +66,13 @@ QString fieldLabel(const QString& field) {
       {QStringLiteral("title"), QObject::tr("Title")},
       {QStringLiteral("percentComplete"), QObject::tr("% complete")},
       {QStringLiteral("deleted"), QObject::tr("Deleted")},
+      {QStringLiteral("type"), QObject::tr("Type")},
+      {QStringLiteral("duration"), QObject::tr("Duration")},
+      {QStringLiteral("parent"), QObject::tr("Parent")},
+      {QStringLiteral("order"), QObject::tr("Position")},
+      {QStringLiteral("deadline"), QObject::tr("Deadline")},
+      {QStringLiteral("actualStart"), QObject::tr("Actual start")},
+      {QStringLiteral("actualFinish"), QObject::tr("Actual finish")},
   };
   return labels.value(field, field);
 }

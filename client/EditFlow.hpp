@@ -39,6 +39,9 @@ struct DryRunPreview {
   // Q6: preview when the write is destructive or ripples to other entities;
   // a plain edit applies straight after a clean dry run.
   bool needsPreview(bool destructive, const QString& entityKind, const QString& entityId) const;
+  // Like otherChanges, but without siblings that only get a new `order`
+  // (a move renumbers them; that is not a ripple, plan Q6).
+  int ripples(const QString& entityKind, const QString& entityId) const;
 };
 
 // A 412 (plan §4.4): the user edited `mine` starting from `base`; the server

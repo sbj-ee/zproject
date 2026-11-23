@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.10.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.11.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -328,6 +328,12 @@ children (`core/Rollup.cpp`), recursively through nested summaries:
 - **Existing data:** opening the database recomputes every summary and
   corrects stale ones (actor `system`), so data from before 0.5.0 is fixed on
   the first start; afterwards this finds nothing to do.
+- **Desktop (0.11.0):** summary rows are bold; their status and % complete
+  cells carry a lock, the tooltip "Rolled up from N child tasks", and an
+  accessible name ending "(rolled up)", and can't be edited (nor actual start
+  or finish, when the task editor arrives). If a concurrent change makes the
+  edited task a summary, the 400 is shown as "This task now has subtasks; its
+  progress is rolled up" and the outline refreshes.
 
 ## 6. Scheduling engine
 
@@ -405,6 +411,23 @@ change row, and the old and new parents roll up in the same transaction
 milestone, deleted or other-project parent is 400. Not destructive; honours
 `If-Match` and `dryRun`. A task's `order` is read-only everywhere else: a
 create or `PATCH` body with `order` is 400 `validation` (0.10.0).
+
+Desktop (0.11.0): View → Outline shows the project's tasks as a tree over the
+cache (§8.3). WBS codes are numbered locally the way the server numbers them
+and checked against the cached `GET /v1/projects/{id}/wbs`; after a move they
+can lag one refresh, and the header says so. Edit → Insert Task creates "New
+task" below the current task (`POST /v1/projects/{id}/tasks` with its parent,
+then `move` to the position if it isn't last) and opens its title editor;
+Indent moves a task under its previous sibling (not a milestone); Outdent
+moves it to just after its parent; Move Up / Down change `position` by one;
+Convert to Milestone sets `type: milestone, duration: 0` (back: `type: task,
+duration: 1`), not offered on summaries; Delete is a tombstone with the
+subtree, always previewed, sending the `confirmId`; Restore Deleted Task…
+restores the tasks deleted from this window, most recent first. Every write
+is a dry run first and reads the task's `rev` for `If-Match`; a preview is
+shown when the write is destructive or ripples, and siblings that are only
+renumbered (`order`) are not a ripple (§9.3). A 412 on a structural change
+does nothing and refreshes; on a field edit it opens the conflict dialog.
 
 ### 7.2 Critical path [approved] — phase 1
 
@@ -545,6 +568,11 @@ Carlo, multi-user permissions.
   View → All Projects shows a table (Name, Status, RAG as a letter and a
   coloured dot, Priority, Start, Target finish, Owner) whose rows open the
   project's Details. Portfolio and the sub-views arrive with their views.
+  As built (0.11.0): View → Outline (and Open Outline on Details) shows a
+  project's tasks; the Edit menu has Insert Task, Indent, Outdent, Move Up,
+  Move Down, Rename Task, Convert to Milestone, Delete Task…, Restore Deleted
+  Task…, Find…, Find Next and Find Previous. Selecting a task shows it,
+  read-only, in the inspector.
 - Main area: the selected view. Inspector panel on the right for the selected
   task, milestone, resource or RAID item (Details, Schedule, Assignments,
   Notes journal, Links, History tabs).
@@ -592,7 +620,14 @@ link. Print and export to PDF/PNG.
 
 ### 8.3 Other views
 
-List (outline table with configurable columns, inline edit), Resources sheet
+List (outline table with configurable columns, inline edit; as built in
+0.11.0 the columns are fixed: WBS, title, type, status, % complete, duration,
+start, finish, deadline, priority; inline edit covers title, priority, and
+status and % complete on leaf tasks, where % above 0 sends the scheduled start,
+else today, as the actual start if there is none; filter by status (All, Not
+done, To do, In progress, Done) keeps matches' ancestors; Find matches titles
+or an exact WBS code; a summary's start and finish show the span of its
+subtasks, display only, and its duration is blank until scheduling), Resources sheet
 and Resource Usage heat map, RAID table with type filters and risk heat map,
 Baselines and Variance table, Reports (rendered Markdown with export),
 Portfolio table and all-projects timeline, Calendar editor (work week and
@@ -612,7 +647,13 @@ Window-wide: UI text zoom Ctrl-+ / Ctrl-− / Ctrl-0 (as zterminal and zwriter),
 Preferences Ctrl-, , sidebar Ctrl-B, inspector Ctrl-I, go to the project list
 Ctrl-Shift-P, new project Ctrl-N, edit project details Ctrl-E, help F1,
 keyboard shortcuts Ctrl-/, quit Ctrl-Q. Cmd instead of
-Ctrl on macOS.
+Ctrl on macOS. As built (0.11.0), in the outline and only while the tree has
+focus: Insert Task Ins or Enter, indent Tab, outdent Shift-Tab, move up / down
+Alt-↑ / Alt-↓, rename F2, delete Del or Backspace (always previewed; Edit →
+Restore brings it back), find Ctrl-F, find next / previous F3 / Shift-F3
+(Enter / Shift-Enter in the find bar, Esc closes); Ctrl-Tab / Ctrl-Shift-Tab
+(Control on macOS) leave the tree, since Tab indents there. Ctrl-1…6 stay unassigned
+until the views exist.
 
 ## 9. HTTP API
 
@@ -657,6 +698,9 @@ expires in 90 days, `requireConfirm = true`; agents never get `admin`
   returns 412 on mismatch. Desktop clients always send it.
 - Dry run: every write accepts `?dryRun=true` and returns
   `{changes:[...], ripple:{moved:[...], finishDelta, criticalChanged}, confirmId?}`.
+  Desktop clients (0.11.0) show a preview when a write is destructive or a
+  change touches another entity; an `update` whose `after` holds only `order`
+  (a sibling renumbered by a move) is not counted.
 - Confirm: destructive operations (delete, bulk update, re-baseline, template
   instantiate into an existing project, import, restore, token revoke by
   non-owner) for tokens with `requireConfirm` need
