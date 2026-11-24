@@ -1,5 +1,6 @@
 #include "core/Zip.hpp"
 
+#include <QTimeZone>
 #include <QtEndian>
 
 #include <array>
@@ -51,9 +52,9 @@ quint32 crc32(const QByteArray& data) {
 }
 
 ZipWriter::ZipWriter(const QDateTime& modified) {
-  QDateTime t = modified.isValid() ? modified.toUTC() : QDateTime(QDate(1980, 1, 1), QTime(0, 0), Qt::UTC);
-  if (t.date().year() < 1980) t = QDateTime(QDate(1980, 1, 1), QTime(0, 0), Qt::UTC);
-  if (t.date().year() > 2107) t = QDateTime(QDate(2107, 12, 31), QTime(23, 59, 58), Qt::UTC);
+  QDateTime t = modified.isValid() ? modified.toUTC() : QDateTime(QDate(1980, 1, 1), QTime(0, 0), QTimeZone::utc());
+  if (t.date().year() < 1980) t = QDateTime(QDate(1980, 1, 1), QTime(0, 0), QTimeZone::utc());
+  if (t.date().year() > 2107) t = QDateTime(QDate(2107, 12, 31), QTime(23, 59, 58), QTimeZone::utc());
   const QDate d = t.date();
   const QTime tm = t.time();
   dosDate_ = static_cast<quint16>(((d.year() - 1980) << 9) | (d.month() << 5) | d.day());

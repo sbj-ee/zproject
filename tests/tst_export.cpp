@@ -3,6 +3,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QTimeZone>
 #include <QXmlStreamReader>
 #include <QtEndian>
 #include <QtTest>
@@ -284,7 +285,7 @@ void TestExport::csv() {
 
 void TestExport::zipWriterRoundTrip() {
   QCOMPARE(crc32("123456789"), 0xCBF43926U);  // the standard check value
-  ZipWriter z(QDateTime(QDate(2026, 11, 24), QTime(15, 4, 6), Qt::UTC));
+  ZipWriter z(QDateTime(QDate(2026, 11, 24), QTime(15, 4, 6), QTimeZone::utc()));
   z.add(QStringLiteral("stored"), "hello", false);
   z.add(QStringLiteral("dir/big.txt"), QByteArray(5000, 'x'));
   z.add(QStringLiteral("empty"), QByteArray());
