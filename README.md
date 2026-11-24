@@ -1,6 +1,6 @@
 # zproject
 
-**0.23.0**
+**0.24.0**
 
 Current release: **0.21.1**
 

@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.23.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.24.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -1025,6 +1025,11 @@ zproject-cli audit [--token ID] [--since ...]
 
 `tasks move ID [--parent ID|none] [--position N]` counts N from 1, as WBS
 numbers do (the API's `position` is 0-based).
+
+`projects create|update` set the rest of the details page (§7.10) with
+`--objectives`, `--scope`, `--out-of-scope`, `--success-criteria` and
+`--sponsor` (an empty value clears one), `--budget N|none` and `--color
+#rrggbb|none` (0.24.0). `projects show` lists them all.
 
 `export` (0.22.0) takes the format from `--format`, else from PATH's
 extension (`.json`, `.csv`, `.ods`, `.xml` = MSPDI), else JSON. It writes

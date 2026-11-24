@@ -304,6 +304,75 @@ class TestCli : public QObject {
     QVERIFY(r.err.contains(QStringLiteral("libsecret-tools")));
   }
 
+  // The details page's text fields (SPEC.md §7.10): set on create, changed
+  // and cleared on update, shown by `projects show`.
+  void projectDetailsText() {
+    auto run = [&](const QStringList& args) { return cliAs(owner_, QStringList{QStringLiteral("projects")} + args); };
+    Run r = run({QStringLiteral("--json"), QStringLiteral("create"), QStringLiteral("Loft"), QStringLiteral("--objectives"),
+                 QStringLiteral("A dry loft"), QStringLiteral("--scope"), QStringLiteral("Insulation\nBoarding"),
+                 QStringLiteral("--out-of-scope"), QStringLiteral("Windows"), QStringLiteral("--success-criteria"),
+                 QStringLiteral("Passes inspection")});
+    QVERIFY2(r.code == 0, qPrintable(r.err));
+    QJsonObject p = r.json().toObject();
+    const QString id = p.value(QStringLiteral("id")).toString();
+    QCOMPARE(p.value(QStringLiteral("objectives")).toString(), QStringLiteral("A dry loft"));
+    QCOMPARE(p.value(QStringLiteral("scope")).toString(), QStringLiteral("Insulation\nBoarding"));
+    QCOMPARE(p.value(QStringLiteral("outOfScope")).toString(), QStringLiteral("Windows"));
+    QCOMPARE(p.value(QStringLiteral("successCriteria")).toString(), QStringLiteral("Passes inspection"));
+
+    // A dry run changes nothing; then one field changes and another clears.
+    r = run({QStringLiteral("update"), id, QStringLiteral("--out-of-scope"), QStringLiteral("Windows, roof"),
+             QStringLiteral("--dry-run")});
+    QCOMPARE(r.code, 0);
+    QVERIFY(r.out.startsWith(QStringLiteral("Dry run")));
+    r = run({QStringLiteral("--json"), QStringLiteral("update"), id, QStringLiteral("--out-of-scope"),
+             QStringLiteral("Windows, roof"), QStringLiteral("--objectives="), QStringLiteral("--rev"), QStringLiteral("1")});
+    QVERIFY2(r.code == 0, qPrintable(r.err));
+    p = r.json().toObject();
+    QCOMPARE(p.value(QStringLiteral("outOfScope")).toString(), QStringLiteral("Windows, roof"));
+    QVERIFY(p.value(QStringLiteral("objectives")).toString().isEmpty());
+    QCOMPARE(p.value(QStringLiteral("scope")).toString(), QStringLiteral("Insulation\nBoarding"));  // untouched
+
+    // `show` lists them after the description, multi-line values indented.
+    r = run({QStringLiteral("show"), id});
+    QCOMPARE(r.code, 0);
+    QVERIFY(r.out.indexOf(QStringLiteral("description:")) < r.out.indexOf(QStringLiteral("scope:")));
+    QVERIFY(r.out.contains(QStringLiteral("outOfScope:      Windows, roof")));
+    QVERIFY(r.out.contains(QStringLiteral("successCriteria: Passes inspection")));
+    QVERIFY(r.out.contains(QStringLiteral("scope:           Insulation\n                 Boarding")));
+    // Sponsor, budget and color: set, then cleared with "" / none.
+    r = run({QStringLiteral("--json"), QStringLiteral("update"), id, QStringLiteral("--sponsor"), QStringLiteral("Jo"),
+             QStringLiteral("--budget"), QStringLiteral("12500.50"), QStringLiteral("--color"), QStringLiteral("#3A9D5D")});
+    QVERIFY2(r.code == 0, qPrintable(r.err));
+    p = r.json().toObject();
+    QCOMPARE(p.value(QStringLiteral("sponsor")).toString(), QStringLiteral("Jo"));
+    QCOMPARE(p.value(QStringLiteral("budget")).toDouble(), 12500.5);
+    QCOMPARE(p.value(QStringLiteral("color")).toString(), QStringLiteral("#3a9d5d"));
+    r = run({QStringLiteral("show"), id});
+    QVERIFY(r.out.contains(QStringLiteral("budget:          12500.5")));
+    QVERIFY(r.out.indexOf(QStringLiteral("sponsor:")) < r.out.indexOf(QStringLiteral("description:")));
+    r = run({QStringLiteral("--json"), QStringLiteral("update"), id, QStringLiteral("--sponsor="), QStringLiteral("--budget"),
+             QStringLiteral("none"), QStringLiteral("--color"), QStringLiteral("none")});
+    QVERIFY2(r.code == 0, qPrintable(r.err));
+    p = r.json().toObject();
+    QVERIFY(p.value(QStringLiteral("sponsor")).toString().isEmpty());
+    QVERIFY(p.value(QStringLiteral("budget")).isNull());
+    QVERIFY(p.value(QStringLiteral("color")).isNull() || p.value(QStringLiteral("color")).toString().isEmpty());
+    // Bad values are refused before anything is sent.
+    for (const QStringList& bad : {QStringList{QStringLiteral("--budget"), QStringLiteral("-5")},
+                                   QStringList{QStringLiteral("--budget"), QStringLiteral("lots")},
+                                   QStringList{QStringLiteral("--color"), QStringLiteral("green")},
+                                   QStringList{QStringLiteral("--color"), QStringLiteral("#12345")}}) {
+      r = run(QStringList{QStringLiteral("update"), id} + bad);
+      QCOMPARE(r.code, int(kExitUsage));
+    }
+    // Not an option of other commands.
+    QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("list"), id, QStringLiteral("--scope"),
+                            QStringLiteral("x")})
+                 .code,
+             int(kExitUsage));
+  }
+
   void projectsAndTasks() {
     const QString p = createProject(QStringLiteral("Garage"));
     Run r = cliAs(owner_, {QStringLiteral("projects"), QStringLiteral("list")});

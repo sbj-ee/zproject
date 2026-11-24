@@ -7,6 +7,28 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.24.0 — 2026-11-24
+
+CLI: the rest of the project details fields (SPEC §7.10, §10). Stacked on
+0.23.0. Before this, these fields could only be set through the API or the
+desktop app.
+
+- `zproject-cli projects create|update` take:
+  - `--objectives`, `--scope`, `--out-of-scope` and `--success-criteria`,
+    whose values are Markdown;
+  - `--sponsor`;
+  - `--budget N|none` (a number >= 0);
+  - `--color #rrggbb|none` (the project's color in the sidebar and the
+    all-projects Milestones view).
+
+  `""` clears a text field, and `none` clears the budget or the color. Bad
+  numbers and colors are refused before anything is sent.
+- `projects show` lists sponsor, budget and color after the owner, and the
+  four text fields after the description, with multi-line values indented.
+- **Tests**: `projectDetailsText` in `tst_cli` covers create, a dry run,
+  setting, changing and clearing on update, `show`, bad budgets and colors,
+  and the options refused elsewhere.
+
 ## 0.23.0 — 2026-11-24
 
 Project exports, PR 2 of 2: the desktop (SPEC §7.9, §8.1). Stacked on
