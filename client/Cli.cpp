@@ -748,7 +748,7 @@ class Runner {
     }
     return numOpt(QStringLiteral("budget"), QStringLiteral("budget"), b);
   }
-  // --color #rrggbb|none: the project's colour (sidebar, milestones), or null.
+  // --color #rrggbb|none: the project's color (sidebar, milestones), or null.
   bool colorOpt(QJsonObject* b) {
     if (!a_.has(QStringLiteral("color"))) return true;
     const QString v = a_.opt(QStringLiteral("color"));

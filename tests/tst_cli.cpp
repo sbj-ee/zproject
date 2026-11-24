@@ -340,7 +340,7 @@ class TestCli : public QObject {
     QVERIFY(r.out.contains(QStringLiteral("outOfScope:      Windows, roof")));
     QVERIFY(r.out.contains(QStringLiteral("successCriteria: Passes inspection")));
     QVERIFY(r.out.contains(QStringLiteral("scope:           Insulation\n                 Boarding")));
-    // Sponsor, budget and colour: set, then cleared with "" / none.
+    // Sponsor, budget and color: set, then cleared with "" / none.
     r = run({QStringLiteral("--json"), QStringLiteral("update"), id, QStringLiteral("--sponsor"), QStringLiteral("Jo"),
              QStringLiteral("--budget"), QStringLiteral("12500.50"), QStringLiteral("--color"), QStringLiteral("#3A9D5D")});
     QVERIFY2(r.code == 0, qPrintable(r.err));
