@@ -2,7 +2,7 @@
  "openapi": "3.1.0",
  "info": {
   "title": "zproject API",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "Plans served by zprojectd on 127.0.0.1:8788, published on the tailnet by\n`tailscale serve`. Every request except `GET /v1/health` needs\n`Authorization: Bearer zpt_<id>.<secret>`. Each operation names the\nscope it needs (`x-zproject-scope`; `any` = any valid token), whether\nit is destructive (`x-zproject-destructive`; tokens with\n`requireConfirm` must confirm it) and whether it takes `?dryRun=true`\n(`x-zproject-dry-run`).\n",
   "license": {
    "name": "MIT",
