@@ -51,6 +51,9 @@ QString cliUsage() {
       "                       [--status S] [--rag R] [--priority N] [--dry-run]\n"
       "  projects update ID [--name T] [same options] [--rev N] [--dry-run]\n"
       "                       [--calendar ID|none] (create too): its working calendar\n"
+      "                       [--objectives T] [--scope T] [--out-of-scope T]\n"
+      "                       [--success-criteria T] (create too): the details page's\n"
+      "                       text (Markdown); \"\" clears one\n"
       "  projects delete ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
       "\n"
       "Tasks (dates are YYYY-MM-DD; \"none\" clears a date)\n"
@@ -145,7 +148,9 @@ const QSet<QString>& valueOptions() {
       QStringLiteral("position"),   QStringLiteral("task"),          QStringLiteral("type"),
       QStringLiteral("lag"),        QStringLiteral("base"),          QStringLiteral("week"),
       QStringLiteral("hours-per-day"), QStringLiteral("calendar"),   QStringLiteral("hours"),
-      QStringLiteral("label"),      QStringLiteral("country"),       QStringLiteral("format")};
+      QStringLiteral("label"),      QStringLiteral("country"),       QStringLiteral("format"),
+      QStringLiteral("objectives"), QStringLiteral("scope"),         QStringLiteral("out-of-scope"),
+      QStringLiteral("success-criteria")};
   return s;
 }
 const QSet<QString>& flagOptions() {
@@ -715,6 +720,10 @@ class Runner {
     strOpt(QStringLiteral("name"), QStringLiteral("name"), &b);
     strOpt(QStringLiteral("description"), QStringLiteral("description"), &b);
     strOpt(QStringLiteral("owner"), QStringLiteral("owner"), &b);
+    strOpt(QStringLiteral("objectives"), QStringLiteral("objectives"), &b);
+    strOpt(QStringLiteral("scope"), QStringLiteral("scope"), &b);
+    strOpt(QStringLiteral("out-of-scope"), QStringLiteral("outOfScope"), &b);
+    strOpt(QStringLiteral("success-criteria"), QStringLiteral("successCriteria"), &b);
     strOpt(QStringLiteral("status"), QStringLiteral("status"), &b);
     strOpt(QStringLiteral("rag"), QStringLiteral("rag"), &b);
     if (!dateOpt(QStringLiteral("start"), QStringLiteral("start"), &b) ||
@@ -743,7 +752,9 @@ class Runner {
     const QString sub = a_.pos.takeFirst();
     const QStringList fields{QStringLiteral("description"), QStringLiteral("owner"), QStringLiteral("start"),
                              QStringLiteral("finish"),      QStringLiteral("status"), QStringLiteral("rag"),
-                             QStringLiteral("priority"),    QStringLiteral("dry-run"),  QStringLiteral("calendar")};
+                             QStringLiteral("priority"),    QStringLiteral("dry-run"),  QStringLiteral("calendar"),
+                             QStringLiteral("objectives"),  QStringLiteral("scope"),    QStringLiteral("out-of-scope"),
+                             QStringLiteral("success-criteria")};
     if (sub == QLatin1String("list")) {
       if (!allow({QStringLiteral("all")})) return badOption();
       if (!a_.pos.isEmpty()) return usage(QStringLiteral("projects list takes no arguments"));
@@ -781,7 +792,9 @@ class Runner {
       } else {
         printFields(out_, r.json, {QStringLiteral("id"), QStringLiteral("name"), QStringLiteral("status"),
                                    QStringLiteral("rag"), QStringLiteral("start"), QStringLiteral("finish"),
-                                   QStringLiteral("owner"), QStringLiteral("description"), QStringLiteral("rev")});
+                                   QStringLiteral("owner"), QStringLiteral("description"), QStringLiteral("objectives"),
+                                   QStringLiteral("scope"), QStringLiteral("outOfScope"),
+                                   QStringLiteral("successCriteria"), QStringLiteral("rev")});
       }
       return kExitOk;
     }

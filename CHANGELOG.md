@@ -7,6 +7,21 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.24.0 — 2026-11-24
+
+CLI: the project details page's text fields (SPEC §7.10, §10). Stacked on
+0.23.0.
+
+- `zproject-cli projects create|update` take `--objectives`, `--scope`,
+  `--out-of-scope` and `--success-criteria`. Values are Markdown, and `""`
+  clears one. Before this, these fields could only be set through the API or
+  the desktop app.
+- `projects show` lists them after the description, with multi-line values
+  indented.
+- **Tests**: `projectDetailsText` in `tst_cli` covers create, a dry run,
+  changing and clearing on update, `show`, and the options refused
+  elsewhere.
+
 ## 0.23.0 — 2026-11-24
 
 Project exports, PR 2 of 2: the desktop (SPEC §7.9, §8.1). Stacked on
