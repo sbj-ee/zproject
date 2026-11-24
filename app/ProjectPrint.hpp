@@ -24,7 +24,7 @@ struct PrintSettings {
 // finish, % complete, predecessors) and, beside it, a Gantt timeline scaled
 // to fit the page width (day, week, month or quarter ticks). Rows run on
 // over as many pages as needed; the column headings repeat; "Page n of m"
-// at the foot. It always prints in light colours, whatever the theme.
+// at the foot. It always prints in light colors, whatever the theme.
 //
 // Everything is laid out in points (1/72 inch) for the printable area, so
 // the same pages go to a printer, a PDF or, in tests, an image.

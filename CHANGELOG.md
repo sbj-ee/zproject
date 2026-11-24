@@ -45,7 +45,7 @@ Project exports, PR 2 of 2: the desktop (SPEC §7.9, §8.1). Stacked on
   - a Gantt fitted to the page width: day/week/month/quarter ticks,
     weekends, today, progress bars, summary brackets, milestone diamonds
     and deadline flags;
-  - pages with repeated headings and "Page n of m", always in print colours.
+  - pages with repeated headings and "Page n of m", always in print colors.
 - **Data**: the server's JSON export, so files and printouts include
   dependencies and calendars. They are written on the client by the same
   `core/Export` and saved atomically. Offline they come from the cache, which
@@ -59,7 +59,7 @@ Project exports, PR 2 of 2: the desktop (SPEC §7.9, §8.1). Stacked on
     page, an empty project;
   - file types from the extension or the filter;
   - in the window against a real server: every file type with links, Export
-    as PDF, Print to a PDF printer and cancelling, offline exports after
+    as PDF, Print to a PDF printer and canceling, offline exports after
     asking, and actions disabled with no project.
 
   `tst_export` adds the JSON round trip.

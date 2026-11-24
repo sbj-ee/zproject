@@ -641,7 +641,7 @@ finish, % complete, predecessors) and a Gantt fitted to the remaining width
 shaded at day and week scale; today line; bars with progress, outlined for
 manual tasks; summary brackets; milestone diamonds, hollow when done;
 deadline flags, red when missed). Rows run on over pages, the headings
-repeat, and the footer has "Page n of m". Always light colours. Narrow
+repeat, and the footer has "Page n of m". Always light colors. Narrow
 pages or a project with no dates print the table alone. No PNG yet, no
 dependency arrows, and no date-range or column choice.
 
