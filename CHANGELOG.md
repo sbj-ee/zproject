@@ -7,6 +7,41 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.23.0 — 2026-11-24
+
+Project exports, PR 2 of 2: the desktop (SPEC §7.9, §8.1). Stacked on
+0.22.0.
+
+- **File → Export…** (Ctrl+Shift+E): one save dialog for MS Project XML,
+  OpenDocument spreadsheet, CSV, PDF or zproject JSON. A typed extension
+  wins; otherwise the chosen type's is added. The name starts as the
+  project's, in the folder used last.
+- **File → Export as PDF…** and **File → Print…** (Ctrl+P, landscape) use
+  one printout (`app/ProjectPrint`):
+  - a header with the project's dates, owner and status;
+  - the task table (WBS, task, duration, start, finish, %, predecessors);
+  - a Gantt fitted to the page width: day/week/month/quarter ticks,
+    weekends, today, progress bars, summary brackets, milestone diamonds
+    and deadline flags;
+  - pages with repeated headings and "Page n of m", always in print colors.
+- **Data**: the server's JSON export, so files and printouts include
+  dependencies and calendars. They are written on the client by the same
+  `core/Export` and saved atomically. Offline they come from the cache, which
+  has no links: a file export asks first, and a printout notes it under the
+  heading. `core` gains `exportDataFromJson`.
+- **Build**: the desktop links Qt PrintSupport, which is in Qt 6.4.
+- **Help**: *Exporting and printing* covers the menu, the printout and
+  offline use, and the shortcut table lists the new keys.
+- **Tests**: `tst_exportprint` (12):
+  - the printout: pagination, timescales, bars on white, one PDF page per
+    page, an empty project;
+  - file types from the extension or the filter;
+  - in the window against a real server: every file type with links, Export
+    as PDF, Print to a PDF printer and canceling, offline exports after
+    asking, and actions disabled with no project.
+
+  `tst_export` adds the JSON round trip.
+
 ## 0.22.0 — 2026-11-24
 
 Project exports, PR 1 of 2: the server and the CLI (SPEC §7.9, §9.4, §10,

@@ -9,6 +9,9 @@ QList<ShortcutInfo> shellShortcuts() {
       {QStringLiteral("actionNewProject"), QObject::tr("New project"), {QKeySequence(Qt::CTRL | Qt::Key_N)}},
       {QStringLiteral("actionEditProject"), QObject::tr("Edit the project's details"),
        {QKeySequence(Qt::CTRL | Qt::Key_E)}},
+      {QStringLiteral("actionExport"), QObject::tr("Export the project to a file"),
+       {QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_E)}},
+      {QStringLiteral("actionPrint"), QObject::tr("Print the project"), {QKeySequence(Qt::CTRL | Qt::Key_P)}},
       // The outline (SPEC.md §8.4); these keys act only while the task tree
       // has the focus.
       {QStringLiteral("actionInsertTask"), QObject::tr("Insert a task below (outline)"),

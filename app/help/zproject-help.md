@@ -14,7 +14,7 @@ can't be reached, and follows changes made elsewhere — another computer,
 - [Milestones](#milestones)
 - [Activity](#activity)
 - [Editing a task](#editing-a-task)
-- [Exporting a project](#exporting-a-project)
+- [Exporting and printing](#exporting-and-printing)
 - [Offline](#offline)
 - [Appearance](#appearance)
 - [Preferences](#preferences)
@@ -179,11 +179,35 @@ field: keep yours or take theirs. **Revert** puts the task back as the
 server has it. Moving to another task, another project or quitting with
 unsaved changes asks first.
 
-## Exporting a project
+## Exporting and printing
 
-A project can be saved as a file to open in another program or to keep. The
-server makes the file from its own copy of the plan, so an export needs the
-server; it holds the project's live tasks (not deleted ones).
+Select a project, then use the **File** menu:
+
+- **Export…** (Ctrl + Shift + E) saves the project as a file. Pick the type
+  in the save dialog (or just type a name ending in `.xml`, `.ods`, `.csv`,
+  `.pdf` or `.json`). The name starts as the project's, in the folder you
+  used last.
+- **Export as PDF…** saves the printout below as a PDF.
+- **Print…** (Ctrl + P) prints it. The page is set to landscape; change the
+  printer, paper or pages in the print dialog. Choose **Print to File (PDF)**
+  there for a PDF too.
+
+The **printout** has, on every page, the project's name, dates, owner and
+status, then a table of the tasks (WBS, task, duration, start, finish, %
+complete and predecessors) with a Gantt chart beside it. The chart is scaled
+to fit the page across, in days, weeks, months or quarters as the project's
+length needs, with weekends shaded, a dashed line for today, bars with their
+progress, brackets for summaries, diamonds for milestones and a small flag
+for each deadline (red when the task finishes after it). Long projects run
+on over more pages; the headings repeat. It always prints in black on white,
+whatever theme you use.
+
+Files and printouts hold the project's live tasks (not deleted ones). They
+come from the server's copy, with dependencies and calendars. **Offline**,
+they come from the copy on this computer, which has no dependencies: a file
+export asks first, and a printout says so under its heading.
+
+The file types:
 
 | Format | File | Opens in | What's in it |
 | --- | --- | --- | --- |
@@ -218,9 +242,8 @@ zproject-cli export PROJECT-ID --format csv --stdout | head
 ```
 
 Without `--out-file`, the file goes in the current folder, named after the
-project, and an existing file is never replaced. Exporting and printing from
-this window (**File → Export…**, **File → Print…** and PDF) arrive in the
-next version.
+project, and an existing file is never replaced. The command line has no
+PDF; use **Export as PDF…** here.
 
 ## Offline
 
@@ -293,6 +316,7 @@ the server machine.
 | Show or hide the inspector | Ctrl + I |
 | Go to the project list | Ctrl + Shift + P |
 | New project / edit project details | Ctrl + N / Ctrl + E |
+| Export the project / print it | Ctrl + Shift + E / Ctrl + P |
 | Insert task (outline) | Ins or Enter |
 | Indent / outdent (outline) | Tab / Shift + Tab |
 | Move task up / down (outline) | Alt + ↑ / Alt + ↓ |

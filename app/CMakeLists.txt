@@ -8,6 +8,7 @@ add_library(zproject_app_lib STATIC
   ChangeText.cpp ChangeText.hpp
   Dialogs.cpp Dialogs.hpp
   EditDialogs.cpp EditDialogs.hpp
+  ExportActions.cpp ExportActions.hpp
   GanttView.cpp GanttView.hpp
   HelpDialog.cpp HelpDialog.hpp
   Icons.cpp Icons.hpp
@@ -17,6 +18,7 @@ add_library(zproject_app_lib STATIC
   OutlineView.cpp OutlineView.hpp
   TaskInspector.cpp TaskInspector.hpp
   ProjectActions.cpp ProjectActions.hpp
+  ProjectPrint.cpp ProjectPrint.hpp
   Shortcuts.cpp Shortcuts.hpp
   SignInDialog.cpp SignInDialog.hpp
   SingleInstance.cpp SingleInstance.hpp
@@ -29,7 +31,7 @@ add_library(zproject_app_lib STATIC
   UpdateDialog.cpp UpdateDialog.hpp
   UpdateManager.cpp UpdateManager.hpp
   zproject_app.qrc)
-target_link_libraries(zproject_app_lib PUBLIC zproject_client Qt6::Widgets PRIVATE PkgConfig::SODIUM)
+target_link_libraries(zproject_app_lib PUBLIC zproject_client Qt6::Widgets Qt6::PrintSupport PRIVATE PkgConfig::SODIUM)
 zproject_set_warnings(zproject_app_lib)
 
 add_executable(zproject main.cpp)

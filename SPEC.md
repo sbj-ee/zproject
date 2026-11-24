@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.22.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.23.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -624,6 +624,27 @@ ODF package):
 XML output drops characters XML 1.0 forbids. PDF and PNG are rendered by
 the desktop app (0.23.0); a `pdf` or `png` format here is a 400.
 
+As built (0.23.0), the desktop: **File → Export…** (Ctrl+Shift+E; a save
+dialog whose file types are MS Project XML, OpenDocument spreadsheet, CSV,
+PDF and zproject JSON; the extension typed wins, else the chosen type's is
+added; the name starts as the project's, in the folder last used), **Export
+as PDF…** and **Print…** (Ctrl+P; QPrintDialog, landscape, 12 mm margins,
+Letter in US locales, else A4). Files are written by `core/Export` on the
+client from the server's JSON export (so with dependencies and calendars)
+and saved atomically; offline they come from the cache, which has no
+dependencies or calendars, after asking. The printout (`app/ProjectPrint`,
+QPdfWriter at 300 dpi for PDF) has on each page a header (name, start,
+finish, owner, status, task count, print time; the offline note when
+offline), a task table (WBS, task indented by level, duration, start,
+finish, % complete, predecessors) and a Gantt fitted to the remaining width
+(day, week, month or quarter ticks under month or year bands; weekends
+shaded at day and week scale; today line; bars with progress, outlined for
+manual tasks; summary brackets; milestone diamonds, hollow when done;
+deadline flags, red when missed). Rows run on over pages, the headings
+repeat, and the footer has "Page n of m". Always light colors. Narrow
+pages or a project with no dates print the table alone. No PNG yet, no
+dependency arrows, and no date-range or column choice.
+
 ### 7.10 Projects, project details, task notes
 
 Project details page: description, objectives, scope / out of scope, success
@@ -729,6 +750,9 @@ Carlo, multi-user permissions.
   View also has Theme (System, Light, Dark, High contrast) and UI text zoom
   (Zoom In / Zoom Out / Actual Size, 50–300 %). Help is zwriter's: one
   embedded Markdown guide in a modeless window; links open only if https.
+  As built (0.23.0): File has Export… (Ctrl+Shift+E), Export as PDF… and
+  Print… (Ctrl+P) after New Project, enabled while a project is selected,
+  online or offline (§7.9).
 - First run: server URL (e.g. `https://<server-host>.<tailnet>.ts.net`),
   prefilled from `zproject-cli`'s `cli.ini`, then the device token. If
   `zproject-cli` on this machine already has one, the app offers it by its

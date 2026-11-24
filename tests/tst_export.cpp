@@ -176,6 +176,7 @@ class TestExport : public QObject {
   void ods();
   void mspdi();
   void json();
+  void jsonReadsBack();
   void deterministic();
 };
 
@@ -434,6 +435,24 @@ void TestExport::json() {
   const QJsonArray cals = o.value(QStringLiteral("calendars")).toArray();
   QCOMPARE(cals.size(), 1);
   QCOMPARE(cals[0].toObject().value(QStringLiteral("exceptions")).toArray().size(), 2);
+}
+
+void TestExport::jsonReadsBack() {
+  const ExportData d = sample();
+  auto back = exportDataFromJson(exportJson(d));
+  QVERIFY(back.ok());
+  QCOMPARE(back->project.name, d.project.name);
+  QCOMPARE(back->tasks.size(), 4);  // the live ones
+  QCOMPARE(back->dependencies.size(), 2);
+  QCOMPARE(back->calendars.value(QString(kStandardCalendarId)).exceptions.size(), 2);
+  // The same snapshot exports the same way again.
+  ExportData again = back.value();
+  again.exportedAt = d.exportedAt;
+  QCOMPARE(exportCsv(again), exportCsv(d));
+  QCOMPARE(exportMspdi(again), exportMspdi(d));
+  QVERIFY(!exportDataFromJson("[]").ok());
+  QVERIFY(!exportDataFromJson(R"({"format":"other"})").ok());
+  QVERIFY(!exportDataFromJson(R"({"format":"zproject-export","schemaVersion":99})").ok());
 }
 
 void TestExport::deterministic() {
