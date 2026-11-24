@@ -221,7 +221,7 @@ void ProjectPrintout::paintColumnHeader(QPainter& p) const {
   double x = 0;
   for (const Column& c : columns_) {
     p.drawText(QRectF(x + kPad, top + kColumnHeaderHeight / 2, c.width - 2 * kPad, kColumnHeaderHeight / 2),
-               (c.right ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter,
+               static_cast<int>((c.right ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter),
                QFontMetricsF(font(8, true)).elidedText(c.title, Qt::ElideRight, c.width - 2 * kPad));
     x += c.width;
   }
@@ -299,7 +299,8 @@ void ProjectPrintout::paintRow(QPainter& p, const ExportRow& r, double y, bool s
     const double indent = c == 1 ? (r.level - 1) * kIndent : 0;
     const double w = col.width - 2 * kPad - indent;
     if (w > 4) {
-      p.drawText(QRectF(x + kPad + indent, y, w, kRowHeight), (col.right ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter,
+      p.drawText(QRectF(x + kPad + indent, y, w, kRowHeight),
+                 static_cast<int>((col.right ? Qt::AlignRight : Qt::AlignLeft) | Qt::AlignVCenter),
                  fm.elidedText(cell(r, c), Qt::ElideRight, w));
     }
     x += col.width;
