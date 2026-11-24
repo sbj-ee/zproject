@@ -72,5 +72,11 @@ int main(int argc, char* argv[]) {
 
   QTextStream out(stdout);
   QTextStream err(stderr);
+  io.writeStdout = [&out](const QByteArray& bytes) {
+    out.flush();
+    const bool ok = std::fwrite(bytes.constData(), 1, static_cast<size_t>(bytes.size()), stdout) ==
+                    static_cast<size_t>(bytes.size());
+    return std::fflush(stdout) == 0 && ok;
+  };
   return zproject::client::runCli(QCoreApplication::arguments().mid(1), io, out, err);
 }

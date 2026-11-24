@@ -7,7 +7,7 @@
 openapi: 3.1.0
 info:
   title: zproject API
-  version: 0.21.1
+  version: 0.22.0
   description: |
     Plans served by zprojectd on 127.0.0.1:8788, published on the tailnet by
     `tailscale serve`. Every request except `GET /v1/health` needs
@@ -216,6 +216,66 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Wbs'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+  /v1/projects/{id}/export:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      operationId: exportProject
+      tags: [projects]
+      summary: The project as a file (JSON, CSV, OpenDocument spreadsheet or MS Project XML)
+      description: |
+        One project's live rows as a download (SPEC.md §7.9), with
+        `Content-Disposition: attachment` and a file name made from the
+        project's name.
+
+        - `json`: full fidelity, `{"format": "zproject-export",
+          "schemaVersion": 1, project, tasks (with `wbs`), dependencies,
+          calendars (with their exceptions)}`.
+        - `csv`: the task table, RFC 4180, UTF-8, CRLF, with a header row:
+          WBS, Level, Title, Type (task, milestone or summary), Mode,
+          Duration (days), Start, Finish, Predecessors (`3FS+2d`), %
+          Complete, Status, Priority, Constraint, Constraint date,
+          Deadline, Actual start, Actual finish, Fixed cost, Notes, ID.
+          Text that starts with `=`, `+`, `-`, `@`, a tab or a carriage
+          return gets a leading `'` so spreadsheets don't run it.
+        - `ods`: OpenDocument spreadsheet with Tasks (the CSV columns, as
+          typed numbers, dates and percentages), Dependencies and Project
+          sheets.
+        - `mspdi`: Microsoft Project XML (opens in MS Project, ProjectLibre
+          and GanttProject): the outline, durations, dates, milestones,
+          links with lag, constraints, deadlines, % complete, notes and
+          the calendars used, with their holidays.
+
+        PDF and PNG need a renderer and are made by the desktop app.
+      x-zproject-scope: tasks:read
+      x-zproject-destructive: false
+      x-zproject-dry-run: false
+      parameters:
+        - name: format
+          in: query
+          description: The file format (default json)
+          schema: {type: string, enum: [json, csv, ods, mspdi], default: json}
+      responses:
+        '200':
+          description: The file
+          headers:
+            Content-Disposition:
+              description: '`attachment; filename="<project-name>.<json|csv|ods|xml>"`'
+              schema: {type: string}
+          content:
+            application/json:
+              schema: {type: object}
+            text/csv:
+              schema: {type: string}
+            application/vnd.oasis.opendocument.spreadsheet:
+              schema: {type: string, contentMediaType: application/vnd.oasis.opendocument.spreadsheet}
+            application/xml:
+              schema: {type: string}
+        '400': {$ref: '#/components/responses/Validation'}
         '401': {$ref: '#/components/responses/Unauthenticated'}
         '403': {$ref: '#/components/responses/Forbidden'}
         '404': {$ref: '#/components/responses/NotFound'}

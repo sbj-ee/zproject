@@ -265,6 +265,78 @@ class TestApi : public QObject {
     QVERIFY(Fixture::json(r).value(QStringLiteral("more")).toBool());
   }
 
+  // GET /v1/projects/{id}/export (SPEC.md §7.9): each format with its type
+  // and file name, the project allowlist, and unknown formats refused.
+  void exportProject() {
+    Fixture f;
+    const QString p1 = f.createProject(QStringLiteral("Office move"));
+    const QString p2 = f.createProject(QStringLiteral("Other"));
+    const QString design = f.createTask(p1, QStringLiteral("Design"));
+    const QString spec = f.createTask(p1, QStringLiteral("Spec"), design);
+    const QString build = f.createTask(p1, QStringLiteral("Build"));
+    QCOMPARE(f.call("POST", "/v1/dependencies", f.owner,
+                    {{QStringLiteral("predecessor"), spec}, {QStringLiteral("successor"), build},
+                     {QStringLiteral("type"), QStringLiteral("SS")}, {QStringLiteral("lag"), 2}})
+                 .status,
+             201);
+    const QByteArray base = "/v1/projects/" + p1.toLatin1() + "/export";
+    auto header = [](const Response& r, const QByteArray& name) {
+      for (const auto& h : r.headers) {
+        if (h.first.compare(name, Qt::CaseInsensitive) == 0) return h.second;
+      }
+      return QByteArray();
+    };
+
+    // Default: JSON, full fidelity.
+    Response r = f.call("GET", base, f.owner);
+    QCOMPARE(r.status, 200);
+    QCOMPARE(r.contentType, QByteArray("application/json"));
+    QCOMPARE(header(r, "Content-Disposition"), QByteArray("attachment; filename=\"Office-move.json\""));
+    QCOMPARE(header(r, "Cache-Control"), QByteArray("no-store"));
+    QJsonObject o = Fixture::json(r);
+    QCOMPARE(o.value(QStringLiteral("format")).toString(), QStringLiteral("zproject-export"));
+    QCOMPARE(o.value(QStringLiteral("exportedAt")).toString(), QStringLiteral("2026-11-21T12:00:00.000Z"));
+    QCOMPARE(o.value(QStringLiteral("tasks")).toArray().size(), 3);
+    QCOMPARE(o.value(QStringLiteral("dependencies")).toArray().size(), 1);
+    QVERIFY(!o.value(QStringLiteral("calendars")).toArray().isEmpty());  // Standard
+
+    r = f.call("GET", base + "?format=csv", f.owner);
+    QCOMPARE(r.status, 200);
+    QVERIFY(r.contentType.startsWith("text/csv"));
+    QCOMPARE(header(r, "Content-Disposition"), QByteArray("attachment; filename=\"Office-move.csv\""));
+    const QList<QByteArray> lines = r.body.split('\n');
+    QVERIFY(lines.value(1).startsWith("1,1,Design,summary,"));
+    QVERIFY(lines.value(2).startsWith("1.1,2,Spec,task,"));
+    QVERIFY(lines.value(3).contains(",1.1SS+2d,"));
+
+    r = f.call("GET", base + "?format=ods", f.owner);
+    QCOMPARE(r.status, 200);
+    QCOMPARE(r.contentType, QByteArray("application/vnd.oasis.opendocument.spreadsheet"));
+    QVERIFY(r.body.startsWith("PK\x03\x04"));
+    QCOMPARE(header(r, "Content-Disposition"), QByteArray("attachment; filename=\"Office-move.ods\""));
+
+    r = f.call("GET", base + "?format=mspdi", f.owner);
+    QCOMPARE(r.status, 200);
+    QCOMPARE(r.contentType, QByteArray("application/xml"));
+    QCOMPARE(header(r, "Content-Disposition"), QByteArray("attachment; filename=\"Office-move.xml\""));
+    QVERIFY(r.body.contains("<Project xmlns=\"http://schemas.microsoft.com/project\">"));
+    QVERIFY(r.body.contains("<Title>Office move</Title>"));
+
+    r = f.call("GET", base + "?format=pdf", f.owner);
+    QCOMPARE(r.status, 400);
+    QCOMPARE(code(r), QStringLiteral("validation"));
+    QCOMPARE(f.call("GET", "/v1/projects/ffffffffffffffffffff/export", f.owner).status, 404);
+
+    // An agent for the other project can't export this one.
+    const QByteArray agent = f.createToken({{QStringLiteral("name"), QStringLiteral("agent")},
+                                            {QStringLiteral("kind"), QStringLiteral("agent")},
+                                            {QStringLiteral("projects"), QJsonArray{p2}}});
+    r = f.call("GET", base + "?format=csv", agent);
+    QCOMPARE(r.status, 403);
+    QCOMPARE(code(r), QStringLiteral("forbidden_project"));
+    QCOMPARE(f.call("GET", "/v1/projects/" + p2.toLatin1() + "/export?format=csv", agent).status, 200);
+  }
+
   void agentTokenDefaultsAndLimits() {
     Fixture f;
     const QString p1 = f.createProject(QStringLiteral("One"));

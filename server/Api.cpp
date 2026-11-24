@@ -11,6 +11,7 @@
 #include <functional>
 #include <optional>
 
+#include "core/Export.hpp"
 #include "core/Id.hpp"
 #include "core/Rollup.hpp"
 #include "core/Version.hpp"
@@ -304,6 +305,9 @@ const QList<Api::Route>& Api::routeTable() {
        &Api::deleteProject, true},
       {{"GET", QStringLiteral("/v1/projects/{id}/wbs"), QStringLiteral("getWbs"), QStringLiteral("tasks:read")},
        &Api::getWbs, false},
+      {{"GET", QStringLiteral("/v1/projects/{id}/export"), QStringLiteral("exportProject"),
+        QStringLiteral("tasks:read")},
+       &Api::exportProject, false},
       {{"GET", QStringLiteral("/v1/projects/{id}/tasks"), QStringLiteral("listTasks"), QStringLiteral("tasks:read")},
        &Api::listTasks, false},
       {{"POST", QStringLiteral("/v1/projects/{id}/tasks"), QStringLiteral("createTask"), QStringLiteral("tasks:write"),
@@ -919,6 +923,48 @@ Response Api::getWbs(Call& c) {
                              {QStringLiteral("parent"), parent.isEmpty() ? QJsonValue() : QJsonValue(parent)}});
   }
   return Response::json(200, QJsonObject{{QStringLiteral("projectId"), id}, {QStringLiteral("items"), items}});
+}
+
+// One project as a file (SPEC.md §7.9): json (full fidelity), csv (the
+// task table), ods (tasks, dependencies and details as sheets) or mspdi
+// (Microsoft Project XML). PDF and PNG are rendered by the desktop app.
+Response Api::exportProject(Call& c) {
+  const QString id = c.params.value(0);
+  if (auto a = checkProjectAccess(c, id); a.status) return a;
+  const QString name = c.query.queryItemValue(QStringLiteral("format"));
+  const auto format = parseExportFormat(name.isEmpty() ? QStringLiteral("json") : name);
+  if (!format) {
+    return validation(QStringLiteral("format must be json, csv, ods or mspdi (the desktop app makes PDFs)"),
+                      QJsonObject{{QStringLiteral("field"), QStringLiteral("format")}});
+  }
+  auto p = store_.project(id);
+  if (!p) return storeError(p.error());
+  auto ts = store_.tasks(id);
+  if (!ts) return storeError(ts.error());
+  auto ds = store_.dependencies(id);
+  if (!ds) return storeError(ds.error());
+  auto cals = store_.calendars();
+  if (!cals) return storeError(cals.error());
+  ExportData data;
+  data.project = p.value();
+  data.tasks = ts.value();
+  data.dependencies = ds.value();
+  for (CalendarDef cal : cals.value()) {
+    auto ex = store_.calendarExceptions(cal.id);
+    if (!ex) return storeError(ex.error());
+    cal.exceptions = ex.value();
+    data.calendars.insert(cal.id, cal);
+  }
+  data.exportedAt = isoTimestamp(now());
+  data.generator = versionLine(QStringLiteral("zprojectd"));
+  Response r;
+  r.contentType = exportContentType(*format);
+  r.body = zproject::exportProject(data, *format);
+  const QByteArray disposition =
+      "attachment; filename=\"" + exportFileName(data.project.name, *format).toLatin1() + '"';
+  r.headers.append({QByteArray("Content-Disposition"), disposition});
+  r.headers.append({QByteArray("Cache-Control"), QByteArray("no-store")});
+  return r;
 }
 
 Response Api::listTasks(Call& c) {

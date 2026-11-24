@@ -2,11 +2,13 @@
 #include "client/Cli.hpp"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLibraryInfo>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSet>
 #include <QSysInfo>
 #include <QUrlQuery>
@@ -23,6 +25,7 @@
 
 #include "client/ApiClient.hpp"
 #include "client/ClientConfig.hpp"
+#include "core/Export.hpp"
 #include "core/LinkNotation.hpp"
 #include "core/Model.hpp"
 #include "core/Version.hpp"
@@ -47,7 +50,7 @@ QString cliUsage() {
       "  projects create NAME [--description T] [--owner T] [--start D] [--finish D]\n"
       "                       [--status S] [--rag R] [--priority N] [--dry-run]\n"
       "  projects update ID [--name T] [same options] [--rev N] [--dry-run]\n"
-      "                       [--calendar ID|none] (create too): its working calendar"
+      "                       [--calendar ID|none] (create too): its working calendar\n"
       "  projects delete ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
       "\n"
       "Tasks (dates are YYYY-MM-DD; \"none\" clears a date)\n"
@@ -89,6 +92,15 @@ QString cliUsage() {
       "  calendars exception remove EXCEPTION_ID [--dry-run] [--confirm CONFIRM_ID]\n"
       "  calendars import-holidays ID YEAR [--country US] [--dry-run]\n"
       "                       a year's public holidays, computed (not fetched)\n"
+      "\n"
+      "Export\n"
+      "  export PROJECT [--format json|csv|ods|mspdi] [--out-file PATH | --stdout]\n"
+      "                       the project as a file: zproject JSON (full fidelity,\n"
+      "                       the default), CSV (the task table), an OpenDocument\n"
+      "                       spreadsheet, or MS Project XML (mspdi). Without\n"
+      "                       --format, PATH's extension picks it (.json .csv .ods\n"
+      "                       .xml). Without PATH, a new file named after the\n"
+      "                       project in this directory. PDF: the desktop app.\n"
       "\n"
       "Administration (owner token)\n"
       "  token list\n"
@@ -133,7 +145,7 @@ const QSet<QString>& valueOptions() {
       QStringLiteral("position"),   QStringLiteral("task"),          QStringLiteral("type"),
       QStringLiteral("lag"),        QStringLiteral("base"),          QStringLiteral("week"),
       QStringLiteral("hours-per-day"), QStringLiteral("calendar"),   QStringLiteral("hours"),
-      QStringLiteral("label"),      QStringLiteral("country")};
+      QStringLiteral("label"),      QStringLiteral("country"),       QStringLiteral("format")};
   return s;
 }
 const QSet<QString>& flagOptions() {
@@ -320,6 +332,7 @@ class Runner {
     if (cmd == QLatin1String("token")) return token();
     if (cmd == QLatin1String("audit")) return audit();
     if (cmd == QLatin1String("backup")) return backup();
+    if (cmd == QLatin1String("export")) return exportProject();
     return usage(QStringLiteral("unknown command '%1'").arg(cmd));
   }
 
@@ -1631,6 +1644,75 @@ class Runner {
       printJson(r.json);
     } else {
       printFields(out_, r.json, {});
+    }
+    return kExitOk;
+  }
+
+  // GET /v1/projects/{id}/export to a file (atomically, via QSaveFile) or
+  // to standard output.
+  int exportProject() {
+    if (!allow({QStringLiteral("format"), QStringLiteral("out-file"), QStringLiteral("stdout")})) return badOption();
+    if (a_.pos.size() != 1) return usage(QStringLiteral("export PROJECT"));
+    const QString project = a_.pos[0];
+    if (!idRe().match(project).hasMatch()) return usage(QStringLiteral("PROJECT must be a project ID"));
+    const bool toStdout = flag("stdout");
+    const QString outFile = a_.opt(QStringLiteral("out-file"));
+    if (toStdout && a_.has(QStringLiteral("out-file"))) return usage(QStringLiteral("--out-file or --stdout, not both"));
+    if (a_.has(QStringLiteral("out-file")) && outFile.isEmpty()) return usage(QStringLiteral("--out-file needs a path"));
+
+    std::optional<ExportFormat> format;
+    if (a_.has(QStringLiteral("format"))) {
+      format = parseExportFormat(a_.opt(QStringLiteral("format")));
+      if (!format) return usage(QStringLiteral("--format must be json, csv, ods or mspdi"));
+    } else if (!outFile.isEmpty()) {
+      const QString ext = QFileInfo(outFile).suffix().toLower();
+      if (ext == QLatin1String("xml")) {
+        format = ExportFormat::Mspdi;
+      } else if (ext == QLatin1String("csv") || ext == QLatin1String("ods") || ext == QLatin1String("json")) {
+        format = parseExportFormat(ext);
+      }
+    }
+    if (!format) format = ExportFormat::Json;
+    if (toStdout && *format == ExportFormat::Ods && io_.stdoutIsTty) {
+      return usage(QStringLiteral("refusing to write a spreadsheet to a terminal; use --out-file PATH or a pipe"));
+    }
+
+    if (int c = connect(); c != kExitOk) return c;
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("format"), exportFormatName(*format));
+    const ApiResponse r = api_->get(QStringLiteral("/v1/projects/%1/export").arg(project), q);
+    if (!r.ok()) return apiError(r);
+
+    if (toStdout) {
+      if (!io_.writeStdout) {
+        out_ << QString::fromUtf8(r.body);
+        out_.flush();
+        return kExitOk;
+      }
+      return io_.writeStdout(r.body) ? kExitOk : fail(kExitError, QStringLiteral("could not write to standard output"));
+    }
+    QString path = outFile;
+    if (path.isEmpty()) {
+      // The server's suggested name, checked again here: a plain file name
+      // in this directory, never a path. An existing file is never replaced
+      // without being named.
+      static const QRegularExpression nameRe(QStringLiteral("filename=\"([A-Za-z0-9][A-Za-z0-9._-]{0,120})\""));
+      const auto m = nameRe.match(QString::fromLatin1(r.header("Content-Disposition")));
+      path = m.hasMatch() ? m.captured(1) : exportFileName(QString(), *format);
+      if (QFileInfo::exists(path)) {
+        return fail(kExitUsage, QStringLiteral("%1 already exists; name the file with --out-file PATH").arg(path));
+      }
+    }
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(r.body) != r.body.size() || !file.commit()) {
+      return fail(kExitError, QStringLiteral("could not write %1: %2").arg(path, file.errorString()));
+    }
+    if (json_) {
+      printJson(QJsonObject{{QStringLiteral("file"), path},
+                            {QStringLiteral("format"), exportFormatName(*format)},
+                            {QStringLiteral("bytes"), static_cast<qint64>(r.body.size())}});
+    } else {
+      out_ << "Wrote " << path << " (" << exportFormatName(*format) << ", " << r.body.size() << " bytes).\n";
     }
     return kExitOk;
   }

@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.21.1**, the version in `CMakeLists.txt`
+This specification describes zproject **0.22.0**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -10,6 +10,7 @@ Approved 2026-11-20 4:02 PM MST by Stephen** ("Go ahead and start building zproj
 and phase 1 starts in reviewable pull requests. Merges, tags, releases and
 installs still each need Stephen's yes.
 **Post-lock change, approved by Stephen:** Changed 2026-11-20 3:59 PM MST by Stephen: zprojectd moved to a different server host, a Pop!_OS 24.04 amd64 machine (§4.4, decision 2).
+**Post-lock change, requested by Stephen 2026-11-24:** exports (§7.9, decision 20): MS Project XML (MSPDI) **export** moves to phase 1 (import stays phase 2); OpenDocument spreadsheet (`.ods`) export is added; CSV, ODS, MSPDI and JSON are made by the server (`core/Export`) for the API, CLI and desktop, and PDF by the desktop app, since `zprojectd` links no Qt Gui. Two PRs: 0.22.0 (server and CLI), 0.23.0 (desktop export, print and PDF).
 This document consolidates the Notion spec
 ([zproject spec](https://app.notion.com/p/41e2b260c3f08169ad71f9c403f787f9))
 and the additions of 2026-11-20 afternoon: Stephen's feature list (1:20 PM), the
@@ -590,6 +591,39 @@ milestones and deadlines. Every import is a dry run first. API:
 `GET /v1/projects/{id}/export?format=json|csv|pdf|png`,
 `POST /v1/import?format=json|csv|mspdi&dryRun=true`.
 
+As built (0.22.0; post-lock change of 2026-11-24): `GET
+/v1/projects/{id}/export?format=json|csv|ods|mspdi` (`tasks:read`, the
+project allowlist applies; default `json`) returns one project's live rows
+as an attachment named after the project (`Office-move.ods`), with
+`Cache-Control: no-store`. The writers are in `core/Export` (Qt Core only;
+deterministic for a snapshot; `core/Zip` is a minimal zip writer for the
+ODF package):
+- **json** — full fidelity: `{format: "zproject-export", schemaVersion: 1,
+  exportedAt, generator, project, tasks (each with its `wbs`),
+  dependencies, calendars (with their exceptions)}`.
+- **csv** — the task table, RFC 4180, UTF-8 without a BOM, CRLF, a header
+  row: WBS, Level, Title, Type (`task`, `milestone` or `summary`), Mode,
+  Duration (days; blank for summaries), Start, Finish (a summary's span
+  when it has none of its own), Predecessors (`3FS+2d` by WBS code), %
+  Complete, Status, Priority, Constraint, Constraint date, Deadline, Actual
+  start, Actual finish, Fixed cost, Notes, ID. Text starting with `=`, `+`,
+  `-`, `@`, a tab or a carriage return gets a leading `'` (CSV injection);
+  the phase-1 CSV importer strips it again.
+- **ods** — OpenDocument 1.2 spreadsheet: sheets Tasks (the CSV columns as
+  typed numbers, dates and percentages, header row repeated when printed),
+  Dependencies and Project (the details page).
+- **mspdi** — Microsoft Project XML for MS Project, ProjectLibre and
+  GanttProject: task 0 is the project; the outline (WBS, outline level),
+  durations in days, dates (working day 08:00–17:00 with a lunch hour, from
+  the calendar's hours), milestones, manual tasks, summaries, links (FS,
+  SS, FF) with lag, SNET/FNLT constraints, deadlines, % complete, actual
+  dates, fixed cost and notes. Priorities 1–4 map to 800, 500, 300 and 100
+  (P1 highest). Every calendar used (Standard is UID 1) is written as a
+  base calendar flattened from its base chain, with its exceptions as
+  dated ranges. No resources or assignments yet.
+XML output drops characters XML 1.0 forbids. PDF and PNG are rendered by
+the desktop app (0.23.0); a `pdf` or `png` format here is a 400.
+
 ### 7.10 Projects, project details, task notes
 
 Project details page: description, objectives, scope / out of scope, success
@@ -959,13 +993,20 @@ zproject-cli schedule show|critical [--project ID]
 zproject-cli baseline set|show|variance
 zproject-cli raid list|add|update
 zproject-cli report status|variance|resources|portfolio [--format md|pdf|json]
-zproject-cli export|import ...
+zproject-cli export PROJECT [--format json|csv|ods|mspdi] [--out-file PATH | --stdout]
+zproject-cli import ...
 zproject-cli token create|list|revoke  --kind agent --scopes read --projects ID,ID --expires 90d
 zproject-cli audit [--token ID] [--since ...]
 ```
 
 `tasks move ID [--parent ID|none] [--position N]` counts N from 1, as WBS
 numbers do (the API's `position` is 0-based).
+
+`export` (0.22.0) takes the format from `--format`, else from PATH's
+extension (`.json`, `.csv`, `.ods`, `.xml` = MSPDI), else JSON. It writes
+PATH atomically (replacing it), or with no PATH a new file in the current
+directory named after the project (an existing one is never replaced), or
+the bytes to standard output with `--stdout` (not an `.ods` to a terminal).
 
 On the server, `zprojectd` has its own admin flags: `--create-owner-token`,
 `--backup`, `--restore FILE` (service stopped), `--verify-audit`,
@@ -1243,7 +1284,9 @@ colour alone.
   60 s and uploads any reproducer; it isn't a required check yet. Nightly runs
   come later. 0.21.0 adds `fuzz/fuzz_calendar_json` (calendar and exception
   bodies: whatever validates must resolve, find working days and
-  round-trip).
+  round-trip). 0.22.0 adds `fuzz/fuzz_export` (any snapshot of project,
+  tasks, links and calendars through every export writer: each live task
+  appears once, the MSPDI and ODS XML is well-formed, the JSON parses).
 - **CI (`ci.yml`, on every PR and push to main; actions pinned by SHA;
   `-Werror`):** Version consistency; Linux (ubuntu-24.04) build + test +
   `cpack` both `.deb`s (built on ubuntu-24.04, matching the server host's Pop!_OS 24.04
@@ -1407,6 +1450,8 @@ notification hub's port by convention).
     contract. [40]
 20. **Phase 1 exports:** JSON, CSV, PDF/PNG; MSPDI and `.ics` in phase 2.
     **Accepted 2026-11-20 (Stephen: go with the recs).** [41]
+    **Changed 2026-11-24 (Stephen):** MSPDI export and ODS export join phase 1;
+    MSPDI import and `.ics` stay phase 2 (§7.9).
 21. **Multi-project in phase 1:** portfolio and all-projects timeline;
     cross-project links later. **Accepted 2026-11-20 (Stephen: go with the recs).** [42, 8]
 22. **Time tracking** in phase 2. **Accepted 2026-11-20 (Stephen: go with the recs).** [43]
