@@ -53,9 +53,9 @@ or **Preferences → Change server or token…**.
   Find and Check for Updates. Hover a button for its name and shortcut.
   **View → Show Toolbar** hides or shows it; zproject remembers.
 - **Projects** (left) lists the projects your token can see. Each has a
-  folder icon with a dot in its RAG colour (green, amber, red); projects that
-  aren't active are greyed and named with their status.
-- The **centre** shows the selected project: its details, or its tasks in
+  folder icon with a dot in its RAG color (green, amber, red); projects that
+  aren't active are grayed and named with their status.
+- The **center** shows the selected project: its details, or its tasks in
   the outline (**View → Outline**), or its Gantt (**View → Gantt**). The
   resource views arrive in later versions.
 - The **Inspector** (right) shows the selected item's details; for a task
@@ -123,9 +123,9 @@ stored on each task and changes nothing.
 date: its WBS code, date, deadline, status, the summary it sits under, and
 how far away it is ("In 4 days", "Today", "6 days late"). Milestones with no
 date yet come last. Tick **All projects** to see every project's milestones
-in one list (done and cancelled projects only when the sidebar shows them).
+in one list (done and canceled projects only when the sidebar shows them).
 There, each milestone's diamond and its Project cell take the project's
-colour (set it in **Project → Edit Project Details…**); the project's name is
+color (set it in **Project → Edit Project Details…**); the project's name is
 always there too.
 
 - A milestone that is late, or dated after its deadline, is marked ⚠ and
@@ -259,7 +259,7 @@ server speaking another API version is shown the same way.
 ## Appearance
 
 **View → Theme** chooses Light, Dark, High contrast, or System (follow the
-operating system). The accent colour is zproject blue, as in zterminal and
+operating system). The accent color is zproject blue, as in zterminal and
 zwriter.
 
 **View → Zoom In / Zoom Out / Actual Size** (Ctrl + = , Ctrl + − , Ctrl + 0;

@@ -292,7 +292,7 @@ class TestAppShell : public QObject {
     QVERIFY(!Theme::paletteIsDark(lightPalette()));
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     if (QGuiApplication::styleHints()->colorScheme() != Qt::ColorScheme::Unknown) {
-      QSKIP("the platform reports a colour scheme; the palette fallback is not used");
+      QSKIP("the platform reports a color scheme; the palette fallback is not used");
     }
 #endif
     // Qt 6.4, or no scheme from the platform: the palette decides.

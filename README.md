@@ -1,12 +1,12 @@
 # zproject
 
-**0.24.0**
+**0.24.1**
 
 Current release: **0.21.1**
 
 Project management for the z-suite: projects with a WBS, milestones,
 dependencies, a critical-path schedule, baselines, resources and cost, a RAID
-log, reports and alerts, with a Gantt chart at its centre. Three programs from
+log, reports and alerts, with a Gantt chart at its center. Three programs from
 one repository (C++20, Qt 6):
 
 | Program | What it is |
@@ -44,7 +44,7 @@ the task table: day to quarter timescales, a today line, bars from the
 stored dates, summary brackets, milestone diamonds, progress and deadline
 flags, all readable by screen readers. View → Milestones (Ctrl + Shift + M)
 lists the project's milestones, or every project's (each in its project's
-colour), by date, with days to go or days late and missed deadlines; Enter opens one in the outline, and
+color), by date, with days to go or days late and missed deadlines; Enter opens one in the outline, and
 Show in Gantt on the timeline. View → Activity (Ctrl + Shift + A) lists
 what changed in the project, newest first, from the change feed the app
 already keeps: when, who ("This computer" for this device's token), which
@@ -54,7 +54,7 @@ OpenDocument spreadsheet, CSV, zproject JSON or PDF; File → Print… (Ctrl + P
 prints the task table with a Gantt chart beside it, paginated.
 The title bar shows the version.
 The project sidebar, the menus and the toolbar (View → Show Toolbar) use
-zproject's own icons (a folder per project with its RAG colour), drawn the
+zproject's own icons (a folder per project with its RAG color), drawn the
 same on every platform; on Linux the menu bar always stays in the window.
 **Help → Check for Updates…** installs new desktop releases after checking
 their minisign signature and SHA-256 (SPEC.md §21); it never touches

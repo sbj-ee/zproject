@@ -81,7 +81,7 @@ QString formatWhen(const QDateTime& t) {
   return loc.toString(local, QLocale::ShortFormat);
 }
 
-// Sidebar order (SPEC.md §8.1): active, on hold, then done and cancelled.
+// Sidebar order (SPEC.md §8.1): active, on hold, then done and canceled.
 int statusRank(const QString& s) {
   if (s == QLatin1String("active")) return 0;
   if (s == QLatin1String("on_hold")) return 1;
@@ -646,7 +646,7 @@ void MainWindow::applyAppearance() {
     action(QStringLiteral("actionZoomOut"))->setEnabled(settings_.zoomPercent > ViewZoom::kMinPercent);
 }
 
-// The app's own icons (app/Icons.hpp), redrawn in the theme's colours.
+// The app's own icons (app/Icons.hpp), redrawn in the theme's colors.
 void MainWindow::applyIcons(const ThemeColors& c) {
   using G = Icons::Glyph;
   const std::pair<const char*, G> glyphs[] = {
@@ -979,8 +979,8 @@ void MainWindow::reloadProjects() {
     }
   }
   showClosed_->setVisible(closed > 0);
-  showClosed_->setText(showClosed_->isChecked() ? tr("Hide done and cancelled (%1)").arg(closed)
-                                                : tr("Show done and cancelled (%1)").arg(closed));
+  showClosed_->setText(showClosed_->isChecked() ? tr("Hide done and canceled (%1)").arg(closed)
+                                                : tr("Show done and canceled (%1)").arg(closed));
   showClosed_->setAccessibleName(showClosed_->text());
   fillProjectTable(list);
   showProject(currentProjectId());
@@ -1146,7 +1146,7 @@ void MainWindow::showProject(const QString& id) {
     milestones_->setProject(id, name);
     QList<MilestoneSource> sources;
     if (milestones_->allProjects()) {
-      // The projects the sidebar shows: done and cancelled ones only when
+      // The projects the sidebar shows: done and canceled ones only when
       // they are shown there too.
       for (const QJsonObject& other : session_->cache()->projects()) {
         const QString oid = other.value(QStringLiteral("id")).toString();

@@ -29,8 +29,8 @@ QString str(const QJsonObject& o, const char* key) { return o.value(QLatin1Strin
 
 QString dateText(const QDate& d) { return d.isValid() ? QLocale().toString(d, QStringLiteral("d MMM yyyy")) : QString(); }
 
-// A milestone diamond (or, `square`, a swatch) in a project's colour,
-// outlined in the theme's text colour so a pale colour still shows on any
+// A milestone diamond (or, `square`, a swatch) in a project's color,
+// outlined in the theme's text color so a pale color still shows on any
 // background; hollow once done.
 QIcon swatch(const QColor& fill, const QColor& outline, bool hollow, bool square) {
   QIcon icon;
@@ -79,7 +79,7 @@ QList<MilestoneRow> milestoneRows(const QList<MilestoneSource>& sources, const Q
       MilestoneRow r;
       r.projectId = s.projectId;
       r.projectName = s.projectName;
-      // #rrggbb only (the project's validated colour); QColor(QString) is in Qt 6.4.
+      // #rrggbb only (the project's validated color); QColor(QString) is in Qt 6.4.
       if (s.projectColor.size() == 7 && s.projectColor.startsWith(QLatin1Char('#'))) {
         const QColor c(s.projectColor);
         if (c.isValid()) r.projectColor = c;
@@ -208,12 +208,12 @@ void MilestonesView::decorate() {
     QTableWidgetItem* title = table_->item(i, Title);
     QTableWidgetItem* project = table_->item(i, Project);
     if (title == nullptr || project == nullptr) continue;
-    const bool coloured = all && r.projectColor.isValid();
-    // With a colour the drawn diamond replaces the text one.
-    title->setText(coloured ? r.title : (r.done ? QStringLiteral("◇ ") : QStringLiteral("◆ ")) + r.title);
-    title->setIcon(coloured ? swatch(r.projectColor, outline_, r.done, false) : QIcon());
-    project->setIcon(coloured ? swatch(r.projectColor, outline_, false, true) : QIcon());
-    project->setToolTip(coloured ? tr("%1 (colour %2)").arg(r.projectName, r.projectColor.name()) : r.projectName);
+    const bool colored = all && r.projectColor.isValid();
+    // With a color the drawn diamond replaces the text one.
+    title->setText(colored ? r.title : (r.done ? QStringLiteral("◇ ") : QStringLiteral("◆ ")) + r.title);
+    title->setIcon(colored ? swatch(r.projectColor, outline_, r.done, false) : QIcon());
+    project->setIcon(colored ? swatch(r.projectColor, outline_, false, true) : QIcon());
+    project->setToolTip(colored ? tr("%1 (color %2)").arg(r.projectName, r.projectColor.name()) : r.projectName);
   }
 }
 

@@ -53,7 +53,7 @@ MinisignResult verifyMinisign(const QByteArray& message, const QByteArray& signa
                               const MinisignPublicKey& key) {
   MinisignResult r;
   if (sodium_init() < 0) {
-    r.error = QStringLiteral("libsodium could not be initialised");
+    r.error = QStringLiteral("libsodium could not be initialized");
     return r;
   }
   QList<QByteArray> lines = signatureFile.split('\n');

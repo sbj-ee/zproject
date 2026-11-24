@@ -62,7 +62,7 @@ QString fieldLabel(const QString& field) {
       {QStringLiteral("start"), QObject::tr("Start")},
       {QStringLiteral("finish"), QObject::tr("Target finish")},
       {QStringLiteral("budget"), QObject::tr("Budget")},
-      {QStringLiteral("color"), QObject::tr("Colour")},
+      {QStringLiteral("color"), QObject::tr("Color")},
       {QStringLiteral("title"), QObject::tr("Title")},
       {QStringLiteral("percentComplete"), QObject::tr("% complete")},
       {QStringLiteral("deleted"), QObject::tr("Deleted")},
@@ -101,7 +101,7 @@ QString projectStatusName(const QString& status) {
   if (status == QLatin1String("active")) return QObject::tr("Active");
   if (status == QLatin1String("on_hold")) return QObject::tr("On hold");
   if (status == QLatin1String("done")) return QObject::tr("Done");
-  if (status == QLatin1String("cancelled")) return QObject::tr("Cancelled");
+  if (status == QLatin1String("cancelled")) return QObject::tr("Canceled");
   return status;
 }
 

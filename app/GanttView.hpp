@@ -30,7 +30,7 @@ class OutlineModel;
 // (the same model and the table's own row geometry, so they scroll
 // together). Bars come from stored dates: auto tasks solid, manual tasks
 // outlined, summaries as brackets over their subtasks' span, milestones as
-// diamonds; a centre band shows % complete and a flag marks the deadline
+// diamonds; a center band shows % complete and a flag marks the deadline
 // (filled when the finish is past it). Weekends are shaded and a dashed
 // line marks today. Only the rows in view are painted (SPEC.md §17).
 class GanttChart : public QWidget {

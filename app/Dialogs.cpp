@@ -47,7 +47,7 @@ AboutDialog::AboutDialog(const ConnectionInfo& info, QWidget* parent) : QDialog(
   icon->setAccessibleName(tr("zproject icon"));
   top->addWidget(icon, 0, Qt::AlignTop);
   auto* title = new QLabel(tr("<h2>zproject %1</h2><p>Project scheduling for one owner and a few people, "
-                              "served over your tailnet.</p><p>MIT licence · Qt %2 (built with %3)</p>")
+                              "served over your tailnet.</p><p>MIT license · Qt %2 (built with %3)</p>")
                                .arg(appVersion(), QString::fromLatin1(qVersion()),
                                     QStringLiteral(QT_VERSION_STR)),
                            this);

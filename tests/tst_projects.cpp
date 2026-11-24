@@ -217,16 +217,16 @@ class TestProjects : public QObject {
   void sidebarTableAndDetails() {
     login(owner_);
     auto w = open(5);
-    // Active first, then on hold; done and cancelled behind the toggle.
+    // Active first, then on hold; done and canceled behind the toggle.
     QCOMPARE(sidebar(*w), (QStringList{QStringLiteral("Kitchen remodel"), QStringLiteral("Q1 board report"),
                                        QStringLiteral("Website relaunch (on hold)")}));
     QToolButton* closed = w->showClosedButton();
     QVERIFY(!closed->isHidden());
-    QCOMPARE(closed->text(), QStringLiteral("Show done and cancelled (2)"));
+    QCOMPARE(closed->text(), QStringLiteral("Show done and canceled (2)"));
     closed->click();
     QCOMPARE(sidebar(*w).size(), 5);
-    QCOMPARE(sidebar(*w).last(), QStringLiteral("Old intranet (cancelled)"));
-    QCOMPARE(closed->text(), QStringLiteral("Hide done and cancelled (2)"));
+    QCOMPARE(sidebar(*w).last(), QStringLiteral("Old intranet (canceled)"));
+    QCOMPARE(closed->text(), QStringLiteral("Hide done and canceled (2)"));
     closed->click();
     QCOMPARE(sidebar(*w).size(), 3);
 
@@ -239,7 +239,7 @@ class TestProjects : public QObject {
     QVERIFY(html.contains(QStringLiteral("2026-12-18")));
     QVERIFY(w->findChild<QLabel*>(QStringLiteral("projectSummary"))->text().startsWith(QStringLiteral("2 tasks")));
 
-    // View → All Projects: every project, RAG as a letter (not colour alone).
+    // View → All Projects: every project, RAG as a letter (not color alone).
     w->action(QStringLiteral("actionAllProjects"))->trigger();
     QTableWidget* t = w->projectTable();
     QCOMPARE(w->mainStack()->currentWidget(), t);
@@ -254,7 +254,7 @@ class TestProjects : public QObject {
     // Opening a closed project from the table shows it in the sidebar too.
     emit t->cellActivated(4, 0);
     QCOMPARE(w->mainStack()->currentIndex(), 1);
-    QCOMPARE(w->projectList()->currentItem()->text(), QStringLiteral("Old intranet (cancelled)"));
+    QCOMPARE(w->projectList()->currentItem()->text(), QStringLiteral("Old intranet (canceled)"));
     QVERIFY(w->showClosedButton()->isChecked());
     // A refresh keeps the table showing.
     w->action(QStringLiteral("actionAllProjects"))->trigger();
@@ -284,10 +284,10 @@ class TestProjects : public QObject {
     QVERIFY2(green.green() > green.red() && green.green() > green.blue(), qPrintable(green.name()));
     QVERIFY2(red.red() > red.green() && red.red() > red.blue(), qPrintable(red.name()));
     QVERIFY2(amber.red() > amber.blue() && amber.green() > amber.blue(), qPrintable(amber.name()));
-    // Not active: the folder is drawn in the muted colour.
+    // Not active: the folder is drawn in the muted color.
     auto folderPixel = [](const QListWidgetItem* item) { return item->icon().pixmap(16, 16).toImage().pixelColor(2, 8); };
     QVERIFY(folderPixel(find(QStringLiteral("Kitchen"))) != folderPixel(find(QStringLiteral("Website"))));
-    // A theme change redraws them in its colours.
+    // A theme change redraws them in its colors.
     const QColor lightFolder = folderPixel(find(QStringLiteral("Kitchen")));
     w->setTheme(QStringLiteral("dark"));
     QVERIFY(folderPixel(find(QStringLiteral("Kitchen"))) != lightFolder);
