@@ -3,7 +3,7 @@
 //    page, a PDF with one page per laid-out page, an empty project;
 //  - File → Export…, Export as PDF… and Print… in the window, offscreen,
 //    against the real zprojectd API on loopback: every file kind from the
-//    server's snapshot (with links), the printer, cancelling, and offline
+//    server's snapshot (with links), the printer, canceling, and offline
 //    exports from the cache (asked first, without links).
 #include <QApplication>
 #include <QBuffer>
@@ -68,9 +68,9 @@ ExportData plan(int n, int daysApart = 7) {
   return d;
 }
 
-QColor barColour() { return QColor(0xa9, 0xc4, 0xe8); }
+QColor barColor() { return QColor(0xa9, 0xc4, 0xe8); }
 
-int countColour(const QImage& img, const QColor& c) {
+int countColor(const QImage& img, const QColor& c) {
   int n = 0;
   for (int y = 0; y < img.height(); ++y) {
     for (int x = 0; x < img.width(); ++x) {
@@ -254,7 +254,7 @@ class TestExportPrint : public QObject {
     out.paintPage(p, 0);
     p.end();
     QCOMPARE(img.pixelColor(2, 539), QColor(Qt::white));  // light whatever the theme
-    QVERIFY(countColour(img, barColour()) > 50);          // the task bars
+    QVERIFY(countColor(img, barColor()) > 50);          // the task bars
   }
 
   void pdfHasEveryPage() {
@@ -346,7 +346,7 @@ class TestExportPrint : public QObject {
     r = run(*w, [&] { w->action(QStringLiteral("actionExport"))->trigger(); });
     QVERIFY(readAll(chosen).startsWith("%PDF"));
 
-    // Cancelling the dialog does nothing.
+    // Canceling the dialog does nothing.
     chosen.clear();
     QSignalSpy spy(w->exportActions(), &ExportActions::finished);
     w->action(QStringLiteral("actionExport"))->trigger();
@@ -379,7 +379,7 @@ class TestExportPrint : public QObject {
     QVERIFY(readAll(printed).startsWith("%PDF"));
     QVERIFY(w->statusBar()->currentMessage().contains(QStringLiteral("Office move")));
 
-    // Cancelled: nothing printed.
+    // Canceled: nothing printed.
     w->exportActions()->setPrintDialogProvider([](QPrinter*) { return false; });
     QSignalSpy spy(w->exportActions(), &ExportActions::finished);
     w->action(QStringLiteral("actionPrint"))->trigger();

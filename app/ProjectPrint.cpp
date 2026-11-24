@@ -22,7 +22,7 @@ constexpr double kPad = 3;
 constexpr double kIndent = 9;
 constexpr double kMinGantt = 160;
 
-// Fixed print colours: paper is white whatever the screen theme.
+// Fixed print colors: paper is white whatever the screen theme.
 const QColor kText(0x1a, 0x1a, 0x1a);
 const QColor kMuted(0x5c, 0x5c, 0x5c);
 const QColor kRule(0xb4, 0xb4, 0xb4);

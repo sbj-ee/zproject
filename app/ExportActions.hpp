@@ -53,8 +53,8 @@ class ExportActions : public QObject {
 
   // Tests and scripted use replace the dialogs. The save dialog gets the
   // suggested path and the filters and returns the chosen path (empty:
-  // cancelled) and filter. The print dialog may set up the printer and
-  // returns false when cancelled. The question returns true to go on.
+  // canceled) and filter. The print dialog may set up the printer and
+  // returns false when canceled. The question returns true to go on.
   using SavePathFn = std::function<QString(const QString& suggested, const QStringList& filters, QString* filter)>;
   using PrintDialogFn = std::function<bool(QPrinter* printer)>;
   using ConfirmFn = std::function<bool(const QString& title, const QString& text)>;
