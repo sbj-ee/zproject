@@ -126,7 +126,14 @@ jobs:
           grep -q './usr/bin/zproject$' desktop.list
           grep -q './usr/bin/zproject-cli$' desktop.list
           grep -q './usr/share/applications/zproject.desktop$' desktop.list
-          grep -q './usr/share/icons/hicolor/256x256/apps/zproject.png$' desktop.list
+          grep -q './usr/share/icons/hicolor/scalable/apps/zproject.svg$' desktop.list
+          for sz in 16 24 32 48 64 128 256 512; do
+            grep -q "./usr/share/icons/hicolor/${sz}x${sz}/apps/zproject.png$" desktop.list
+          done
+          dpkg-deb --fsys-tarfile zproject_*_amd64.deb | tar -xO ./usr/share/applications/zproject.desktop > zproject.desktop
+          grep -qx 'Icon=zproject' zproject.desktop
+          grep -qx 'StartupWMClass=zproject' zproject.desktop
+          rm -f zproject.desktop
           grep -q './usr/bin/zprojectd$' server.list
           grep -q './usr/lib/systemd/system/zprojectd.service$' server.list
           grep -q './usr/lib/systemd/system/zprojectd-backup.service$' server.list

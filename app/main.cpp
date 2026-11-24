@@ -39,6 +39,12 @@ int main(int argc, char* argv[]) {
   QApplication::setApplicationName(QStringLiteral("zproject"));
   QApplication::setApplicationVersion(zproject::appVersion());
   QApplication::setOrganizationDomain(QStringLiteral("sbj.ee"));
+  // Must match packaging/zproject.desktop. On Wayland, Qt 6.4 uses this as
+  // the app_id the shell matches to the .desktop file (dash, overview, task
+  // switcher). If it is left empty, Qt builds app_id as the reversed
+  // organization domain plus the binary name (ee.sbj.zproject), which does
+  // not match, and GNOME shows no icon for the running app.
+  QGuiApplication::setDesktopFileName(QStringLiteral("zproject"));
   QApplication::setWindowIcon(QIcon(QStringLiteral(":/icons/zproject-256.png")));
 
   // The platform palette decides "System" on Qt 6.4; read it before Fusion

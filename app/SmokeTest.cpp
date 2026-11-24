@@ -44,6 +44,8 @@ int runSmokeTest(QString* report) {
     check(style.compare(QLatin1String("fusion"), Qt::CaseInsensitive) == 0, QStringLiteral("style: %1").arg(style));
     check(QFile::exists(QStringLiteral(":/help/zproject-help.md")), QStringLiteral("help guide bundled"));
     check(!QIcon(QStringLiteral(":/icons/zproject-256.png")).isNull(), QStringLiteral("app icon bundled"));
+    check(QGuiApplication::desktopFileName() == QStringLiteral("zproject"),
+          QStringLiteral("desktop file name: %1").arg(QGuiApplication::desktopFileName()));
 
     MainWindow w(std::move(o));
     w.show();

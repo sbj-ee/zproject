@@ -7,6 +7,16 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.21.1 — 2026-11-23
+
+Linux: the running app now shows its icon on GNOME/Wayland. Call
+`setDesktopFileName("zproject")` so the Wayland app_id matches
+`zproject.desktop`. Without that, Qt 6.4 built the app_id as
+`ee.sbj.zproject` (reversed `organizationDomain` plus the binary name)
+and the shell could not find the already-installed hicolor icons.
+The smoke test checks the desktop file name; CI checks `Icon=` and
+`StartupWMClass` in the `.deb`.
+
 ## 0.21.0 — 2026-11-23
 
 Scheduling plan, PR S4: calendars on the server (plan §2.1, §3; SPEC §5.1,
