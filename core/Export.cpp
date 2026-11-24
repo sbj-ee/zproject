@@ -1041,6 +1041,38 @@ QByteArray exportMspdi(const ExportData& data) {
   return buf;
 }
 
+Result<ExportData> exportDataFromJson(const QByteArray& json) {
+  QJsonParseError err{};
+  const QJsonDocument doc = QJsonDocument::fromJson(json, &err);
+  if (err.error != QJsonParseError::NoError || !doc.isObject()) {
+    return Error::validation(QStringLiteral("not a JSON object"));
+  }
+  const QJsonObject o = doc.object();
+  if (o.value(QStringLiteral("format")).toString() != QLatin1String("zproject-export")) {
+    return Error::validation(QStringLiteral("not a zproject export"));
+  }
+  const int version = o.value(QStringLiteral("schemaVersion")).toInt();
+  if (version < 1 || version > kExportSchemaVersion) {
+    return Error::validation(QStringLiteral("export schema version %1 is not supported").arg(version));
+  }
+  ExportData d;
+  d.project = projectFromJson(o.value(QStringLiteral("project")).toObject());
+  for (const QJsonValue& v : o.value(QStringLiteral("tasks")).toArray()) d.tasks.append(taskFromJson(v.toObject()));
+  for (const QJsonValue& v : o.value(QStringLiteral("dependencies")).toArray()) {
+    d.dependencies.append(dependencyFromJson(v.toObject()));
+  }
+  for (const QJsonValue& v : o.value(QStringLiteral("calendars")).toArray()) {
+    CalendarDef c = calendarFromJson(v.toObject());
+    for (const QJsonValue& e : v.toObject().value(QStringLiteral("exceptions")).toArray()) {
+      c.exceptions.append(calendarExceptionFromJson(e.toObject()));
+    }
+    d.calendars.insert(c.id, c);
+  }
+  d.exportedAt = o.value(QStringLiteral("exportedAt")).toString();
+  d.generator = o.value(QStringLiteral("generator")).toString();
+  return d;
+}
+
 QByteArray exportProject(const ExportData& data, ExportFormat f) {
   switch (f) {
     case ExportFormat::Json: return exportJson(data);

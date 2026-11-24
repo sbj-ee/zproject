@@ -37,6 +37,7 @@ class ActivityView;
 class GanttView;
 class MilestonesView;
 class OutlineView;
+class ExportActions;
 class ProjectActions;
 class TaskActions;
 class TaskInspector;
@@ -126,6 +127,7 @@ class MainWindow : public QMainWindow {
   QStackedWidget* mainStack() const { return stack_; }
   QLabel* projectDetails() const { return projectDetails_; }
   ProjectActions* projectActions() const { return projectActions_; }
+  ExportActions* exportActions() const { return exportActions_; }
   QString currentProjectId() const;
   void selectProject(const QString& id);
   void showProjectTable();
@@ -211,6 +213,7 @@ class MainWindow : public QMainWindow {
   QPushButton* editButton_ = nullptr;
   QPushButton* deleteButton_ = nullptr;
   ProjectActions* projectActions_ = nullptr;
+  ExportActions* exportActions_ = nullptr;
   // What a selected project shows: its details or its outline.
   enum class ProjectPage { Details, Outline, Gantt, Milestones, Activity };
   ProjectPage page_ = ProjectPage::Details;

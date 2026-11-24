@@ -95,6 +95,12 @@ QByteArray odsContentXml(const ExportData& data);
 QByteArray exportMspdi(const ExportData& data);
 QByteArray exportProject(const ExportData& data, ExportFormat f);
 
+// Reads an exportJson() document back (the desktop prints from it). A
+// validation error unless it is a "zproject-export" object of a schema
+// version this build reads. Rows are decoded as the API decodes them;
+// nothing else is checked.
+Result<ExportData> exportDataFromJson(const QByteArray& json);
+
 // The text with every character XML 1.0 forbids removed (C0 controls other
 // than tab, newline and carriage return; U+FFFE, U+FFFF; lone surrogates).
 QString xmlSafe(const QString& s);

@@ -41,6 +41,7 @@
 #include "app/Icons.hpp"
 #include "app/OutlineModel.hpp"
 #include "app/OutlineView.hpp"
+#include "app/ExportActions.hpp"
 #include "app/ProjectActions.hpp"
 #include "app/Shortcuts.hpp"
 #include "app/SignInDialog.hpp"
@@ -138,6 +139,17 @@ MainWindow::MainWindow(Options options, QWidget* parent) : QMainWindow(parent), 
   connect(projectActions_, &ProjectActions::notice, this, [this](const QString& text, bool) {
     statusBar()->showMessage(text, 10000);
   });
+  exportActions_ = new ExportActions(this, [this] { return session_.get(); }, this);
+  connect(exportActions_, &ExportActions::notice, this, [this](const QString& text, bool error) {
+    statusBar()->showMessage(text, 10000);
+    if (!error) return;
+    // Window-modal but not blocking: the export has already finished.
+    auto* box = new QMessageBox(QMessageBox::Warning, tr("Export"), text, QMessageBox::Ok, this);
+    box->setObjectName(QStringLiteral("exportError"));
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->open();
+  });
+  connect(exportActions_, &ExportActions::finished, this, [this] { updateEditActions(); });
   connect(projectActions_, &ProjectActions::saved, this, [this](const QString& id, bool created) {
     if (created) pendingSelect_ = id;
   });
@@ -418,6 +430,13 @@ void MainWindow::buildMenus() {
 #endif
   QMenu* file = menuBar()->addMenu(tr("&File"));
   add(file, QStringLiteral("actionNewProject"), tr("&New Project…"), [this] { projectActions_->newProject(); });
+  file->addSeparator();
+  // Exports and printing (SPEC.md §7.9): from the server's copy when it
+  // answers, else from this computer's.
+  add(file, QStringLiteral("actionExport"), tr("&Export…"), [this] { exportActions_->exportProject(currentProjectId()); });
+  add(file, QStringLiteral("actionExportPdf"), tr("Export as P&DF…"),
+      [this] { exportActions_->exportPdf(currentProjectId()); });
+  add(file, QStringLiteral("actionPrint"), tr("&Print…"), [this] { exportActions_->print(currentProjectId()); });
   file->addSeparator();
   add(file, QStringLiteral("actionRefresh"), tr("&Refresh"), [this] {
     if (session_) session_->refresh();
@@ -1014,6 +1033,10 @@ void MainWindow::updateEditActions() {
   enable("actionGantt", haveProject);
   enable("actionMilestones", haveProject);
   enable("actionActivity", haveProject);
+  const bool exporting = exportActions_ != nullptr && exportActions_->busy();
+  enable("actionExport", haveProject && !exporting);
+  enable("actionExportPdf", haveProject && !exporting);
+  enable("actionPrint", haveProject && !exporting);
   if (outlineButton_) outlineButton_->setEnabled(haveProject);
   const bool inOutline = stack_ && stack_->currentWidget() == outline_ && haveProject;
   const QString task = inOutline ? outline_->currentTaskId() : QString();

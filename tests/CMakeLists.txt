@@ -89,6 +89,7 @@ if(ZPROJECT_BUILD_GUI)
   zproject_add_test(tst_gantt zproject_app_lib zproject_server_lib)
   zproject_add_test(tst_milestones zproject_app_lib zproject_server_lib)
   zproject_add_test(tst_activity zproject_app_lib zproject_server_lib)
+  zproject_add_test(tst_exportprint zproject_app_lib zproject_server_lib)
   zproject_add_test(tst_accessibility zproject_app_lib zproject_server_lib)
   # The title-bar test checks the build version against CMake's.
   target_compile_definitions(tst_gantt PRIVATE ZPROJECT_TEST_VERSION="${PROJECT_VERSION}")

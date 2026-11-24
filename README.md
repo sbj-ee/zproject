@@ -1,6 +1,6 @@
 # zproject
 
-**0.22.0**
+**0.23.0**
 
 Current release: **0.21.1**
 
@@ -49,6 +49,9 @@ Show in Gantt on the timeline. View → Activity (Ctrl + Shift + A) lists
 what changed in the project, newest first, from the change feed the app
 already keeps: when, who ("This computer" for this device's token), which
 task, and what changed, filtered by who and by tasks or project details.
+File → Export… (Ctrl + Shift + E) saves a project as MS Project XML, an
+OpenDocument spreadsheet, CSV, zproject JSON or PDF; File → Print… (Ctrl + P)
+prints the task table with a Gantt chart beside it, paginated.
 The title bar shows the version.
 The project sidebar, the menus and the toolbar (View → Show Toolbar) use
 zproject's own icons (a folder per project with its RAG colour), drawn the
