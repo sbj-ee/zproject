@@ -54,6 +54,8 @@ QString cliUsage() {
       "                       [--objectives T] [--scope T] [--out-of-scope T]\n"
       "                       [--success-criteria T] (create too): the details page's\n"
       "                       text (Markdown); \"\" clears one\n"
+      "                       [--sponsor T] [--budget N|none] [--color #rrggbb|none]\n"
+      "                       (create too)\n"
       "  projects delete ID [--rev N] [--dry-run] [--confirm CONFIRM_ID]\n"
       "\n"
       "Tasks (dates are YYYY-MM-DD; \"none\" clears a date)\n"
@@ -150,7 +152,8 @@ const QSet<QString>& valueOptions() {
       QStringLiteral("hours-per-day"), QStringLiteral("calendar"),   QStringLiteral("hours"),
       QStringLiteral("label"),      QStringLiteral("country"),       QStringLiteral("format"),
       QStringLiteral("objectives"), QStringLiteral("scope"),         QStringLiteral("out-of-scope"),
-      QStringLiteral("success-criteria")};
+      QStringLiteral("success-criteria"), QStringLiteral("sponsor"), QStringLiteral("budget"),
+      QStringLiteral("color")};
   return s;
 }
 const QSet<QString>& flagOptions() {
@@ -724,15 +727,42 @@ class Runner {
     strOpt(QStringLiteral("scope"), QStringLiteral("scope"), &b);
     strOpt(QStringLiteral("out-of-scope"), QStringLiteral("outOfScope"), &b);
     strOpt(QStringLiteral("success-criteria"), QStringLiteral("successCriteria"), &b);
+    strOpt(QStringLiteral("sponsor"), QStringLiteral("sponsor"), &b);
     strOpt(QStringLiteral("status"), QStringLiteral("status"), &b);
     strOpt(QStringLiteral("rag"), QStringLiteral("rag"), &b);
     if (!dateOpt(QStringLiteral("start"), QStringLiteral("start"), &b) ||
         !dateOpt(QStringLiteral("finish"), QStringLiteral("finish"), &b) ||
         !intOpt(QStringLiteral("priority"), QStringLiteral("priority"), &b, 1, 4) ||
-        !calendarOpt(&b)) {
+        !calendarOpt(&b) || !budgetOpt(&b) || !colorOpt(&b)) {
       b.insert(QStringLiteral("__invalid"), true);
     }
     return b;
+  }
+  // --budget N|none: a number >= 0, or null (no budget).
+  bool budgetOpt(QJsonObject* b) {
+    if (!a_.has(QStringLiteral("budget"))) return true;
+    const QString v = a_.opt(QStringLiteral("budget"));
+    if (v == QLatin1String("none")) {
+      b->insert(QStringLiteral("budget"), QJsonValue());
+      return true;
+    }
+    return numOpt(QStringLiteral("budget"), QStringLiteral("budget"), b);
+  }
+  // --color #rrggbb|none: the project's colour (sidebar, milestones), or null.
+  bool colorOpt(QJsonObject* b) {
+    if (!a_.has(QStringLiteral("color"))) return true;
+    const QString v = a_.opt(QStringLiteral("color"));
+    if (v == QLatin1String("none")) {
+      b->insert(QStringLiteral("color"), QJsonValue());
+      return true;
+    }
+    static const QRegularExpression re(QStringLiteral("^#[0-9a-fA-F]{6}$"));
+    if (!re.match(v).hasMatch()) {
+      badValue_ = QStringLiteral("--color must be #rrggbb or none");
+      return false;
+    }
+    b->insert(QStringLiteral("color"), v.toLower());
+    return true;
   }
   // --calendar ID|none: a calendar id, or null (Standard / the project's).
   bool calendarOpt(QJsonObject* b) {
@@ -754,7 +784,8 @@ class Runner {
                              QStringLiteral("finish"),      QStringLiteral("status"), QStringLiteral("rag"),
                              QStringLiteral("priority"),    QStringLiteral("dry-run"),  QStringLiteral("calendar"),
                              QStringLiteral("objectives"),  QStringLiteral("scope"),    QStringLiteral("out-of-scope"),
-                             QStringLiteral("success-criteria")};
+                             QStringLiteral("success-criteria"), QStringLiteral("sponsor"), QStringLiteral("budget"),
+                             QStringLiteral("color")};
     if (sub == QLatin1String("list")) {
       if (!allow({QStringLiteral("all")})) return badOption();
       if (!a_.pos.isEmpty()) return usage(QStringLiteral("projects list takes no arguments"));
@@ -792,7 +823,8 @@ class Runner {
       } else {
         printFields(out_, r.json, {QStringLiteral("id"), QStringLiteral("name"), QStringLiteral("status"),
                                    QStringLiteral("rag"), QStringLiteral("start"), QStringLiteral("finish"),
-                                   QStringLiteral("owner"), QStringLiteral("description"), QStringLiteral("objectives"),
+                                   QStringLiteral("owner"), QStringLiteral("sponsor"), QStringLiteral("budget"),
+                                   QStringLiteral("color"), QStringLiteral("description"), QStringLiteral("objectives"),
                                    QStringLiteral("scope"), QStringLiteral("outOfScope"),
                                    QStringLiteral("successCriteria"), QStringLiteral("rev")});
       }

@@ -340,6 +340,32 @@ class TestCli : public QObject {
     QVERIFY(r.out.contains(QStringLiteral("outOfScope:      Windows, roof")));
     QVERIFY(r.out.contains(QStringLiteral("successCriteria: Passes inspection")));
     QVERIFY(r.out.contains(QStringLiteral("scope:           Insulation\n                 Boarding")));
+    // Sponsor, budget and colour: set, then cleared with "" / none.
+    r = run({QStringLiteral("--json"), QStringLiteral("update"), id, QStringLiteral("--sponsor"), QStringLiteral("Jo"),
+             QStringLiteral("--budget"), QStringLiteral("12500.50"), QStringLiteral("--color"), QStringLiteral("#3A9D5D")});
+    QVERIFY2(r.code == 0, qPrintable(r.err));
+    p = r.json().toObject();
+    QCOMPARE(p.value(QStringLiteral("sponsor")).toString(), QStringLiteral("Jo"));
+    QCOMPARE(p.value(QStringLiteral("budget")).toDouble(), 12500.5);
+    QCOMPARE(p.value(QStringLiteral("color")).toString(), QStringLiteral("#3a9d5d"));
+    r = run({QStringLiteral("show"), id});
+    QVERIFY(r.out.contains(QStringLiteral("budget:          12500.5")));
+    QVERIFY(r.out.indexOf(QStringLiteral("sponsor:")) < r.out.indexOf(QStringLiteral("description:")));
+    r = run({QStringLiteral("--json"), QStringLiteral("update"), id, QStringLiteral("--sponsor="), QStringLiteral("--budget"),
+             QStringLiteral("none"), QStringLiteral("--color"), QStringLiteral("none")});
+    QVERIFY2(r.code == 0, qPrintable(r.err));
+    p = r.json().toObject();
+    QVERIFY(p.value(QStringLiteral("sponsor")).toString().isEmpty());
+    QVERIFY(p.value(QStringLiteral("budget")).isNull());
+    QVERIFY(p.value(QStringLiteral("color")).isNull() || p.value(QStringLiteral("color")).toString().isEmpty());
+    // Bad values are refused before anything is sent.
+    for (const QStringList& bad : {QStringList{QStringLiteral("--budget"), QStringLiteral("-5")},
+                                   QStringList{QStringLiteral("--budget"), QStringLiteral("lots")},
+                                   QStringList{QStringLiteral("--color"), QStringLiteral("green")},
+                                   QStringList{QStringLiteral("--color"), QStringLiteral("#12345")}}) {
+      r = run(QStringList{QStringLiteral("update"), id} + bad);
+      QCOMPARE(r.code, int(kExitUsage));
+    }
     // Not an option of other commands.
     QCOMPARE(cliAs(owner_, {QStringLiteral("tasks"), QStringLiteral("list"), id, QStringLiteral("--scope"),
                             QStringLiteral("x")})

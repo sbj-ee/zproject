@@ -9,18 +9,25 @@ heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 
 ## 0.24.0 — 2026-11-24
 
-CLI: the project details page's text fields (SPEC §7.10, §10). Stacked on
-0.23.0.
+CLI: the rest of the project details fields (SPEC §7.10, §10). Stacked on
+0.23.0. Before this, these fields could only be set through the API or the
+desktop app.
 
-- `zproject-cli projects create|update` take `--objectives`, `--scope`,
-  `--out-of-scope` and `--success-criteria`. Values are Markdown, and `""`
-  clears one. Before this, these fields could only be set through the API or
-  the desktop app.
-- `projects show` lists them after the description, with multi-line values
-  indented.
+- `zproject-cli projects create|update` take:
+  - `--objectives`, `--scope`, `--out-of-scope` and `--success-criteria`,
+    whose values are Markdown;
+  - `--sponsor`;
+  - `--budget N|none` (a number >= 0);
+  - `--color #rrggbb|none` (the project's color in the sidebar and the
+    all-projects Milestones view).
+
+  `""` clears a text field, and `none` clears the budget or the color. Bad
+  numbers and colors are refused before anything is sent.
+- `projects show` lists sponsor, budget and color after the owner, and the
+  four text fields after the description, with multi-line values indented.
 - **Tests**: `projectDetailsText` in `tst_cli` covers create, a dry run,
-  changing and clearing on update, `show`, and the options refused
-  elsewhere.
+  setting, changing and clearing on update, `show`, bad budgets and colors,
+  and the options refused elsewhere.
 
 ## 0.23.0 — 2026-11-24
 
