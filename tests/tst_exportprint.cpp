@@ -223,7 +223,10 @@ class TestExportPrint : public QObject {
     QVERIFY(days.hasGantt());
     QCOMPARE(days.unit(), ProjectPrintout::Unit::Day);
     QVERIFY(days.from() <= QDate(2027, 1, 4));
-    ProjectPrintout weeks(plan(12), {});
+    // A 12-task weekly plan (82-day span) is Week on Linux, but macOS fonts
+    // are wider, the table leaves less Gantt room, and the same span becomes
+    // Month (Homebrew Qt 6.12 CI). Eight tasks (54 days) stays Week on both.
+    ProjectPrintout weeks(plan(8), {});
     weeks.layout(QSizeF(760, 540));
     QCOMPARE(weeks.unit(), ProjectPrintout::Unit::Week);
     QCOMPARE(weeks.from().dayOfWeek(), 1);  // starts on a Monday
