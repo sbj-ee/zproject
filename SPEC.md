@@ -1,6 +1,6 @@
 # zproject — Project specification
 
-This specification describes zproject **0.24.0**, the version in `CMakeLists.txt`
+This specification describes zproject **0.24.1**, the version in `CMakeLists.txt`
 (`scripts/check-version.sh` keeps the two in step).
 
 **Status: Approved / locked 2026-11-20** (Stephen: "go with the recs",
@@ -18,7 +18,7 @@ six PM features he approved (1:21 PM), suite interop and agent access
 (1:24 PM), icon concept B, and the backend recommendation. Where Notion and this
 file differ, this file is newer; the Notion page carries a mirror of it.
 
-It is modelled on zterminal's `SPEC.md`: once a repository exists, the build
+It is modeled on zterminal's `SPEC.md`: once a repository exists, the build
 files and workflows win over this document, and this document is corrected to
 match them. Decisions are recorded in
 [§25 Decisions](#25-decisions): every recommendation was accepted on
@@ -61,7 +61,7 @@ Contents:
 zproject is a personal and small-team project-management app in the z-suite:
 projects with a WBS, milestones, dependencies, a schedule computed by the
 critical path method, resources with calendars and cost, baselines, a RAID log,
-templates, reports, and alerts — with a Gantt chart at its centre. It is for
+templates, reports, and alerts — with a Gantt chart at its center. It is for
 work that has a start, a finish and dependencies, which ztodo (daily capture and
 to-do lists) is deliberately not built for. The two stay separate apps that
 interoperate through their APIs (§13).
@@ -181,7 +181,7 @@ fuzzers (`-DZPROJECT_FUZZ=ON`, clang only). CMake options:
 ### 4.3 Dependencies
 
 Qt 6, **minimum 6.4** (Core, Network, Widgets, PrintSupport for PDF, Test), SQLite ≥ 3.45 (bundled amalgamation so WAL and `VACUUM INTO`
-behaviour is fixed; downloaded from sqlite.org at configure time and verified
+behavior is fixed; downloaded from sqlite.org at configure time and verified
 against the SHA3-256 and SHA-256 pinned in `cmake/FetchSQLite.cmake`, not
 vendored), libsodium (minisign verification, token hashing helpers),
 libsecret (Linux keychain) and Security.framework (macOS Keychain). No
@@ -457,7 +457,7 @@ index among the new parent's live children, default last. Destination siblings
 are renumbered (`order` 1..n); each row that changes gets its own revision and
 change row, and the old and new parents roll up in the same transaction
 (§5.3). A move under the task itself or a descendant is 409 `cycle`; a
-milestone, deleted or other-project parent is 400. Not destructive; honours
+milestone, deleted or other-project parent is 400. Not destructive; honors
 `If-Match` and `dryRun`. A task's `order` is read-only everywhere else: a
 create or `PATCH` body with `order` is 400 `validation` (0.10.0).
 
@@ -480,7 +480,7 @@ does nothing and refreshes; on a field edit it opens the conflict dialog.
 
 ### 7.2 Critical path [approved] — phase 1
 
-As §6. UI: critical tasks and links shaded with colour and a hatch pattern,
+As §6. UI: critical tasks and links shaded with color and a hatch pattern,
 float column, "critical only" filter, link editor (type, lag). API:
 `GET /v1/projects/{id}/schedule`, `GET /v1/projects/{id}/critical-path`,
 `POST /v1/projects/{id}/reschedule?dryRun=true`.
@@ -657,7 +657,7 @@ without overwriting each other. API: `PATCH /v1/projects/{id}`,
 Desktop (0.10.0): the Details page shows the project's fields read-only with
 Edit Details… and Delete Project…. The project editor (File → New Project…,
 Project → Edit Project Details…) has name, status, RAG, priority, start, target
-finish, owner, sponsor, budget, colour and the Markdown description,
+finish, owner, sponsor, budget, color and the Markdown description,
 objectives, scope, out of scope and success criteria. It starts from the
 server's copy of the project (`GET /v1/projects/{id}`; its `rev` is the
 `If-Match`), checks fields locally first (⚠ next to each, nothing sent), and
@@ -673,7 +673,7 @@ Portfolio view (status, RAG, % complete, next milestone, finish vs baseline,
 over-allocations), an all-projects timeline (summary bar per project,
 expandable), shared resource pool. API: `GET /v1/portfolio`,
 `GET /v1/portfolio/timeline?from=&to=`. Phase 3: cross-project dependencies,
-programmes.
+programs.
 
 ### 7.12 Also in phase 1 (recommended best practice)
 
@@ -692,9 +692,9 @@ Carlo, multi-user permissions.
   collapsed), with a project's sub-views: Details, Gantt, List, Resources,
   RAID, Baselines, Reports. Alerts badge at the top. As built (0.10.0): the
   project list sorts active, on hold (italic, "(on hold)"), then done and
-  cancelled, which are hidden behind a "Show done and cancelled (N)" toggle;
+  canceled, which are hidden behind a "Show done and canceled (N)" toggle;
   View → All Projects shows a table (Name, Status, RAG as a letter and a
-  coloured dot, Priority, Start, Target finish, Owner) whose rows open the
+  colored dot, Priority, Start, Target finish, Owner) whose rows open the
   project's Details. Portfolio and the sub-views arrive with their views.
   As built (0.11.0): View → Outline (and Open Outline on Details) shows a
   project's tasks; the Edit menu has Insert Task, Indent, Outdent, Move Up,
@@ -702,9 +702,9 @@ Carlo, multi-user permissions.
   Task…, Find…, Find Next and Find Previous. Selecting a task shows it,
   read-only, in the inspector.
   As built (0.12.0): each project row in the sidebar has an icon, a folder
-  in the theme's text colour (muted unless active) with a RAG dot (none when
+  in the theme's text color (muted unless active) with a RAG dot (none when
   RAG is unset); the menu actions use the same set. The icons are drawn by
-  the app in the theme's colours (no system icon theme, no Qt SVG module),
+  the app in the theme's colors (no system icon theme, no Qt SVG module),
   so they look the same on Linux and macOS. The sidebar has no section rows
   yet. Selecting a task opens the task editor in the inspector (§8.3); Edit
   gains Task Details (Alt-Enter) and Save Task (Ctrl-S). Moving to another
@@ -770,7 +770,7 @@ Rows follow the WBS outline (task table on the left: WBS, title, duration,
 start, finish, % complete, resources, float). Timeline: day / week / month /
 quarter zoom, non-working days shaded per project calendar, today line, bars
 (auto: solid; manual: outlined), summary brackets, milestone diamonds,
-progress fill, dependency arrows by type, critical path shading (colour +
+progress fill, dependency arrows by type, critical path shading (color +
 hatch), baseline ghost bars, deadline flags, over-allocation markers, RAID
 badges, and an optional read-only Google Calendar lane (and, phase 3, a ztodo
 lane). Drag a bar to move (sets SNET on auto tasks, or dates on manual tasks,
@@ -895,7 +895,7 @@ expires in 90 days, `requireConfirm = true`; agents never get `admin`
 - Versioning: everything under `/v1`; breaking changes go to `/v2`, with `/v1`
   kept for at least one minor release. `GET /v1/health` returns
   `{ok, version, apiVersion, schemaVersion}` and nothing else.
-- Concurrency: every entity has `rev`; `PATCH` honours `If-Match: <rev>` and
+- Concurrency: every entity has `rev`; `PATCH` honors `If-Match: <rev>` and
   returns 412 on mismatch. Desktop clients always send it.
 - Dry run: every write accepts `?dryRun=true` and returns
   `{changes:[...], ripple:{moved:[...], finishDelta, criticalChanged}, confirmId?}`.
@@ -920,7 +920,7 @@ expires in 90 days, `requireConfirm = true`; agents never get `admin`
   destructive per minute; `app` 600 / 120 / 20; `device` and `owner` 1,200
   total. Failed authentication 10 per minute per source. Overridable per token
   **(decided, Q28)**.
-- Desktop client behaviour (`client/AsyncApiClient`, `client/ApiError`):
+- Desktop client behavior (`client/AsyncApiClient`, `client/ApiError`):
   requests never block the UI; reads run up to 4 at a time, writes are
   serialized per entity, and every `PATCH` sends `If-Match: <rev>` of the
   entity the user started from. Redirects are never followed (the token is
@@ -973,7 +973,7 @@ descendants its delete tombstoned (same delete timestamp); children deleted
 earlier stay deleted and can be restored on their own afterwards. 409
 `conflict` with `details.reason` `not_deleted`, `parent_deleted` (restore the
 parent first), `parent_milestone` or `project_deleted`. Restore is destructive
-(§9.3 confirm), honours `If-Match` and `dryRun`, and rolls summaries up. v1
+(§9.3 confirm), honors `If-Match` and `dryRun`, and rolls summaries up. v1
 restores tasks only (Q13).
 
 As built (0.19.0, scheduling plan S3), dependencies:
@@ -1263,10 +1263,10 @@ frame on the CI's Linux runner).
 
 Qt accessible names and descriptions on every control and Gantt element; full
 keyboard operation (§8.4) including linking and moving bars by keyboard; no
-meaning by colour alone (critical path uses a hatch pattern, RAG uses a letter
-as well as colour, over-allocation uses an icon); high-contrast theme and
+meaning by color alone (critical path uses a hatch pattern, RAG uses a letter
+as well as color, over-allocation uses an icon); high-contrast theme and
 respect for the system's contrast and reduced-motion settings; font size
-setting honoured across views; screen-reader smoke test (VoiceOver on macOS,
+setting honored across views; screen-reader smoke test (VoiceOver on macOS,
 Orca on Linux) before each minor release; minimum 4.5:1 text contrast in both
 light and dark themes.
 
@@ -1277,7 +1277,7 @@ or "Milestone 4 Handover" / "18 Dec, 0% complete, deadline 11 Dec,
 missed"; the same text is each bar's tooltip, and a task with no dates
 reads "unscheduled". Manual vs auto bars differ by outline as well as
 fill, and a missed deadline says "missed", so no meaning is carried by
-colour alone.
+color alone.
 
 ## 19. Testing, fuzzing and CI
 
@@ -1304,7 +1304,7 @@ colour alone.
   importer, JSON import/export and template parser, MSPDI XML parser (phase 2),
   the `3FS+2d` predecessor notation, HTTP request parser and router, JSON body
   decoding, the minisign verifier, and change-record decoding. 60 s per harness
-  in PR CI; nightly 20-minute runs with a cached, minimised corpus.
+  in PR CI; nightly 20-minute runs with a cached, minimized corpus.
   As built (0.19.0): `fuzz/fuzz_link_notation` (the `3FS+2d` parser; anything
   accepted must round-trip through its canonical form) and
   `fuzz/fuzz_dependency_json` (a dependency body through decoding and

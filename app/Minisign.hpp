@@ -10,7 +10,7 @@ namespace zproject::app {
 
 // Verification of minisign (https://jedisct1.github.io/minisign/) detached
 // signatures with libsodium's Ed25519, for the release SHA256SUMS
-// (SHA256SUMS.minisig). zterminal's verifier, unchanged in behaviour.
+// (SHA256SUMS.minisig). zterminal's verifier, unchanged in behavior.
 // Verification only: zproject never holds a secret key.
 //
 // Public key: base64("Ed" | key id (8) | Ed25519 public key (32)), optionally

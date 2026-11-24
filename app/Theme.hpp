@@ -23,7 +23,7 @@ struct ThemeColors {
   QColor hover;
   QColor pressed;
   QColor accent;       // #2fa8f0 (high contrast: a brighter tint)
-  QColor accentText;   // links and accent-coloured text
+  QColor accentText;   // links and accent-colored text
   QColor selBg;
   QColor selFg;
   QColor bannerBg;     // offline banner
@@ -50,7 +50,7 @@ QPalette palette(const ThemeColors& c);
 // The application style sheet; bodyPt is the zoomed UI text size.
 QString styleSheet(const ThemeColors& c, double bodyPt);
 
-// WCAG 2 contrast ratio of two opaque colours (1..21).
+// WCAG 2 contrast ratio of two opaque colors (1..21).
 double contrastRatio(const QColor& a, const QColor& b);
 
 }  // namespace Theme

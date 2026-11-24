@@ -26,7 +26,7 @@ struct ConnectionInfo {
   QString cachePath;
 };
 
-// Help → About zproject (zwriter's pattern): versions, licence, links.
+// Help → About zproject (zwriter's pattern): versions, license, links.
 class AboutDialog : public QDialog {
   Q_OBJECT
  public:

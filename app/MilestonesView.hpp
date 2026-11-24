@@ -55,9 +55,9 @@ QString milestoneAccessibleText(const MilestoneRow& row, bool withProject);
 
 // View → Milestones (Ctrl + Shift + M): the selected project's milestones,
 // or every project's with "All projects" ticked. Showing them all, a
-// milestone's diamond and its Project cell take the project's colour (a
-// swatch outlined in the theme's text colour; the name is still there in
-// words, so colour is never the only cue). Read-only; Enter (or a
+// milestone's diamond and its Project cell take the project's color (a
+// swatch outlined in the theme's text color; the name is still there in
+// words, so color is never the only cue). Read-only; Enter (or a
 // double-click) opens the milestone in the outline, Show in Gantt opens it
 // on the timeline.
 class MilestonesView : public QWidget {
@@ -68,7 +68,7 @@ class MilestonesView : public QWidget {
   explicit MilestonesView(QWidget* parent = nullptr);
 
   void setToday(const QDate& today);
-  // The theme's text colour, for the outline round project colours.
+  // The theme's text color, for the outline around project colors.
   void setOutlineColor(const QColor& c);
   QDate today() const { return today_; }
   // The selected project, named in the heading when not showing them all.
@@ -104,7 +104,7 @@ class MilestonesView : public QWidget {
   void updateHeading();
   void updateButtons();
   void open(bool gantt);
-  void decorate();  // project colours on the rows (all projects only)
+  void decorate();  // project colors on the rows (all projects only)
 
   QDate today_;
   QColor outline_ = Qt::black;

@@ -285,7 +285,7 @@ class TestCalendars : public QObject {
                                               {QStringLiteral("workWeek"), off}}).status, 400);
     QCOMPARE(f.call("POST", "/v1/calendars", {{QStringLiteral("name"), QStringLiteral("x")},
                                               {QStringLiteral("colour"), QStringLiteral("red")}}).status, 400);
-    // PATCH back to the inherited week; If-Match honoured.
+    // PATCH back to the inherited week; If-Match honored.
     r = f.call("PATCH", path, {{QStringLiteral("workWeek"), QJsonValue()}}, {{"if-match", "1"}});
     QCOMPARE(r.status, 200);
     QVERIFY(Server::json(r).value(QStringLiteral("workWeek")).isNull());

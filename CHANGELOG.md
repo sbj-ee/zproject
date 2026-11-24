@@ -7,6 +7,29 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.24.1 — 2026-11-24
+
+American English throughout, in documents, comments and text the apps
+show. Stacked on 0.24.0.
+
+- **Spelling**: color, behavior, center, gray, honor, license, labeled,
+  modeled, canceled, initialized, authorized, minimized and programs, in
+  README, SPEC, Help, this changelog, the OpenAPI descriptions, code
+  comments and test comments.
+- **Text the apps show**:
+  - the project editor's **Color** field;
+  - the **Canceled** status;
+  - **Show/Hide done and canceled (N)** in the sidebar, and a canceled
+    project's "(canceled)" suffix;
+  - "Download canceled.", "Not authorized to install packages",
+    "libsodium could not be initialized";
+  - "MIT license" in About.
+- **Unchanged**:
+  - the stored status value `cancelled`, in the database, the API enum and
+    the model, so data and clients are unaffected;
+  - code identifiers such as `cancelledMessage()`.
+- The project status tests now expect the new sidebar text.
+
 ## 0.24.0 — 2026-11-24
 
 CLI: the rest of the project details fields (SPEC §7.10, §10). Stacked on
@@ -161,20 +184,20 @@ them when scheduling goes live in S5.
 
 ## 0.20.0 — 2026-11-23
 
-Project colours in the all-projects Milestones view (scheduling plan, side
+Project colors in the all-projects Milestones view (scheduling plan, side
 PR agreed 2026-11-23).
 
 - With **All projects** ticked, each milestone's diamond and its Project
-  cell take the project's colour (the `color` set in Edit Project Details).
+  cell take the project's color (the `color` set in Edit Project Details).
   A done milestone's diamond is hollow. Both are outlined in the theme's text
-  colour, so a pale colour still shows in Light, Dark and High contrast.
+  color, so a pale color still shows in Light, Dark and High contrast.
 - The project's name stays in its own column and in each row's accessible
-  description, so colour is never the only cue. Projects without a colour,
+  description, so color is never the only cue. Projects without a color,
   and the single-project view, keep the plain ◆ / ◇.
-- Help describes it. `tst_milestones` checks the colours (the swatch's
-  pixels), hollow done diamonds, no colour on one project or without a
-  project colour, and that the text stays. The screenshots now show two
-  coloured projects.
+- Help describes it. `tst_milestones` checks the colors (the swatch's
+  pixels), hollow done diamonds, no color on one project or without a
+  project color, and that the text stays. The screenshots now show two
+  colored projects.
 
 ## 0.19.0 — 2026-11-23
 
@@ -275,7 +298,7 @@ S4, and the scheduler in S2.
 - **`core/Holidays`**: US federal holidays for any year from 1971, computed
   in code (no network): fixed dates moved Saturday → Friday and Sunday →
   Monday, the Monday holidays, Thanksgiving, and Juneteenth from 2021,
-  labelled "(observed)" when moved. A year lists the holidays observed in
+  labeled "(observed)" when moved. A year lists the holidays observed in
   it, so 2027 has twelve (New Year's Day 2028 falls on 31 December 2027).
 - **Validation** for calendars and exceptions (name, hours per day, a work
   week with at least one working day, exception range and kind), for the
@@ -352,7 +375,7 @@ Desktop client plan, PR 9: the milestones view (plan §3.5; SPEC §7.1, §8.3,
   no date come last; the note under the list counts the late and undated
   ones.
 - **All projects**: one list of every project's milestones, with a Project
-  column. Done and cancelled projects are included only when the sidebar
+  column. Done and canceled projects are included only when the sidebar
   shows them.
 - **Jump to it**: Enter (or a double-click) opens the milestone in the
   outline, switching project if needed; Show in Gantt opens it on the
@@ -453,8 +476,8 @@ Selecting a task in the outline opens it for editing in the inspector.
   untouched the editor follows the server's copy.
 - **Edit → Task Details** (Alt + Enter) jumps to the editor.
 - **Icons**: each project in the sidebar has a folder icon with a dot in its
-  RAG colour (greyed when not active), and the menu actions use the same
-  set. They are drawn by the app in the theme's colours, so they look the
+  RAG color (grayed when not active), and the menu actions use the same
+  set. They are drawn by the app in the theme's colors, so they look the
   same on Linux (no dependence on the system icon theme) and macOS.
 - Read-only tokens and offline mode show the editor read-only, with the
   reason.
@@ -531,8 +554,8 @@ dialog (plan §4.4–4.5, §7.10, §8.1, §9.3). Also makes task `order`
 read-only in the API.
 
 - **Sidebar:** projects sorted active, then on hold (italic, "(on hold)");
-  done and cancelled are hidden behind "Show done and cancelled (N)".
-- **View → All Projects:** a table of Name, Status, RAG (letter and coloured
+  done and canceled are hidden behind "Show done and canceled (N)".
+- **View → All Projects:** a table of Name, Status, RAG (letter and colored
   dot, with an accessible name), Priority, Start, Target finish and Owner;
   activating a row opens that project's Details. View → Project Details goes
   back.
@@ -662,7 +685,7 @@ resources, ...) and the updater follow. The CLI and server behave as before.
   Actual Size, Sidebar, Inspector, Go to Projects) and Help menus. One window
   per user (`QLockFile` in the cache directory).
 - **Themes:** Light, Dark, High contrast and System, built zwriter's way (one
-  set of colour tokens, one application style sheet, forced Fusion) with the
+  set of color tokens, one application style sheet, forced Fusion) with the
   z-suite accent `#2fa8f0`. System follows `QStyleHints::colorScheme()` on Qt
   6.5+ and the platform palette on Qt 6.4. Every theme keeps text at ≥ 4.5:1
   (High contrast ≥ 7:1); a test checks the ratios.
@@ -759,7 +782,7 @@ every child done left the summary where it was (in one plan, children
   changes gets a new revision and its own change record, with the writer's
   token and request id, so history and `/v1/changes` show it. Dry runs list
   the summary updates too.
-- **Behaviour change:** setting `percentComplete`, `status`, `actualStart`
+- **Behavior change:** setting `percentComplete`, `status`, `actualStart`
   or `actualFinish` on a summary task is refused (400 validation, CLI exit
   3); `tasks done` on a summary now fails unless it is already done. A task
   whose last child is deleted or moved keeps its values and is editable again.
@@ -983,7 +1006,7 @@ Phase 1a, first part: the store (SPEC.md §5, §16).
 - `core/`: `Error`/`Result` (the API error codes of §9.3), `Project` and
   `Task` with validation (§5.2: milestone iff duration 0, ASAP/SNET/FNLT
   constraint dates, % complete and actuals, dates, priority, RAG, budget,
-  colour) and JSON with the API's field names.
+  color) and JSON with the API's field names.
 - `zprojectd --db FILE --migrate-only`; `--version` also prints the schema
   version.
 - Tests: `tst_model`, `tst_migrations` (each migration applied step by step,

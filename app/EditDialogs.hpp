@@ -97,7 +97,7 @@ class ProjectEditor : public QDialog {
   bool isNew() const { return base_.isEmpty(); }
   const QJsonObject& base() const { return base_; }
   QString projectId() const { return base_.value(QStringLiteral("id")).toString(); }
-  // Every editable field as the API spells it (empty dates and colour are
+  // Every editable field as the API spells it (empty dates and color are
   // null, an empty budget is null).
   QJsonObject values() const;
   // What to send: the changed fields (edit) or the filled-in ones (new).
@@ -141,7 +141,7 @@ class ProjectEditor : public QDialog {
   bool loading_ = false;
 };
 
-// "G", "A", "R": RAG is never colour alone (SPEC.md §18).
+// "G", "A", "R": RAG is never color alone (SPEC.md §18).
 QString ragLetter(const QString& rag);
 QString projectStatusName(const QString& status);
 

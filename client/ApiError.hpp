@@ -9,7 +9,7 @@
 namespace zproject::client {
 
 // What a desktop client does with a /v1 answer (SPEC.md §9.3 error codes,
-// client behaviour in the "Desktop client" note there).
+// client behavior in the "Desktop client" note there).
 enum class ErrorKind {
   None,               // 2xx with a usable body
   Validation,         // 400 validation: show next to `field`

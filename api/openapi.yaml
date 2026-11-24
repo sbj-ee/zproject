@@ -7,7 +7,7 @@
 openapi: 3.1.0
 info:
   title: zproject API
-  version: 0.24.0
+  version: 0.24.1
   description: |
     Plans served by zprojectd on 127.0.0.1:8788, published on the tailnet by
     `tailscale serve`. Every request except `GET /v1/health` needs
@@ -146,7 +146,7 @@ paths:
     patch:
       operationId: updateProject
       tags: [projects]
-      summary: Change project fields (If-Match honoured)
+      summary: Change project fields (If-Match honored)
       x-zproject-scope: projects:write
       x-zproject-destructive: false
       x-zproject-dry-run: true
@@ -363,7 +363,7 @@ paths:
     patch:
       operationId: updateTask
       tags: [tasks]
-      summary: Change task fields (If-Match honoured)
+      summary: Change task fields (If-Match honored)
       description: >-
         A summary task (one with live children) derives percentComplete,
         status, actualStart and actualFinish from its children (SPEC.md §5.3);
@@ -430,7 +430,7 @@ paths:
     post:
       operationId: moveTask
       tags: [tasks]
-      summary: Move a task to a new parent and/or position within its project (If-Match honoured)
+      summary: Move a task to a new parent and/or position within its project (If-Match honored)
       description: >-
         Reparents and/or reorders a task and its subtree within the same
         project (SPEC.md §7.1). `position` is the 0-based index among the
@@ -620,7 +620,7 @@ paths:
     patch:
       operationId: updateCalendar
       tags: [calendars]
-      summary: Change a calendar (If-Match honoured)
+      summary: Change a calendar (If-Match honored)
       description: Standard has no base. Needs a token for all projects.
       x-zproject-scope: resources:write
       x-zproject-destructive: false
@@ -896,7 +896,7 @@ paths:
     patch:
       operationId: updateDependency
       tags: [dependencies]
-      summary: Change a link's type or lag (If-Match honoured)
+      summary: Change a link's type or lag (If-Match honored)
       description: >-
         Only `type` and `lag` change. A link's tasks are fixed: sending
         `predecessor`, `successor` or `project` is a 400; delete the link and

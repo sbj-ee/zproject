@@ -96,7 +96,7 @@ QList<MilestoneSource> sample() {
            {jt("g1", "Plants ordered", nullptr, 1, "milestone", "2026-10-01"),
             jt("g2", "Planting done", nullptr, 2, "milestone", "2026-10-02")},
            {},
-           QString()}};  // the garden has no colour
+           QString()}};  // the garden has no color
 }
 
 const MilestoneRow* rowOf(const QList<MilestoneRow>& rows, const QString& id) {
@@ -305,7 +305,7 @@ class TestMilestones : public QObject {
     QVERIFY(v.table()->isColumnHidden(C::Project));
     QCOMPARE(v.table()->editTriggers(), QAbstractItemView::NoEditTriggers);
     QVERIFY(v.heading()->text().contains(QStringLiteral("Kitchen remodel")));
-    // The late one says so in words, not colour alone.
+    // The late one says so in words, not color alone.
     const int late = 1;
     QCOMPARE(v.rows().at(late).taskId, QStringLiteral("d2"));
     QVERIFY(v.table()->item(late, C::Due)->text().contains(QStringLiteral("6 days late")));
@@ -336,18 +336,18 @@ class TestMilestones : public QObject {
   }
 
   void projectColours() {
-    // The rows carry the project's colour; a project without one has none.
+    // The rows carry the project's color; a project without one has none.
     const QList<MilestoneRow> rows = milestoneRows(sample(), kToday);
     QCOMPARE(rowOf(rows, QStringLiteral("h"))->projectColor, QColor(QStringLiteral("#d9822b")));
     QVERIFY(!rowOf(rows, QStringLiteral("g1"))->projectColor.isValid());
     MilestonesView v;
     v.setToday(kToday);
     v.setOutlineColor(Qt::black);
-    // One project: plain text diamonds, no colour.
+    // One project: plain text diamonds, no color.
     v.reload({sample().first()});
     QVERIFY(v.table()->item(0, C::Title)->icon().isNull());
     QVERIFY(v.table()->item(0, C::Title)->text().startsWith(QStringLiteral("◇")));  // b1 is done
-    // All projects: the kitchen's diamonds and Project cells in its colour
+    // All projects: the kitchen's diamonds and Project cells in its color
     // (hollow when done); the garden's stay text.
     v.setAllProjects(true);
     v.reload(sample());
@@ -360,7 +360,7 @@ class TestMilestones : public QObject {
         QVERIFY(!project->icon().isNull());
         QCOMPARE(title->text(), r.title);  // the drawn diamond replaces the text one
         QVERIFY(project->toolTip().contains(QStringLiteral("#d9822b")));
-        // The swatch is the project's colour.
+        // The swatch is the project's color.
         const QImage img = project->icon().pixmap(16, 16).toImage();
         QCOMPARE(img.pixelColor(8, 8), QColor(QStringLiteral("#d9822b")));
       } else {
@@ -370,7 +370,7 @@ class TestMilestones : public QObject {
       // Still said in words.
       QVERIFY(title->data(Qt::AccessibleTextRole).toString().contains(r.projectName));
     }
-    // Back to one project: colours go.
+    // Back to one project: colors go.
     v.setAllProjects(false);
     v.reload({sample().first()});
     QVERIFY(v.table()->item(1, C::Title)->icon().isNull());

@@ -10,7 +10,7 @@
 namespace zproject {
 
 // The US federal holidays (5 U.S.C. 6103) whose observed day falls in
-// `year`, in date order, as `holiday` exceptions of one day each, labelled
+// `year`, in date order, as `holiday` exceptions of one day each, labeled
 // with the holiday's name ("Independence Day (observed)" when moved).
 //
 // A holiday on a Saturday is observed the Friday before, on a Sunday the

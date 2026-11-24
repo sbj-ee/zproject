@@ -30,7 +30,7 @@ class RateLimiter {
 
  private:
   struct Bucket {
-    double tokens = -1;  // -1: not initialised (full)
+    double tokens = -1;  // -1: not initialized (full)
     qint64 lastMs = 0;
   };
   // Refills and reports whether one token is available; Retry-After seconds otherwise.

@@ -149,7 +149,7 @@ UpdateDownloader::~UpdateDownloader() {
   delete file_;
 }
 
-QString UpdateDownloader::cancelledMessage() { return tr("Download cancelled."); }
+QString UpdateDownloader::cancelledMessage() { return tr("Download canceled."); }
 
 void UpdateDownloader::failLater(const QString& error) {
   QMetaObject::invokeMethod(this, [this, error] { emit finished(false, QString(), error); }, Qt::QueuedConnection);

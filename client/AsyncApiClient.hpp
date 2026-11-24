@@ -74,7 +74,7 @@ class AsyncApiClient : public QObject {
                 const QByteArray& confirmId = {});
 
   // Drops queued requests and aborts running ones; their callbacks get a
-  // network error ("cancelled").
+  // network error ("canceled").
   void cancelAll();
 
   int running() const { return runningReads_ + static_cast<int>(busyKeys_.size()); }

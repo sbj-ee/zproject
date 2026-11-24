@@ -157,7 +157,7 @@ void AsyncApiClient::cancelAll() {
   for (Pending& p : dropped) {
     ApiResponse r;
     r.networkErrorCode = QNetworkReply::OperationCanceledError;
-    r.networkError = QStringLiteral("cancelled");
+    r.networkError = QStringLiteral("canceled");
     if (p.done) p.done(r);
   }
 }

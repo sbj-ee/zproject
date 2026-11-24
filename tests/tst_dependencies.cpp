@@ -313,7 +313,7 @@ class TestDependencies : public QObject {
     r = f.call("GET", "/v1/projects/" + f.plan.project.toLatin1() + "/dependencies?task=" +
                           f.plan.id.value(QStringLiteral("b")).toLatin1());
     QCOMPARE(Server::json(r).value(QStringLiteral("items")).toArray().size(), 1);
-    // PATCH: type and lag, If-Match honoured; the tasks are read-only.
+    // PATCH: type and lag, If-Match honored; the tasks are read-only.
     r = f.call("PATCH", path, {{QStringLiteral("lag"), 3}}, {{"if-match", "1"}});
     QCOMPARE(r.status, 200);
     QCOMPARE(Server::json(r).value(QStringLiteral("lag")).toInt(), 3);

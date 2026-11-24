@@ -416,7 +416,7 @@ class TestTaskEditor : public QObject {
                                  i->base().value(QStringLiteral("rev")).toInteger() == task(QStringLiteral("Drawings")).rev; }));
     QCOMPARE(desktopWrites().mid(before),
              (QStringList{QStringLiteral("PATCH /v1/tasks/Drawings dry"), QStringLiteral("PATCH /v1/tasks/Drawings")}));
-    // Cancelling a preview keeps the edits.
+    // Canceling a preview keeps the edits.
     fieldOf<QSpinBox>(*w, "percentComplete")->setValue(90);
     i->saveButton()->click();
     d = waitPreview(*w);

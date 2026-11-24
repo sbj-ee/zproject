@@ -592,7 +592,7 @@ void GanttChart::paintBar(QPainter& p, const Bar& b) const {
     }
     p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 2.5, 2.5);
     if (pct > 0) {
-      // Progress: a centre band, so it reads without colour.
+      // Progress: a center band, so it reads without color.
       const QRectF band(r.left() + 1.5, r.center().y() - r.height() / 6.0, (r.width() - 3.0) * pct / 100.0, r.height() / 3.0);
       p.setPen(Qt::NoPen);
       p.setBrush(b.manual ? c_.accent : c_.fg);

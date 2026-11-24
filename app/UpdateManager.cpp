@@ -341,7 +341,7 @@ void UpdateManager::onInstallerFinished(int exitCode, bool crashed, const QStrin
     if (exitCode == 126) {
       why = tr("The password prompt was dismissed, so nothing was installed.");
     } else if (exitCode == 127) {
-      why = tr("Not authorised to install packages (pkexec exit 127).");
+      why = tr("Not authorized to install packages (pkexec exit 127).");
     } else {
       why = tr("apt couldn't install the package (exit %1).").arg(exitCode);
       if (!output.isEmpty()) why += QLatin1Char('\n') + output.right(600);
