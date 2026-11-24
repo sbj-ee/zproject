@@ -32,6 +32,9 @@ struct CliIo {
   // there is no terminal.
   std::function<QString(const QString& prompt)> promptSecret;
   bool stdoutIsTty = false;
+  // Writes raw bytes to standard output (`export --stdout`, which may be
+  // binary). Unset: the bytes go to `out` as UTF-8 text.
+  std::function<bool(const QByteArray&)> writeStdout;
   bool macos = false;
   CommandRunner runner = runCommand;
   QDate today = QDate::currentDate();

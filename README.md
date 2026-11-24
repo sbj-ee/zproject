@@ -1,8 +1,8 @@
 # zproject
 
-**0.21.1**
+**0.22.0**
 
-Current release: **0.21.0**
+Current release: **0.21.1**
 
 Project management for the z-suite: projects with a WBS, milestones,
 dependencies, a critical-path schedule, baselines, resources and cost, a RAID
@@ -21,7 +21,7 @@ The full design is in [SPEC.md](SPEC.md).
 
 Phases 1a and 1b (SPEC.md §24) are under way: `zprojectd` serves the first slice of the `/v1` API (projects,
 tasks, WBS, dependencies, working calendars and holidays, history, the change
-feed, tokens, the audit log, backups) and an
+feed, tokens, the audit log, backups, project exports) and an
 MCP endpoint at `/mcp`, with scoped tokens, rate limits and a hash-chained
 audit log. `zproject-cli` covers all of it from Linux and macOS. The release
 workflow builds signed `.deb` and `.dmg` packages (see [Install](#install)).
@@ -206,7 +206,8 @@ zproject-cli status
 `zproject-cli doctor` shows the config and TLS support. Run
 `zproject-cli --help` for the commands: projects, tasks, dependencies
 (`deps add PROJECT 4 "3FS+2d"`), calendars (`calendars import-holidays ID 2027`),
-tokens, audit and backup, with `--json` output throughout. Deletes are dry runs until you add
+exports (`export PROJECT --out-file plan.xml` for MS Project XML, `.csv`,
+`.ods` or `.json`), tokens, audit and backup, with `--json` output throughout. Deletes are dry runs until you add
 `--confirm ID`. To revoke a lost machine's token, run
 `zproject-cli token revoke <token-id>` (as owner) and check the result with
 `zproject-cli token list`.

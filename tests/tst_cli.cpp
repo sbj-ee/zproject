@@ -3,6 +3,8 @@
 // the token stores, exit codes, projects and tasks, dry-run and confirm,
 // token creation that never prints to a terminal, and the API-version check.
 // Tokens are generated per run; nothing here is real.
+#include <QDir>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -438,6 +440,79 @@ class TestCli : public QObject {
   }
 
   // deps (scheduling plan S3): links by WBS code and the "3FS+2d" notation.
+  // export (SPEC.md §7.9): format from the flag or the extension, the
+  // default file name, never replacing a file it wasn't told to, stdout.
+  void exportProject() {
+    const QString p = createProject(QStringLiteral("Garden shed"));
+    addTask(p, QStringLiteral("Base"));
+    addTask(p, QStringLiteral("Walls"));
+    auto run = [&](const QStringList& args, CliIo i) {
+      i.env.insert(QStringLiteral("ZPROJECT_TOKEN"), owner_);
+      return cli(QStringList{QStringLiteral("export")} + args, i);
+    };
+    const QString dir = dir_->path() + QStringLiteral("/exports");
+    QVERIFY(QDir().mkpath(dir));
+
+    // The extension picks the format.
+    Run r = run({p, QStringLiteral("--out-file"), dir + QStringLiteral("/plan.ods")}, io());
+    QVERIFY2(r.code == 0, qPrintable(r.err));
+    QVERIFY(r.out.startsWith(QStringLiteral("Wrote ") + dir + QStringLiteral("/plan.ods (ods, ")));
+    QFile ods(dir + QStringLiteral("/plan.ods"));
+    QVERIFY(ods.open(QIODevice::ReadOnly));
+    QVERIFY(ods.readAll().startsWith("PK\x03\x04"));
+    r = run({p, QStringLiteral("--out-file"), dir + QStringLiteral("/plan.xml")}, io());
+    QCOMPARE(r.code, 0);
+    QFile xml(dir + QStringLiteral("/plan.xml"));
+    QVERIFY(xml.open(QIODevice::ReadOnly));
+    QVERIFY(xml.readAll().contains("<Title>Garden shed</Title>"));
+    // --format wins; an explicit path is replaced.
+    r = run({QStringLiteral("--json"), p, QStringLiteral("--format"), QStringLiteral("csv"), QStringLiteral("--out-file"),
+             dir + QStringLiteral("/plan.xml")},
+            io());
+    QCOMPARE(r.code, 0);
+    QCOMPARE(r.json().toObject().value(QStringLiteral("format")).toString(), QStringLiteral("csv"));
+    xml.close();
+    QVERIFY(xml.open(QIODevice::ReadOnly));
+    QVERIFY(xml.readAll().startsWith("WBS,Level,Title,"));
+
+    // No path: the project's name in the current directory, once.
+    const QString cwd = QDir::currentPath();
+    QDir::setCurrent(dir);
+    r = run({p, QStringLiteral("--format"), QStringLiteral("csv")}, io());
+    const Run again = run({p, QStringLiteral("--format"), QStringLiteral("csv")}, io());
+    QDir::setCurrent(cwd);
+    QVERIFY2(r.code == 0, qPrintable(r.err));
+    QVERIFY(QFileInfo::exists(dir + QStringLiteral("/Garden-shed.csv")));
+    QCOMPARE(again.code, int(kExitUsage));
+    QVERIFY(again.err.contains(QStringLiteral("Garden-shed.csv already exists")));
+
+    // --stdout: JSON by default; bytes through the raw writer when there is one.
+    r = run({p, QStringLiteral("--stdout")}, io());
+    QCOMPARE(r.code, 0);
+    QCOMPARE(r.json().toObject().value(QStringLiteral("tasks")).toArray().size(), 2);
+    QByteArray raw;
+    CliIo pipe = io();
+    pipe.writeStdout = [&raw](const QByteArray& b) {
+      raw += b;
+      return true;
+    };
+    QCOMPARE(run({p, QStringLiteral("--stdout"), QStringLiteral("--format"), QStringLiteral("ods")}, pipe).code, 0);
+    QVERIFY(raw.startsWith("PK\x03\x04"));
+    CliIo tty = io();
+    tty.stdoutIsTty = true;
+    QCOMPARE(run({p, QStringLiteral("--stdout"), QStringLiteral("--format"), QStringLiteral("ods")}, tty).code,
+             int(kExitUsage));
+
+    // Usage and server errors.
+    QCOMPARE(run({p, QStringLiteral("--format"), QStringLiteral("pdf")}, io()).code, int(kExitUsage));
+    QCOMPARE(run({p, QStringLiteral("--stdout"), QStringLiteral("--out-file"), QStringLiteral("x")}, io()).code,
+             int(kExitUsage));
+    QCOMPARE(run({QStringLiteral("nope")}, io()).code, int(kExitUsage));
+    r = run({QStringLiteral("ffffffffffffffffffff"), QStringLiteral("--stdout")}, io());
+    QCOMPARE(r.code, int(kExitError));
+    QVERIFY(r.err.contains(QStringLiteral("HTTP 404")));
+  }
+
   void deps() {
     const QString p = createProject(QStringLiteral("Kitchen"));
     const QString a = addTask(p, QStringLiteral("Survey"));     // 1

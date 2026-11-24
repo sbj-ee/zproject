@@ -10,6 +10,11 @@ can't be reached, and follows changes made elsewhere — another computer,
 - [Connecting](#connecting)
 - [The window](#the-window)
 - [The outline](#the-outline)
+- [The Gantt](#the-gantt)
+- [Milestones](#milestones)
+- [Activity](#activity)
+- [Editing a task](#editing-a-task)
+- [Exporting a project](#exporting-a-project)
 - [Offline](#offline)
 - [Appearance](#appearance)
 - [Preferences](#preferences)
@@ -173,6 +178,49 @@ confirm. If someone else saved the task since you opened it, you choose per
 field: keep yours or take theirs. **Revert** puts the task back as the
 server has it. Moving to another task, another project or quitting with
 unsaved changes asks first.
+
+## Exporting a project
+
+A project can be saved as a file to open in another program or to keep. The
+server makes the file from its own copy of the plan, so an export needs the
+server; it holds the project's live tasks (not deleted ones).
+
+| Format | File | Opens in | What's in it |
+| --- | --- | --- | --- |
+| MS Project XML | `.xml` | Microsoft Project, ProjectLibre, GanttProject | The outline, durations, dates, milestones, links with lag, constraints, deadlines, % complete, notes, and the calendars used with their holidays |
+| OpenDocument spreadsheet | `.ods` | LibreOffice Calc, Excel, Google Sheets, Numbers | Three sheets: **Tasks**, **Dependencies** and **Project** (the details page). Dates, numbers and percentages are real values you can sort and sum |
+| CSV | `.csv` | Any spreadsheet or script | The **Tasks** sheet as plain text (UTF-8, comma-separated, one header row) |
+| zproject JSON | `.json` | zproject, scripts | Everything, exactly as stored: the project, tasks, dependencies and calendars. Use it for a full copy |
+
+Things to know:
+
+- **Columns.** Tasks are in outline order with their WBS code and level.
+  Summary rows have the type *summary*; their dates span their subtasks and
+  their duration is left blank. Predecessors are written as MS Project writes
+  them, by WBS code: `1.2SS+2d` means "starts with 1.2, plus two working
+  days".
+- **Text that looks like a formula.** In the CSV, a title or note that starts
+  with `=`, `+`, `-` or `@` gets a leading `'`, so a spreadsheet shows it as
+  text instead of running it. The `.ods` file stores text as text and needs
+  no `'`.
+- **Priority in MS Project.** P1 to P4 become priorities 800, 500, 300 and
+  100. Resources and assignments aren't exported yet.
+- **The file name** comes from the project's name, for example
+  `Office-move.ods`.
+
+To export from the command line, give the project's ID (`zproject-cli
+projects list` shows it); the file's extension picks the format:
+
+```
+zproject-cli export PROJECT-ID --out-file office-move.xml
+zproject-cli export PROJECT-ID --format ods
+zproject-cli export PROJECT-ID --format csv --stdout | head
+```
+
+Without `--out-file`, the file goes in the current folder, named after the
+project, and an existing file is never replaced. Exporting and printing from
+this window (**File → Export…**, **File → Print…** and PDF) arrive in the
+next version.
 
 ## Offline
 

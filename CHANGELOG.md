@@ -7,6 +7,50 @@ documentation, minor for features) and adds an entry here. A PR dates its own
 heading. Releases are tagged `vX.Y.Z` and minisign-signed (SPEC.md §20,
 [docs/RELEASING.md](docs/RELEASING.md)). The first release is v0.4.0.
 
+## 0.22.0 — 2026-11-24
+
+Project exports, PR 1 of 2: the server and the CLI (SPEC §7.9, §9.4, §10,
+§19; a post-lock change Stephen asked for on 2026-11-24, recorded in
+SPEC.md and decision 20: MSPDI export moves to phase 1 and ODS is added).
+Desktop Export…, Print… and PDF follow in 0.23.0.
+
+- **Formats** (`core/Export`, Qt Core only, deterministic):
+  - **MS Project XML (MSPDI)** for Microsoft Project, ProjectLibre and
+    GanttProject. It carries the outline, durations, dates, milestones,
+    manual and summary tasks, FS/SS/FF links with lag, constraints,
+    deadlines, % complete, actual dates, fixed cost, notes, and every
+    calendar used with its holidays.
+  - **OpenDocument spreadsheet (.ods)** with Tasks, Dependencies and
+    Project sheets. Numbers, dates and percentages are typed, and the header
+    row repeats on printed pages. `core/Zip` is a minimal zip writer for the
+    package.
+  - **CSV**: the task table (RFC 4180, UTF-8, CRLF). Predecessors are in
+    `3FS+2d` notation by WBS code, and formula-like text is guarded with a
+    leading `'`.
+  - **zproject JSON**: full fidelity, `schemaVersion` 1.
+- **API**: `GET /v1/projects/{id}/export?format=json|csv|ods|mspdi`
+  (`tasks:read`, the project allowlist applies). The file comes back as an
+  attachment named after the project, with `Cache-Control: no-store`.
+- **CLI**: `zproject-cli export PROJECT [--format F] [--out-file PATH |
+  --stdout]`. The format comes from the flag or PATH's extension. PATH is
+  written atomically. Without a PATH, a new file named after the project
+  goes in the current directory and never replaces an existing one. An
+  `.ods` isn't written to a terminal. Also fixed: a missing line break in
+  `--help` after `projects update`.
+- **Help**: a new *Exporting a project* section. The contents list now
+  includes the Gantt, Milestones, Activity and Editing a task sections,
+  which were missing from it.
+- **Untrusted text**: XML output drops characters XML 1.0 forbids. Broken
+  outlines (parent loops, missing parents, very deep trees) export without
+  recursion.
+- **Fuzzing**: a fourth harness, `fuzz_export`, which runs any snapshot
+  through every writer (each live task appears once, the XML is
+  well-formed, the JSON parses). It is in the CI Fuzz job.
+- **Tests**: `tst_export` (13: formats, file names, XML-safe text, outline
+  rows, broken input, CSV, the zip writer read back and inflated, ODS
+  content, MSPDI, JSON, determinism), `exportProject` in `tst_api` and
+  `tst_cli`.
+
 ## 0.21.1 — 2026-11-23
 
 Linux: the running app now shows its icon on GNOME/Wayland. Call

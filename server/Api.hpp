@@ -113,6 +113,7 @@ class Api {
   http::Response updateProject(Call& c);
   http::Response deleteProject(Call& c);
   http::Response getWbs(Call& c);
+  http::Response exportProject(Call& c);
   http::Response listTasks(Call& c);
   http::Response createTask(Call& c);
   http::Response getTask(Call& c);
